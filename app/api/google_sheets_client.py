@@ -1315,42 +1315,28 @@ class GoogleSheetsClient:
                     import math
 
                     # Calculate min and max for total frequency
+                    # min = среднее - разбег (например: 2.0 - 0.1 = 1.9)
                     min_total_freq = max(1.0, total_frequency - total_variance)
-                    max_total_freq = total_frequency
 
-                    # Random total frequency within range (always ≤ total_frequency)
+                    # max = среднее - ε (чуть меньше среднего, НЕ равно)
+                    # Это гарантирует что частота НИКОГДА не будет >= среднего
+                    max_total_freq = total_frequency - 0.00001
+
+                    # Random total frequency within range [min, max)
+                    # Например для частоты 2.0 ± 0.1: диапазон [1.9, 1.99999]
                     actual_total_frequency = random.uniform(min_total_freq, max_total_freq)
 
                     # Calculate total reach from random total frequency
                     final_total_reach = int(total_impressions / actual_total_frequency) if actual_total_frequency > 0 else 0
-
-                    # CRITICAL VALIDATION: Total reach MUST be less than sum of daily reaches
-                    if final_total_reach >= sum_daily_reaches:
-                        print(f"⚠️ WARNING: Calculated total reach ({final_total_reach:,}) >= sum of daily ({sum_daily_reaches:,})!")
-                        print(f"   This can happen with low total variance or high total frequency.")
-
-                        # Calculate minimum reach needed to not exceed max total frequency
-                        # Use ceiling to ensure frequency is STRICTLY <= max
-                        min_reach_for_max_freq = math.ceil(total_impressions / max_total_freq)
-
-                        # Use the LARGER of: min reach for max freq OR 94% of daily sum
-                        # (94% is a reasonable heuristic to ensure total < sum of daily)
-                        fallback_reach = int(sum_daily_reaches * 0.94)
-                        final_total_reach = max(min_reach_for_max_freq, fallback_reach)
-
-                        print(f"   Min reach for max freq ({max_total_freq}): {min_reach_for_max_freq:,}")
-                        print(f"   94% of daily sum: {fallback_reach:,}")
-                        print(f"   Using: {final_total_reach:,}")
-
                     resulting_frequency = total_impressions / final_total_reach if final_total_reach > 0 else 0
 
-                    # FINAL VALIDATION: Ensure frequency does not exceed maximum
-                    if resulting_frequency > max_total_freq:
-                        print(f"⚠️ CRITICAL: Resulting frequency ({resulting_frequency:.5f}) > max ({max_total_freq})!")
-                        # Force adjust to max frequency
-                        final_total_reach = math.ceil(total_impressions / max_total_freq)
+                    # FALLBACK: Если из-за округления int частота >= среднего
+                    if resulting_frequency >= total_frequency:
+                        print(f"⚠️ Fallback: resulting frequency ({resulting_frequency:.5f}) >= average ({total_frequency})")
+                        # Увеличить охват чтобы частота стала < среднего
+                        final_total_reach = math.ceil(total_impressions / (total_frequency - 0.001))
                         resulting_frequency = total_impressions / final_total_reach
-                        print(f"   Force-adjusted reach to {final_total_reach:,} for frequency {resulting_frequency:.5f}")
+                        print(f"   Adjusted reach to {final_total_reach:,}, frequency now {resulting_frequency:.5f}")
 
                     print(f"📊 Total reach calculation (NEW):")
                     print(f"   Total impressions: {total_impressions:,}")

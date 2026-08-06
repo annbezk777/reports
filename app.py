@@ -12,6 +12,8 @@ from email.mime.multipart import MIMEMultipart
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
+import logging
+import sys
 
 # Import configuration
 from config import Config
@@ -21,6 +23,33 @@ app = Flask(__name__,
            template_folder='app/templates',
            static_folder='app/static')
 app.config.from_object(Config)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler('app_logs.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Also redirect print() to logger
+class PrintLogger:
+    def __init__(self, logger, level):
+        self.logger = logger
+        self.level = level
+
+    def write(self, message):
+        if message.strip():
+            self.logger.log(self.level, message.strip())
+
+    def flush(self):
+        pass
+
+# Redirect stdout to logger
+sys.stdout = PrintLogger(logger, logging.INFO)
 
 # Initialize database
 from app.models import db, SapeAccount, Client, Campaign, ReportConfig, ReportLog
@@ -1441,16 +1470,17 @@ def run_report(report_id):
                 total_variances.append(total_variance)
 
                 # Calculate AVERAGE reach across days (not sum!)
-                # For each day: reach = impressions / frequency (with variance)
+                # Apply variance ONCE per campaign (not per day!)
                 import random
+                min_freq = max(frequency - total_variance, 0.1)
+                max_freq = frequency + total_variance
+                actual_frequency = random.uniform(min_freq, max_freq)
+
+                # Now calculate reach for each day using this frequency
                 daily_reaches = []
                 for day_data in daily_data:
                     day_shows = day_data['impressions']
                     if day_shows > 0:
-                        # Apply variance to frequency
-                        min_freq = max(frequency - total_variance, 0.1)
-                        max_freq = frequency + total_variance
-                        actual_frequency = random.uniform(min_freq, max_freq)
                         day_reach = int(day_shows / actual_frequency)
                         daily_reaches.append(day_reach)
 
@@ -1459,7 +1489,7 @@ def run_report(report_id):
 
                 print(f"✅ Campaign {campaign.campaign_id} ({campaign.name}):")
                 print(f"   Shows: {period_shows:,}, Clicks: {period_clicks:,}")
-                print(f"   Frequency target: {frequency}, variance: {total_variance}")
+                print(f"   Frequency target: {frequency} ± {total_variance}, actual: {actual_frequency:.2f}")
                 print(f"   Average daily reach: {average_reach:,} (from {len(daily_reaches)} days)")
 
                 campaigns_data.append({
