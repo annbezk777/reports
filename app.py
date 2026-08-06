@@ -1440,15 +1440,34 @@ def run_report(report_id):
 
                 total_variances.append(total_variance)
 
+                # Calculate AVERAGE reach across days (not sum!)
+                # For each day: reach = impressions / frequency (with variance)
+                import random
+                daily_reaches = []
+                for day_data in daily_data:
+                    day_shows = day_data['impressions']
+                    if day_shows > 0:
+                        # Apply variance to frequency
+                        min_freq = max(frequency - total_variance, 0.1)
+                        max_freq = frequency + total_variance
+                        actual_frequency = random.uniform(min_freq, max_freq)
+                        day_reach = int(day_shows / actual_frequency)
+                        daily_reaches.append(day_reach)
+
+                # Average reach across all days
+                average_reach = int(sum(daily_reaches) / len(daily_reaches)) if daily_reaches else 0
+
                 print(f"✅ Campaign {campaign.campaign_id} ({campaign.name}):")
                 print(f"   Shows: {period_shows:,}, Clicks: {period_clicks:,}")
                 print(f"   Frequency target: {frequency}, variance: {total_variance}")
+                print(f"   Average daily reach: {average_reach:,} (from {len(daily_reaches)} days)")
 
                 campaigns_data.append({
                     'campaign_id': campaign.campaign_id,
                     'shows': period_shows,
                     'clicks': period_clicks,
-                    'frequency': frequency
+                    'frequency': frequency,
+                    'average_reach': average_reach  # NEW: pass average reach instead of calculating from total
                 })
 
                 total_impressions += period_shows

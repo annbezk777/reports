@@ -239,16 +239,23 @@
             <label class="block text-gray-700 text-sm font-bold mb-2" for="worksheet_name">
                 Выберите лист *
             </label>
-            <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    id="worksheet_name"
-                    name="worksheet_name">
-                {% if report.worksheet_name %}
-                    <option value="{{ report.worksheet_name }}" selected>{{ report.worksheet_name }}</option>
-                {% else %}
-                    <option value="">Первый лист (по умолчанию)</option>
-                {% endif %}
-            </select>
-            <p class="text-gray-600 text-xs mt-1">Если таблица содержит несколько листов, выберите нужный</p>
+            <div class="flex gap-2">
+                <select class="shadow border rounded flex-1 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        id="worksheet_name"
+                        name="worksheet_name">
+                    {% if report.worksheet_name %}
+                        <option value="{{ report.worksheet_name }}" selected>{{ report.worksheet_name }}</option>
+                    {% else %}
+                        <option value="">Первый лист (по умолчанию)</option>
+                    {% endif %}
+                </select>
+                <button type="button" onclick="loadWorksheets(true)"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded transition"
+                        title="Обновить список листов">
+                    🔄
+                </button>
+            </div>
+            <p class="text-gray-600 text-xs mt-1">Выберите лист из таблицы. Нажмите 🔄 чтобы обновить список.</p>
         </div>
 
 
@@ -467,10 +474,11 @@ function deselectAllCampaigns() {
     handleCampaignChange();
 }
 
-function loadWorksheets() {
+function loadWorksheets(preserveCurrentValue = false) {
     const sheetUrl = document.getElementById('google_sheet_url').value;
     const worksheetSection = document.getElementById('worksheetSection');
     const worksheetSelect = document.getElementById('worksheet_name');
+    const currentValue = worksheetSelect.value; // Save current selection
 
     if (!sheetUrl) {
         worksheetSection.style.display = 'none';
@@ -502,9 +510,19 @@ function loadWorksheets() {
             const option = document.createElement('option');
             option.value = name;
             option.textContent = name;
-            if (index === 0) option.selected = true;
+            // If preserving value, select the saved one; otherwise select first
+            if (preserveCurrentValue && name === currentValue) {
+                option.selected = true;
+            } else if (!preserveCurrentValue && index === 0) {
+                option.selected = true;
+            }
             worksheetSelect.appendChild(option);
         });
+
+        // If preserved value not found in list, select first
+        if (preserveCurrentValue && !Array.from(worksheetSelect.options).some(opt => opt.value === currentValue)) {
+            worksheetSelect.selectedIndex = 0;
+        }
     })
     .catch(error => {
         console.error('Error loading worksheets:', error);
@@ -516,6 +534,12 @@ function loadWorksheets() {
 document.addEventListener('DOMContentLoaded', function() {
     updateCampaignCounter();
     sortCampaignsSelectedFirst();
+
+    // Load available worksheets from Google Sheet (preserve current selection)
+    const sheetUrl = document.getElementById('google_sheet_url').value;
+    if (sheetUrl) {
+        loadWorksheets(true); // true = preserve current worksheet selection
+    }
 });
 
 // Frequency Help Modal functions

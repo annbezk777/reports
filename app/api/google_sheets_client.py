@@ -1550,7 +1550,8 @@ class GoogleSheetsClient:
                 campaign_id = str(campaign_data['campaign_id'])
                 shows = campaign_data['shows']
                 clicks = campaign_data['clicks']
-                frequency = campaign_data.get('frequency', 3.0)
+                # Use pre-calculated average reach from daily data
+                reach = campaign_data.get('average_reach', 0)
 
                 # Find row and structure for this campaign
                 if campaign_id not in id_to_row_structure:
@@ -1563,13 +1564,7 @@ class GoogleSheetsClient:
                 clicks_col = structure['clicks_col']
                 reach_col = structure['reach_col']
 
-                # Calculate reach
-                min_freq = max(frequency - frequency_variance, 0.1)
-                max_freq = frequency
-                actual_frequency = round(random.uniform(min_freq, max_freq), 2)
-                reach = int(shows / actual_frequency) if actual_frequency > 0 else 0
-
-                print(f"📝 Campaign {campaign_id}: Shows={shows:,}, Clicks={clicks:,}, Reach={reach:,} → Row {row_num}, Cols {shows_col}/{clicks_col}")
+                print(f"📝 Campaign {campaign_id}: Shows={shows:,}, Clicks={clicks:,}, Avg Reach={reach:,} → Row {row_num}, Cols {shows_col}/{clicks_col}")
 
                 # Create unique key for this table cell: (row, shows_col, clicks_col)
                 # This prevents mixing data from different tables with same row number
@@ -1587,7 +1582,7 @@ class GoogleSheetsClient:
 
                 row_aggregated_data[cell_key]['shows'] += shows
                 row_aggregated_data[cell_key]['clicks'] += clicks
-                row_aggregated_data[cell_key]['reach'] += reach
+                row_aggregated_data[cell_key]['reach'] += reach  # Sum of average reaches
                 row_aggregated_data[cell_key]['campaign_ids'].append(campaign_id)
 
             # Now write aggregated data (one update per unique cell)

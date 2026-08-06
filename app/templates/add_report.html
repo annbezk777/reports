@@ -33,6 +33,13 @@
             <label class="block text-gray-700 text-sm font-bold mb-2" for="account_id">
                 1️⃣ Выберите аккаунт SAPE *
             </label>
+            <!-- Search input -->
+            <input type="text"
+                   id="accountSearch"
+                   placeholder="🔍 Поиск по названию или email..."
+                   class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-2"
+                   onkeyup="filterAccounts()">
+
             <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline account-select"
                     id="account_id"
                     onchange="loadCampaigns(this.value)"
@@ -40,7 +47,7 @@
                     style="font-size: 14px;">
                 <option value="">Выберите аккаунт</option>
                 {% for account in accounts %}
-                    <option value="{{ account.id }}">
+                    <option value="{{ account.id }}" data-name="{{ account.name }}" data-login="{{ account.login }}">
                         📁 {{ account.name }}   |   📧 {{ account.login }}
                     </option>
                 {% endfor %}
@@ -836,6 +843,29 @@ function openFrequencyHelp() {
 
 function closeFrequencyHelp() {
     document.getElementById('frequencyHelpModal').classList.add('hidden');
+}
+
+// Account search filter
+function filterAccounts() {
+    const searchInput = document.getElementById('accountSearch');
+    const select = document.getElementById('account_id');
+    const filter = searchInput.value.toLowerCase();
+
+    for (let i = 0; i < select.options.length; i++) {
+        const option = select.options[i];
+
+        if (i === 0) continue; // Skip "Выберите аккаунт"
+
+        const name = option.getAttribute('data-name') || '';
+        const login = option.getAttribute('data-login') || '';
+        const text = (name + ' ' + login).toLowerCase();
+
+        if (text.includes(filter)) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    }
 }
 </script>
 {% endblock %}
