@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Синхронизация аккаунтов - SAPE Reports Panel{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-lg shadow-lg p-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">🔄 Синхронизация аккаунтов</h1>
+
+        <!-- Progress Bar -->
+        <div class="mb-6">
+            <div class="flex justify-between mb-2">
+                <span class="text-sm font-medium text-gray-700">Прогресс</span>
+                <span class="text-sm font-medium text-gray-700" id="progress-text">0 из {{ total }}</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-4">
+                <div id="progress-bar" class="bg-blue-600 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Current Account -->
+        <div class="mb-6 p-4 bg-blue-50 rounded-lg">
+            <p class="text-sm text-gray-600 mb-1">Текущий аккаунт:</p>
+            <p class="text-lg font-semibold text-gray-800" id="current-account">Ожидание...</p>
+        </div>
+
+        <!-- Results List -->
+        <div class="space-y-2 mb-6" id="results-list">
+            <!-- Results will be added here dynamically -->
+        </div>
+
+        <!-- Summary (hidden initially) -->
+        <div id="summary" class="hidden mt-6 p-6 bg-green-50 rounded-lg border border-green-200">
+            <h2 class="text-xl font-bold text-green-800 mb-4">✅ Синхронизация завершена!</h2>
+            <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <p class="text-gray-600">Успешно синхронизировано:</p>
+                    <p class="text-2xl font-bold text-green-600" id="success-count">0</p>
+                </div>
+                <div>
+                    <p class="text-gray-600">Ошибок:</p>
+                    <p class="text-2xl font-bold text-red-600" id="error-count">0</p>
+                </div>
+                <div>
+                    <p class="text-gray-600">Новых клиентов:</p>
+                    <p class="text-xl font-bold text-blue-600" id="total-clients">0</p>
+                </div>
+                <div>
+                    <p class="text-gray-600">Новых кампаний:</p>
+                    <p class="text-xl font-bold text-blue-600" id="total-new">0</p>
+                </div>
+            </div>
+            <div class="mt-4">
+                <a href="{{ url_for('accounts') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition inline-block">
+                    Вернуться к аккаунтам
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Start sync when page loads
+window.addEventListener('DOMContentLoaded', () => {
+    const evtSource = new EventSource('{{ url_for("execute_sync_all") }}');
+    let currentIndex = 0;
+    const total = {{ total }};
+
+    evtSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'start') {
+            console.log('Starting sync for', data.total, 'accounts');
+        }
+        else if (data.type === 'progress') {
+            currentIndex = data.current;
+            const progress = (currentIndex / data.total) * 100;
+
+            document.getElementById('progress-bar').style.width = progress + '%';
+            document.getElementById('progress-text').textContent = currentIndex + ' из ' + data.total;
+            document.getElementById('current-account').textContent = data.account;
+        }
+        else if (data.type === 'account_success') {
+            addResult(data.account, 'success', `✅ ${data.clients} клиентов, ${data.new} новых кампаний, ${data.updated} обновлено`);
+        }
+        else if (data.type === 'account_error') {
+            addResult(data.account, 'error', `❌ ${data.error}`);
+        }
+        else if (data.type === 'complete') {
+            document.getElementById('current-account').textContent = 'Завершено!';
+            document.getElementById('success-count').textContent = data.success_count;
+            document.getElementById('error-count').textContent = data.failed.length;
+            document.getElementById('total-clients').textContent = data.total_clients;
+            document.getElementById('total-new').textContent = data.total_new;
+            document.getElementById('summary').classList.remove('hidden');
+
+            evtSource.close();
+        }
+    };
+
+    evtSource.onerror = (err) => {
+        console.error('EventSource error:', err);
+        document.getElementById('current-account').textContent = 'Ошибка соединения';
+        evtSource.close();
+    };
+});
+
+function addResult(accountName, type, message) {
+    const resultsList = document.getElementById('results-list');
+    const resultDiv = document.createElement('div');
+
+    if (type === 'success') {
+        resultDiv.className = 'p-3 bg-green-50 border border-green-200 rounded text-sm';
+    } else {
+        resultDiv.className = 'p-3 bg-red-50 border border-red-200 rounded text-sm';
+    }
+
+    resultDiv.innerHTML = `<strong>${accountName}:</strong> ${message}`;
+    resultsList.appendChild(resultDiv);
+
+    // Scroll to bottom
+    resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+</script>
+{% endblock %}

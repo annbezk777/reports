@@ -1,0 +1,841 @@
+{% extends "base.html" %}
+
+{% block title %}Создать отчет - SAPE Reports Panel{% endblock %}
+
+<style>
+    /* Улучшенный стиль для select аккаунтов */
+    .account-select option {
+        padding: 12px 8px !important;
+        line-height: 1.8 !important;
+        font-size: 14px !important;
+        background: white;
+    }
+
+    .account-select option:hover {
+        background-color: #EFF6FF !important;
+    }
+
+    .account-select {
+        line-height: 2 !important;
+    }
+</style>
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-800">➕ Создать отчет</h1>
+    <p class="text-gray-600 mt-2">Настройка автоматической выгрузки метрик</p>
+</div>
+
+<div class="max-w-6xl bg-white rounded-lg shadow-lg p-8">
+    <form method="POST" id="reportForm">
+        <!-- Step 1: Account Selection -->
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="account_id">
+                1️⃣ Выберите аккаунт SAPE *
+            </label>
+            <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline account-select"
+                    id="account_id"
+                    onchange="loadCampaigns(this.value)"
+                    required
+                    style="font-size: 14px;">
+                <option value="">Выберите аккаунт</option>
+                {% for account in accounts %}
+                    <option value="{{ account.id }}">
+                        📁 {{ account.name }}   |   📧 {{ account.login }}
+                    </option>
+                {% endfor %}
+            </select>
+            {% if not accounts %}
+                <p class="text-red-600 text-xs mt-1">⚠️ Сначала добавьте аккаунт и синхронизируйте кампании</p>
+            {% endif %}
+        </div>
+
+        <!-- Step 1.5: Client Filter (Optional) -->
+        <div class="mb-6" id="clientsSection" style="display: none;">
+            <label class="block text-gray-700 text-sm font-bold mb-2">
+                1️⃣.5 Фильтр по клиенту (необязательно)
+            </label>
+            <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    id="client_id"
+                    onchange="filterCampaignsByClient()">
+                <option value="">Все клиенты</option>
+            </select>
+            <p class="text-gray-600 text-xs mt-1">Выберите клиента для фильтрации кампаний</p>
+        </div>
+
+        <!-- Step 2: Campaign Selection (Multiple) -->
+        <div class="mb-6" id="campaignsSection" style="display: none;">
+            <label class="block text-gray-700 text-sm font-bold mb-2">
+                2️⃣ Выберите кампании *
+            </label>
+
+            <!-- Quick action buttons -->
+            <div class="mb-4 flex gap-2">
+                <button type="button" onclick="openBulkModal()"
+                        class="bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-4 rounded transition">
+                        📝 Добавить массово
+                </button>
+                <button type="button" onclick="selectAllCampaigns()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded transition">
+                        ✓ Выбрать все
+                </button>
+                <button type="button" onclick="deselectAllCampaigns()"
+                        class="bg-gray-600 hover:bg-gray-700 text-white text-sm font-bold py-2 px-4 rounded transition">
+                        ✗ Снять все
+                </button>
+            </div>
+
+            <div id="campaignsList" class="border rounded p-4 max-h-60 overflow-y-auto bg-gray-50">
+                <p class="text-gray-500 text-sm">Загрузка кампаний...</p>
+            </div>
+            <p class="text-gray-600 text-xs mt-2">
+                <span id="campaignCounter">Не выбрано ни одной кампании</span>
+            </p>
+        </div>
+
+        <!-- Report Name -->
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="report_name">
+                Название отчета (необязательно)
+            </label>
+            <input class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                   id="report_name"
+                   name="report_name"
+                   type="text"
+                   placeholder="Например: Отчет по видео кампаниям апрель 2026">
+            <p class="text-gray-600 text-xs mt-1">Если не указано, будет использовано название первой кампании</p>
+        </div>
+
+        <!-- Manager -->
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="manager">
+                Менеджер (необязательно)
+            </label>
+            <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    id="manager"
+                    name="manager">
+                <option value="">Не выбран</option>
+                <option value="Даня">Даня</option>
+                <option value="Саша">Саша</option>
+                <option value="Аня">Аня</option>
+                <option value="Лена">Лена</option>
+            </select>
+            <p class="text-gray-600 text-xs mt-1">Выберите ответственного менеджера</p>
+        </div>
+
+        <!-- Campaign Mode -->
+        <div class="mb-6" id="campaignModeSection" style="display: none;">
+            <label class="block text-gray-700 text-sm font-bold mb-2">
+                Режим заполнения данных *
+            </label>
+            <div class="space-y-2">
+                <label class="flex items-center">
+                    <input type="radio" name="campaign_mode" value="separate" checked class="mr-2">
+                    <span class="text-gray-700">
+                        <strong>По дням</strong> - каждая кампания в своей секции таблицы, разбивка по дням
+                    </span>
+                </label>
+                <label class="flex items-center">
+                    <input type="radio" name="campaign_mode" value="total" class="mr-2">
+                    <span class="text-gray-700">
+                        <strong>Сводный отчёт</strong> - итоговые показатели за период (без разбивки по дням)
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Google Sheets URL -->
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="google_sheet_url">
+                Ссылка на Google Sheets *
+            </label>
+            <input class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                   id="google_sheet_url"
+                   name="google_sheet_url"
+                   type="url"
+                   placeholder="https://docs.google.com/spreadsheets/d/..."
+                   onchange="loadWorksheets()"
+                   required>
+            <p class="text-gray-600 text-xs mt-1">Скопируйте ссылку из адресной строки Google Sheets</p>
+        </div>
+
+        <!-- Worksheet Selection -->
+        <div class="mb-6" id="worksheetSection" style="display: none;">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="worksheet_name">
+                Выберите лист *
+            </label>
+            <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    id="worksheet_name"
+                    name="worksheet_name">
+                <option value="">Загрузка листов...</option>
+            </select>
+            <p class="text-gray-600 text-xs mt-1">Если таблица содержит несколько листов, выберите нужный</p>
+        </div>
+
+        <!-- Schedule -->
+        <div class="mb-6 p-4 bg-gray-50 rounded">
+            <h3 class="font-bold text-gray-800 mb-3">Расписание обновления</h3>
+            <div class="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-gray-700 text-sm mb-2" for="schedule_days">
+                        Дни недели
+                    </label>
+                    <input class="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline"
+                           id="schedule_days"
+                           name="schedule_days"
+                           type="text"
+                           placeholder="1,5">
+                    <p class="text-gray-600 text-xs mt-1">1=Пн, 2=Вт, 3=Ср, 4=Чт, 5=Пт, 6=Сб, 7=Вс</p>
+                </div>
+                <div>
+                    <label class="block text-gray-700 text-sm mb-2" for="schedule_time">
+                        Время
+                    </label>
+                    <input class="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline"
+                           id="schedule_time"
+                           name="schedule_time"
+                           type="time"
+                           value="09:00">
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between">
+            <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition"
+                    type="submit"
+                    {% if not accounts %}disabled{% endif %}>
+                Создать отчет
+            </button>
+            <a href="{{ url_for('reports') }}" class="text-gray-600 hover:text-gray-800">
+                Отмена
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Help Box -->
+<div class="max-w-3xl mt-6 bg-blue-50 border-l-4 border-blue-400 p-4">
+    <div class="flex">
+        <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+            </svg>
+        </div>
+        <div class="ml-3">
+            <h3 class="text-sm font-medium text-blue-800">Перед созданием отчета:</h3>
+            <div class="mt-2 text-sm text-blue-700">
+                <ol class="list-decimal list-inside space-y-1">
+                    <li>Откройте Google Sheets таблицу</li>
+                    <li>Дайте доступ "Редактор" для Service Account email: <code class="bg-gray-100 px-1">sape-reports-bot@orbital-outpost-484308-s3.iam.gserviceaccount.com</code></li>
+                    <li>Определите ячейки куда записывать метрики</li>
+                    <li>После создания нажмите "Обновить сейчас" для теста</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk ID Input Modal -->
+<div id="bulkIdModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-2xl p-8 max-w-2xl w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-gray-800">📝 Массовый ввод ID кампаний</h3>
+            <button type="button" onclick="closeBulkModal()" class="text-gray-500 hover:text-gray-700 text-2xl">
+                ×
+            </button>
+        </div>
+
+        <p class="text-gray-600 text-sm mb-4">
+            Введите ID кампаний через запятую или каждый с новой строки:
+        </p>
+
+        <textarea id="bulkCampaignIdsModal"
+                  class="shadow border rounded w-full py-3 px-4 text-gray-700 focus:outline-none focus:border-blue-500"
+                  rows="8"
+                  placeholder="Например:&#10;283672&#10;284501&#10;285302&#10;&#10;или&#10;&#10;283672, 284501, 285302"></textarea>
+
+        <div id="bulkIdErrorsModal" class="mt-2 text-red-600 text-sm hidden"></div>
+
+        <div class="mt-6 flex gap-3 justify-end">
+            <button type="button" onclick="closeBulkModal()"
+                    class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded transition">
+                Отмена
+            </button>
+            <button type="button" onclick="applyBulkIdsFromModal()"
+                    class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded transition">
+                ✓ Применить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Frequency Help Modal -->
+<div id="frequencyHelpModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-2xl p-8 max-w-2xl w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-gray-800">ℹ️ Справка: Частоты и разбросы</h3>
+            <button type="button" onclick="closeFrequencyHelp()" class="text-gray-500 hover:text-gray-700 text-2xl">
+                ×
+            </button>
+        </div>
+
+        <div class="text-gray-700 space-y-4">
+            <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
+                <h4 class="font-bold mb-2">Как работает:</h4>
+                <p class="mb-2">Частота = случайное число от <strong>(Частота - Разброс)</strong> до <strong>Частоты</strong></p>
+            </div>
+
+            <div>
+                <h4 class="font-bold mb-2">Примеры с разбросом 0.5:</h4>
+                <ul class="list-disc list-inside space-y-1 ml-2">
+                    <li>Частота 2.0 → диапазон от <strong>1.5 до 2.0</strong></li>
+                    <li>Частота 3.0 → диапазон от <strong>2.5 до 3.0</strong></li>
+                    <li>Частота 4.0 → диапазон от <strong>3.5 до 4.0</strong></li>
+                </ul>
+            </div>
+
+            <div>
+                <h4 class="font-bold mb-2">Дневная и Тотальная частоты:</h4>
+                <ul class="list-disc list-inside space-y-1 ml-2">
+                    <li><strong>Дневная частота</strong> - используется для расчета охвата по каждому дню</li>
+                    <li><strong>Тотальная частота</strong> - используется для расчета общего охвата в строке "Всего"</li>
+                </ul>
+            </div>
+
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <h4 class="font-bold mb-2">⚠️ Важно:</h4>
+                <ul class="list-disc list-inside space-y-1 ml-2">
+                    <li>Частота <strong>НИКОГДА</strong> не превышает указанное максимальное значение</li>
+                    <li>Тотальная частота должна быть <strong>≤ Дневной частоты</strong></li>
+                    <li>По умолчанию разброс = <strong>0.1</strong></li>
+                    <li>Для отчетов с несколькими кампаниями используется среднее значение частот</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+            <button type="button" onclick="closeFrequencyHelp()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition">
+                Понятно
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateFormatBadge(selectElement, campaignId) {
+    // Format will be saved when form is submitted
+    console.log(`Campaign ${campaignId} format changed to ${selectElement.value}`);
+}
+
+let allCampaigns = [];  // Store ALL campaigns (unfiltered) for bulk ID matching
+let displayedCampaigns = [];  // Currently displayed campaigns (may be filtered)
+let currentAccountId = null;  // Track current account
+
+function loadCampaigns(accountId) {
+    const campaignsSection = document.getElementById('campaignsSection');
+    const campaignModeSection = document.getElementById('campaignModeSection');
+    const campaignsList = document.getElementById('campaignsList');
+    const clientsSection = document.getElementById('clientsSection');
+
+    currentAccountId = accountId;
+
+    if (!accountId) {
+        campaignsSection.style.display = 'none';
+        campaignModeSection.style.display = 'none';
+        clientsSection.style.display = 'none';
+        return;
+    }
+
+    // Load clients for this account
+    loadClients(accountId);
+
+    // Show loading
+    campaignsList.innerHTML = '<p class="text-gray-500 text-sm">Загрузка кампаний...</p>';
+    campaignsSection.style.display = 'block';
+
+    // Fetch campaigns
+    fetchCampaigns(accountId, null);
+}
+
+function loadClients(accountId) {
+    const clientsSection = document.getElementById('clientsSection');
+    const clientSelect = document.getElementById('client_id');
+
+    // Fetch clients
+    fetch(`/api/clients/${accountId}`)
+        .then(response => response.json())
+        .then(clients => {
+            // Reset select
+            clientSelect.innerHTML = '<option value="">Все клиенты</option>';
+
+            if (clients.length > 0) {
+                clients.forEach(client => {
+                    const option = document.createElement('option');
+                    option.value = client.id;
+                    option.textContent = client.name;
+                    clientSelect.appendChild(option);
+                });
+
+                // Show clients section only if there are clients
+                clientsSection.style.display = 'block';
+            } else {
+                clientsSection.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading clients:', error);
+            clientsSection.style.display = 'none';
+        });
+}
+
+function filterCampaignsByClient() {
+    const clientId = document.getElementById('client_id').value;
+    const campaignsList = document.getElementById('campaignsList');
+
+    // Show loading
+    campaignsList.innerHTML = '<p class="text-gray-500 text-sm">Загрузка кампаний...</p>';
+
+    // Fetch campaigns filtered by client
+    fetchCampaigns(currentAccountId, clientId || null);
+}
+
+function fetchCampaigns(accountId, clientId) {
+    const campaignsList = document.getElementById('campaignsList');
+    const campaignModeSection = document.getElementById('campaignModeSection');
+
+    // CRITICAL: Always load ALL campaigns first (for bulk search to work)
+    // Then load filtered campaigns for display
+    if (clientId && allCampaigns.length === 0) {
+        console.log('⚠️ Loading ALL campaigns first (for bulk search), then will apply filter');
+
+        // Load ALL campaigns first
+        fetch(`/api/campaigns/${accountId}`)
+            .then(response => response.json())
+            .then(allCampsData => {
+                allCampaigns = allCampsData;
+                console.log(`✅ Loaded ${allCampaigns.length} total campaigns in account`);
+
+                // Now load filtered campaigns
+                return fetch(`/api/campaigns/${accountId}?client_id=${clientId}`);
+            })
+            .then(response => response.json())
+            .then(filteredCampaigns => {
+                displayedCampaigns = filteredCampaigns;
+                console.log(`✅ Loaded ${filteredCampaigns.length} campaigns for selected client`);
+
+                if (filteredCampaigns.length === 0) {
+                    campaignsList.innerHTML = '<p class="text-red-600 text-sm">Нет кампаний для выбранного клиента.</p>';
+                    campaignModeSection.style.display = 'none';
+                    return;
+                }
+
+                renderCampaigns(filteredCampaigns);
+                campaignModeSection.style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error loading campaigns:', error);
+                campaignsList.innerHTML = '<p class="text-red-600 text-sm">Ошибка загрузки кампаний</p>';
+            });
+
+        return;
+    }
+
+    // Regular loading (no client filter OR allCampaigns already loaded)
+    let url = `/api/campaigns/${accountId}`;
+    if (clientId) {
+        url += `?client_id=${clientId}`;
+    }
+
+    fetch(url)
+        .then(response => response.json())
+        .then(campaigns => {
+            // Store complete list only when loading without filter
+            if (!clientId) {
+                allCampaigns = campaigns;  // Store ALL campaigns for bulk operations
+                console.log(`✅ Loaded ${allCampaigns.length} total campaigns in account`);
+            }
+
+            displayedCampaigns = campaigns;  // Store currently displayed campaigns
+
+            if (campaigns.length === 0) {
+                campaignsList.innerHTML = '<p class="text-red-600 text-sm">Нет доступных кампаний. Сначала синхронизируйте аккаунт.</p>';
+                campaignModeSection.style.display = 'none';
+                return;
+            }
+
+            renderCampaigns(campaigns);
+            campaignModeSection.style.display = 'none';
+        })
+        .catch(error => {
+            console.error('Error loading campaigns:', error);
+            campaignsList.innerHTML = '<p class="text-red-600 text-sm">Ошибка загрузки кампаний</p>';
+        });
+}
+
+function renderCampaigns(campaigns) {
+    const campaignsList = document.getElementById('campaignsList');
+
+    // Render campaigns as checkboxes with format selector and frequency input
+    let html = '<div class="space-y-2" id="campaignsListInner">';
+    campaigns.forEach(campaign => {
+        const currentFormat = campaign.format_type || 'B';
+        html += `
+            <div class="flex items-center hover:bg-gray-100 p-2 rounded campaign-item" data-campaign-id="${campaign.campaign_id}">
+                <input type="checkbox" name="campaign_ids" value="${campaign.id}"
+                       id="campaign_${campaign.id}"
+                       data-sape-id="${campaign.campaign_id}"
+                       class="mr-3" onchange="handleCampaignChange()">
+                <label for="campaign_${campaign.id}" class="flex-1 cursor-pointer">
+                    <div class="font-semibold text-gray-800">${campaign.name}</div>
+                    <div class="text-xs text-gray-600">ID: ${campaign.campaign_id}</div>
+                </label>
+                <div class="ml-4 flex items-center gap-2">
+                    <select name="format_${campaign.id}"
+                            class="px-2 py-1 border rounded text-xs font-bold focus:outline-none focus:border-blue-500"
+                            onchange="updateFormatBadge(this, '${campaign.id}')">
+                        <option value="B" ${currentFormat === 'B' ? 'selected' : ''} class="text-blue-700">B (Баннер)</option>
+                        <option value="V" ${currentFormat === 'V' ? 'selected' : ''} class="text-red-700">V (Видео)</option>
+                        <option value="CTV" ${currentFormat === 'CTV' ? 'selected' : ''} class="text-green-700">CTV (Connected TV)</option>
+                        <option value="TGB" ${currentFormat === 'TGB' ? 'selected' : ''} class="text-purple-700">TGB (ТГБ)</option>
+                    </select>
+                </div>
+                <div class="ml-2 flex items-center gap-2">
+                    <!-- Daily Frequency -->
+                    <div class="flex flex-col">
+                        <label class="text-[10px] text-gray-500 mb-0.5">Дневная</label>
+                        <input type="number"
+                               name="daily_freq_${campaign.id}"
+                               step="0.1"
+                               min="1"
+                               max="10"
+                               value="3.0"
+                               class="w-14 px-1 py-1 border rounded text-xs focus:outline-none focus:border-blue-500"
+                               placeholder="3.0">
+                    </div>
+
+                    <!-- Daily Variance -->
+                    <div class="flex flex-col">
+                        <label class="text-[10px] text-gray-500 mb-0.5">±</label>
+                        <input type="number"
+                               name="daily_var_${campaign.id}"
+                               step="0.1"
+                               min="0"
+                               max="2"
+                               value="0.1"
+                               class="w-12 px-1 py-1 border rounded text-xs focus:outline-none focus:border-blue-500"
+                               placeholder="0.1">
+                    </div>
+
+                    <!-- Total Frequency -->
+                    <div class="flex flex-col">
+                        <label class="text-[10px] text-gray-500 mb-0.5">Тотал.</label>
+                        <input type="number"
+                               name="total_freq_${campaign.id}"
+                               step="0.1"
+                               min="1"
+                               max="10"
+                               value="3.0"
+                               class="w-14 px-1 py-1 border rounded text-xs focus:outline-none focus:border-blue-500"
+                               placeholder="3.0">
+                    </div>
+
+                    <!-- Total Variance -->
+                    <div class="flex flex-col">
+                        <label class="text-[10px] text-gray-500 mb-0.5">±</label>
+                        <input type="number"
+                               name="total_var_${campaign.id}"
+                               step="0.1"
+                               min="0"
+                               max="2"
+                               value="0.1"
+                               class="w-12 px-1 py-1 border rounded text-xs focus:outline-none focus:border-blue-500"
+                               placeholder="0.1">
+                    </div>
+
+                    <!-- Help Icon -->
+                    <button type="button"
+                            onclick="openFrequencyHelp()"
+                            class="text-blue-500 hover:text-blue-700 transition ml-1"
+                            title="Справка о частотах">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+
+    campaignsList.innerHTML = html;
+}
+
+function selectAllCampaigns() {
+    document.querySelectorAll('input[name="campaign_ids"]').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    handleCampaignChange();
+}
+
+function deselectAllCampaigns() {
+    document.querySelectorAll('input[name="campaign_ids"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    handleCampaignChange();
+}
+
+// Modal functions for bulk ID input
+function openBulkModal() {
+    // Check if campaigns are loaded
+    const campaignsListInner = document.getElementById('campaignsListInner');
+    if (!campaignsListInner || campaignsListInner.querySelectorAll('.campaign-item').length === 0) {
+        alert('⚠️ Сначала выберите аккаунт чтобы загрузить список кампаний');
+        return;
+    }
+
+    document.getElementById('bulkIdModal').classList.remove('hidden');
+    document.getElementById('bulkCampaignIdsModal').value = '';
+    document.getElementById('bulkIdErrorsModal').classList.add('hidden');
+}
+
+function closeBulkModal() {
+    document.getElementById('bulkIdModal').classList.add('hidden');
+}
+
+function applyBulkIdsFromModal() {
+    const bulkInput = document.getElementById('bulkCampaignIdsModal').value;
+    const errorDiv = document.getElementById('bulkIdErrorsModal');
+
+    if (!bulkInput.trim()) {
+        errorDiv.innerHTML = '<strong>⚠️ Введите ID кампаний</strong>';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    // Check if campaigns are loaded
+    if (allCampaigns.length === 0) {
+        errorDiv.innerHTML = '<strong>⚠️ Сначала выберите аккаунт</strong>';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    // Parse IDs (support comma-separated or line-separated)
+    const inputIds = bulkInput
+        .split(/[\n,]/)
+        .map(id => id.trim())
+        .filter(id => id.length > 0);
+
+    console.log('🔍 Searching for IDs:', inputIds);
+    console.log('📋 Total campaigns in account:', allCampaigns.length);
+    console.log('📋 Displayed campaigns (may be filtered):', displayedCampaigns.length);
+
+    // Find which campaigns exist in allCampaigns
+    const foundInAll = [];
+    const notFoundIds = [];
+
+    inputIds.forEach(inputId => {
+        const campaign = allCampaigns.find(c => String(c.campaign_id) === String(inputId));
+        if (campaign) {
+            foundInAll.push(campaign);
+            console.log(`  ✅ Found in account: ${inputId} - ${campaign.name}`);
+        } else {
+            notFoundIds.push(inputId);
+            console.log(`  ❌ NOT found in account: ${inputId}`);
+        }
+    });
+
+    // Show error for IDs that don't exist at all
+    if (notFoundIds.length > 0) {
+        // Show available IDs to help user
+        const availableIds = allCampaigns.map(c => c.campaign_id).slice(0, 10);
+        console.log('📋 Available IDs in account (first 10):', availableIds);
+
+        let errorMsg = `<strong>⚠️ Не найдены ID в выбранном аккаунте:</strong> ${notFoundIds.join(', ')}<br><br>`;
+        errorMsg += `<small>Доступные ID в аккаунте (первые 10): ${availableIds.join(', ')}</small><br>`;
+        errorMsg += `<small>Проверьте что выбран правильный аккаунт и кампании синхронизированы.</small>`;
+
+        errorDiv.innerHTML = errorMsg;
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    // Check if any campaigns are filtered out
+    const displayedIds = displayedCampaigns.map(c => String(c.campaign_id));
+    const needsFilterRemoval = foundInAll.some(c => !displayedIds.includes(String(c.campaign_id)));
+
+    if (needsFilterRemoval) {
+        console.log('⚠️ Some campaigns are filtered out - removing client filter');
+        const clientSelect = document.getElementById('client_id');
+        if (clientSelect) {
+            clientSelect.value = '';
+            filterCampaignsByClient();
+        }
+
+        // Wait for campaigns to reload
+        setTimeout(() => {
+            selectCampaignsByIds(inputIds, errorDiv);
+        }, 800);
+    } else {
+        // All campaigns are already displayed, select immediately
+        selectCampaignsByIds(inputIds, errorDiv);
+    }
+}
+
+function selectCampaignsByIds(inputIds, errorDiv) {
+    console.log('✅ Selecting campaigns by IDs in DOM');
+
+    const allCheckboxes = document.querySelectorAll('input[data-sape-id]');
+    const availableIds = Array.from(allCheckboxes).map(cb => cb.getAttribute('data-sape-id'));
+    console.log('📋 Available campaign IDs in DOM:', availableIds);
+
+    let foundCount = 0;
+
+    // First, uncheck all
+    document.querySelectorAll('input[name="campaign_ids"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+
+    // Check boxes for matching IDs
+    inputIds.forEach(inputId => {
+        const checkbox = document.querySelector(`input[data-sape-id="${inputId}"]`);
+        if (checkbox) {
+            console.log(`  ✅ Checked: ${inputId}`);
+            checkbox.checked = true;
+            foundCount++;
+        } else {
+            console.log(`  ⚠️ Not in DOM yet: ${inputId}`);
+        }
+    });
+
+    // Success - close modal
+    errorDiv.classList.add('hidden');
+    closeBulkModal();
+
+    if (foundCount > 0) {
+        // Show a brief success notification
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+        notification.innerHTML = `✅ Выбрано кампаний: ${foundCount}`;
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+    }
+
+    handleCampaignChange();
+}
+
+function loadWorksheets() {
+    const sheetUrl = document.getElementById('google_sheet_url').value;
+    const worksheetSection = document.getElementById('worksheetSection');
+    const worksheetSelect = document.getElementById('worksheet_name');
+
+    if (!sheetUrl) {
+        worksheetSection.style.display = 'none';
+        return;
+    }
+
+    worksheetSection.style.display = 'block';
+    worksheetSelect.innerHTML = '<option value="">Загрузка листов...</option>';
+
+    // Fetch worksheets
+    fetch('/api/worksheets', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ google_sheet_url: sheetUrl })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            worksheetSelect.innerHTML = '<option value="">Ошибка загрузки листов</option>';
+            alert('Ошибка: ' + data.error);
+            return;
+        }
+
+        // Populate worksheet options
+        worksheetSelect.innerHTML = '';
+        data.worksheets.forEach((name, index) => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            if (index === 0) option.selected = true;
+            worksheetSelect.appendChild(option);
+        });
+    })
+    .catch(error => {
+        console.error('Error loading worksheets:', error);
+        worksheetSelect.innerHTML = '<option value="">Ошибка загрузки</option>';
+    });
+}
+
+function updateCampaignCounter() {
+    const checked = document.querySelectorAll('input[name="campaign_ids"]:checked');
+    const counter = document.getElementById('campaignCounter');
+    const count = checked.length;
+
+    if (count === 0) {
+        counter.textContent = 'Не выбрано ни одной кампании';
+    } else if (count === 1) {
+        counter.textContent = 'Выбрано: 1 кампания';
+    } else if (count < 5) {
+        counter.textContent = `Выбрано: ${count} кампании`;
+    } else {
+        counter.textContent = `Выбрано: ${count} кампаний`;
+    }
+}
+
+function sortCampaignsSelectedFirst() {
+    const container = document.getElementById('campaignsListInner');
+    if (!container) return; // Not rendered yet
+
+    const items = Array.from(container.querySelectorAll('.campaign-item'));
+
+    // Sort: checked first, then unchecked
+    items.sort((a, b) => {
+        const aChecked = a.querySelector('input[type="checkbox"]').checked;
+        const bChecked = b.querySelector('input[type="checkbox"]').checked;
+
+        if (aChecked && !bChecked) return -1;
+        if (!aChecked && bChecked) return 1;
+        return 0;
+    });
+
+    // Clear and re-append in sorted order
+    container.innerHTML = '';
+    items.forEach(item => container.appendChild(item));
+}
+
+function handleCampaignChange() {
+    updateCampaignCounter();
+    sortCampaignsSelectedFirst();
+    toggleCampaignMode();
+}
+
+function toggleCampaignMode() {
+    const checked = document.querySelectorAll('input[name="campaign_ids"]:checked');
+    const campaignModeSection = document.getElementById('campaignModeSection');
+
+    if (checked.length > 1) {
+        campaignModeSection.style.display = 'block';
+    } else {
+        campaignModeSection.style.display = 'none';
+    }
+}
+
+// Frequency Help Modal functions
+function openFrequencyHelp() {
+    document.getElementById('frequencyHelpModal').classList.remove('hidden');
+}
+
+function closeFrequencyHelp() {
+    document.getElementById('frequencyHelpModal').classList.add('hidden');
+}
+</script>
+{% endblock %}

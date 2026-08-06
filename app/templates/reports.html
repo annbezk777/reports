@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Отчеты - SAPE Reports Panel{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-800">
+                {% if show_archived %}
+                    📦 Архив отчетов
+                {% else %}
+                    📊 Отчеты
+                {% endif %}
+            </h1>
+            <p class="text-gray-600 mt-2">Настройка автоматической выгрузки в Google Sheets</p>
+        </div>
+        <a href="{{ url_for('add_report') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
+            + Создать отчет
+        </a>
+    </div>
+
+    <!-- Archive toggle -->
+    <div class="flex gap-2 mb-4">
+        {% if show_archived %}
+            <a href="{{ url_for('reports') }}" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition">
+                📊 Активные отчеты
+            </a>
+            <span class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">
+                📦 Архив
+            </span>
+        {% else %}
+            <span class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">
+                📊 Активные отчеты
+            </span>
+            <a href="{{ url_for('reports', show_archived='true') }}" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition">
+                📦 Архив
+            </a>
+        {% endif %}
+    </div>
+
+    <!-- Manager Filter -->
+    <div class="mb-4">
+        <form method="GET" class="flex items-center gap-3">
+            <label class="text-gray-700 font-semibold">Фильтр по менеджеру:</label>
+            <select name="manager"
+                    onchange="this.form.submit()"
+                    class="shadow border rounded py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline">
+                <option value="">Все менеджеры</option>
+                <option value="Даня" {% if manager_filter == 'Даня' %}selected{% endif %}>Даня</option>
+                <option value="Саша" {% if manager_filter == 'Саша' %}selected{% endif %}>Саша</option>
+                <option value="Аня" {% if manager_filter == 'Аня' %}selected{% endif %}>Аня</option>
+                <option value="Лена" {% if manager_filter == 'Лена' %}selected{% endif %}>Лена</option>
+                <option value="unassigned" {% if manager_filter == 'unassigned' %}selected{% endif %}>Без менеджера</option>
+            </select>
+            {% if request.args.get('show_archived') %}
+                <input type="hidden" name="show_archived" value="true">
+            {% endif %}
+            {% if manager_filter %}
+                <a href="{{ url_for('reports', show_archived=request.args.get('show_archived')) }}"
+                   class="text-blue-600 hover:text-blue-800 text-sm">
+                    ✖ Сбросить фильтр
+                </a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Reports List -->
+<div class="grid gap-6">
+    {% if reports %}
+        {% for report in reports %}
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex justify-between items-start">
+                <div class="flex-1">
+                    <h3 class="text-xl font-bold text-gray-800 mb-2">
+                        {{ report.name if report.name else report.campaign.name }}
+                        {% if report.brand %}
+                            <span class="text-sm font-normal bg-blue-100 text-blue-700 px-2 py-1 rounded ml-2">
+                                🏷️ {{ report.brand }}
+                            </span>
+                        {% endif %}
+                        {% if report.manager %}
+                            <span class="text-sm font-normal bg-purple-100 text-purple-700 px-2 py-1 rounded ml-2">
+                                👤 {{ report.manager }}
+                            </span>
+                        {% endif %}
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-4">
+                        Аккаунт: 📁 {{ report.campaign.account.name }}   |   📧
+                        {% if report.campaign.account.sape_user_id %}
+                            <a href="https://cp.sapient.ru/users/sudo?uid={{ report.campaign.account.sape_user_id }}&sid=15"
+                               target="_blank"
+                               class="text-blue-600 hover:text-blue-800 underline"
+                               title="Открыть личный кабинет SAPE">
+                                {{ report.campaign.account.login }}
+                            </a>
+                        {% else %}
+                            {{ report.campaign.account.login }}
+                        {% endif %}
+                    </p>
+
+                    <div class="grid md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <p class="text-gray-600">📋 Google Sheets:</p>
+                            <a href="{{ report.google_sheet_url }}" target="_blank" class="text-blue-600 hover:text-blue-800 break-all">
+                                {{ report.google_sheet_url[:50] }}...
+                            </a>
+                        </div>
+
+                        <div>
+                            <p class="text-gray-600">🕐 Последнее обновление:</p>
+                            <p class="text-gray-800">
+                                {% if report.last_update %}
+                                    {{ report.last_update.strftime('%d.%m.%Y %H:%M') }}
+                                {% else %}
+                                    <span class="text-gray-400">Еще не обновлялся</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ml-6 flex flex-col gap-2">
+                    <button onclick="toggleDetails({{ report.id }})"
+                       class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition block text-center w-full">
+                        📅 Выбрать даты
+                    </button>
+                    <a href="{{ url_for('edit_report', report_id=report.id) }}"
+                       class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition block text-center">
+                        ✏️ Редактировать
+                    </a>
+                    <a href="{{ url_for('copy_report', report_id=report.id) }}"
+                       class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition block text-center"
+                       onclick="return confirm('Создать копию отчета {{ report.name or report.campaign.name }}?')">
+                        📋 Скопировать
+                    </a>
+                    {% if show_archived %}
+                        <form action="{{ url_for('unarchive_report', report_id=report.id) }}" method="POST" style="margin: 0;">
+                            <button type="submit"
+                               class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition block text-center w-full">
+                                📤 Восстановить
+                            </button>
+                        </form>
+                    {% else %}
+                        <form action="{{ url_for('archive_report', report_id=report.id) }}" method="POST" style="margin: 0;">
+                            <button type="submit"
+                               class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition block text-center w-full">
+                                📦 В архив
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Date picker form (hidden by default) -->
+            <div id="datePicker{{ report.id }}" class="hidden mt-4 p-4 bg-gray-50 rounded border border-gray-200">
+                <form action="{{ url_for('run_report', report_id=report.id) }}" method="GET" class="grid md:grid-cols-3 gap-4 items-end" onsubmit="showProgress(event, {{ report.id }})">
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Дата с:</label>
+                        <input type="date" name="date_from" required
+                               class="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Дата по:</label>
+                        <input type="date" name="date_to" required
+                               class="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none">
+                    </div>
+                    <div>
+                        <button type="submit"
+                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full transition">
+                            Обновить за период
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="bg-white rounded-lg shadow-lg p-8 text-center">
+            <p class="text-gray-500 mb-4">У вас пока нет настроенных отчетов</p>
+            <a href="{{ url_for('add_report') }}" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
+                + Создать первый отчет
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Progress Modal -->
+<div id="progressModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
+        <div class="text-center">
+            <!-- Spinner -->
+            <div class="mb-4 flex justify-center">
+                <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
+            </div>
+
+            <!-- Status Messages -->
+            <h3 class="text-xl font-bold text-gray-800 mb-2" id="progressTitle">Обновление отчета...</h3>
+            <p class="text-gray-600 mb-4" id="progressMessage">Пожалуйста, подождите</p>
+
+            <!-- Progress Steps -->
+            <div class="space-y-2 text-left">
+                <div class="flex items-center text-sm">
+                    <span id="step1" class="text-gray-400">⏳ Загрузка данных из SAPE API</span>
+                </div>
+                <div class="flex items-center text-sm">
+                    <span id="step2" class="text-gray-400">⏳ Запись данных в Google Sheets</span>
+                </div>
+                <div class="flex items-center text-sm">
+                    <span id="step3" class="text-gray-400">⏳ Расчет итоговых показателей</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleDetails(reportId) {
+    const picker = document.getElementById('datePicker' + reportId);
+    if (picker.classList.contains('hidden')) {
+        picker.classList.remove('hidden');
+    } else {
+        picker.classList.add('hidden');
+    }
+}
+
+function showDatePicker(reportId) {
+    // Quick run - last 7 days by default
+    window.location.href = `/reports/${reportId}/run`;
+}
+
+function showProgress(event, reportId) {
+    // Show progress modal
+    const modal = document.getElementById('progressModal');
+    modal.classList.remove('hidden');
+
+    // Animate progress steps
+    setTimeout(() => {
+        document.getElementById('step1').innerHTML = '✅ Загрузка данных из SAPE API';
+        document.getElementById('step1').classList.remove('text-gray-400');
+        document.getElementById('step1').classList.add('text-green-600');
+    }, 500);
+
+    setTimeout(() => {
+        document.getElementById('step2').innerHTML = '✅ Запись данных в Google Sheets';
+        document.getElementById('step2').classList.remove('text-gray-400');
+        document.getElementById('step2').classList.add('text-green-600');
+    }, 1500);
+
+    setTimeout(() => {
+        document.getElementById('step3').innerHTML = '✅ Расчет итоговых показателей';
+        document.getElementById('step3').classList.remove('text-gray-400');
+        document.getElementById('step3').classList.add('text-green-600');
+        document.getElementById('progressTitle').innerHTML = 'Почти готово...';
+    }, 2500);
+
+    // Form will submit normally and page will reload
+    return true;
+}
+</script>
+{% endblock %}

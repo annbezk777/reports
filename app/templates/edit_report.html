@@ -1,0 +1,530 @@
+{% extends "base.html" %}
+
+{% block title %}Редактировать отчет - SAPE Reports Panel{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-800">✏️ Редактировать отчет</h1>
+    <p class="text-gray-600 mt-2">Изменение настроек отчета</p>
+</div>
+
+<div class="max-w-6xl bg-white rounded-lg shadow-lg p-8">
+    <form method="POST" id="reportForm">
+        <!-- Report Name -->
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="report_name">
+                Название отчета
+            </label>
+            <input class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                   id="report_name"
+                   name="report_name"
+                   type="text"
+                   value="{{ report.name or '' }}"
+                   placeholder="Например: Отчет по видео кампаниям апрель 2026">
+            <p class="text-gray-600 text-xs mt-1">Если не указано, будет использовано название первой кампании</p>
+        </div>
+
+        <!-- Manager -->
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="manager">
+                Менеджер (необязательно)
+            </label>
+            <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    id="manager"
+                    name="manager">
+                <option value="">Не выбран</option>
+                <option value="Даня" {% if report.manager == 'Даня' %}selected{% endif %}>Даня</option>
+                <option value="Саша" {% if report.manager == 'Саша' %}selected{% endif %}>Саша</option>
+                <option value="Аня" {% if report.manager == 'Аня' %}selected{% endif %}>Аня</option>
+                <option value="Лена" {% if report.manager == 'Лена' %}selected{% endif %}>Лена</option>
+            </select>
+            <p class="text-gray-600 text-xs mt-1">Выберите ответственного менеджера</p>
+        </div>
+
+        <!-- Account Info (read-only) -->
+        <div class="mb-6 p-4 bg-gray-50 rounded border">
+            <label class="block text-gray-700 text-sm font-bold mb-2">
+                Аккаунт SAPE
+            </label>
+            <p class="text-gray-800">📁 {{ account.name }}   |   📧 {{ account.login }}</p>
+            <p class="text-gray-600 text-xs mt-1">Аккаунт нельзя изменить. Создайте новый отчет для другого аккаунта.</p>
+        </div>
+
+        <!-- Campaign Selection (Multiple) -->
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2">
+                Выберите кампании *
+            </label>
+
+            <!-- Bulk ID Input -->
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm mb-2">
+                    Массовый ввод ID кампаний (через запятую или построчно):
+                </label>
+                <textarea id="bulkCampaignIds"
+                          class="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline"
+                          rows="3"
+                          placeholder="Например: 283672, 284501, 285302 или каждый ID с новой строки"></textarea>
+                <div class="mt-2 flex gap-2">
+                    <button type="button" onclick="applyBulkIds()"
+                            class="bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded transition">
+                        Применить ID
+                    </button>
+                    <button type="button" onclick="selectAllCampaigns()"
+                            class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded transition">
+                        ✓ Выбрать все
+                    </button>
+                    <button type="button" onclick="deselectAllCampaigns()"
+                            class="bg-gray-600 hover:bg-gray-700 text-white text-sm font-bold py-1 px-3 rounded transition">
+                        ✗ Снять все
+                    </button>
+                </div>
+                <div id="bulkIdErrors" class="mt-2 text-red-600 text-sm hidden"></div>
+            </div>
+
+            <div class="border rounded p-4 max-h-60 overflow-y-auto bg-gray-50">
+                <div class="space-y-2" id="campaignsList">
+                    {% for campaign in campaigns %}
+                    <div class="flex items-center hover:bg-gray-100 p-2 rounded campaign-item"
+                         data-campaign-id="{{ campaign.campaign_id }}"
+                         data-is-selected="{% if campaign.id in report.campaign_ids %}1{% else %}0{% endif %}">
+                        <input type="checkbox" name="campaign_ids" value="{{ campaign.id }}"
+                               id="campaign_{{ campaign.id }}"
+                               data-sape-id="{{ campaign.campaign_id }}"
+                               {% if campaign.id in report.campaign_ids %}checked{% endif %}
+                               class="mr-3" onchange="handleCampaignChange()">
+                        <label for="campaign_{{ campaign.id }}" class="flex-1 cursor-pointer">
+                            <div class="font-semibold text-gray-800">{{ campaign.name }}</div>
+                            <div class="text-xs text-gray-600">ID: {{ campaign.campaign_id }}</div>
+                        </label>
+                        <div class="ml-4 flex items-center gap-2">
+                            <select name="format_{{ campaign.id }}"
+                                    class="px-2 py-1 border rounded text-xs font-bold focus:outline-none focus:border-blue-500">
+                                <option value="B" {% if campaign.format_type == 'B' %}selected{% endif %} class="text-blue-700">B (Баннер)</option>
+                                <option value="V" {% if campaign.format_type == 'V' %}selected{% endif %} class="text-red-700">V (Видео)</option>
+                                <option value="CTV" {% if campaign.format_type == 'CTV' %}selected{% endif %} class="text-green-700">CTV (Connected TV)</option>
+                                <option value="TGB" {% if campaign.format_type == 'TGB' %}selected{% endif %} class="text-purple-700">TGB (ТГБ)</option>
+                            </select>
+                        </div>
+                        <div class="ml-2 flex items-center gap-2">
+                            {% set campaign_id_str = campaign.id|string %}
+                            {% if report.campaign_settings and campaign_id_str in report.campaign_settings %}
+                                {% set settings = report.campaign_settings[campaign_id_str] %}
+                                {% set daily_freq = settings.daily_frequency %}
+                                {% set daily_var = settings.daily_variance %}
+                                {% set total_freq = settings.total_frequency %}
+                                {% set total_var = settings.total_variance %}
+                            {% else %}
+                                {# Fallback to old fields #}
+                                {% set daily_freq = report.campaign_frequencies.get(campaign_id_str, 3.0) if report.campaign_frequencies else 3.0 %}
+                                {% set daily_var = report.frequency_variance or 0.1 %}
+                                {% set total_freq = daily_freq %}
+                                {% set total_var = 0.1 %}
+                            {% endif %}
+
+                            <!-- Daily Frequency -->
+                            <div class="flex flex-col">
+                                <label class="text-[10px] text-gray-500 mb-0.5">Дневная</label>
+                                <input type="number"
+                                       name="daily_freq_{{ campaign.id }}"
+                                       step="0.1"
+                                       min="1"
+                                       max="10"
+                                       value="{{ daily_freq }}"
+                                       class="w-14 px-1 py-1 border rounded text-xs focus:outline-none focus:border-blue-500"
+                                       placeholder="3.0">
+                            </div>
+
+                            <!-- Daily Variance -->
+                            <div class="flex flex-col">
+                                <label class="text-[10px] text-gray-500 mb-0.5">±</label>
+                                <input type="number"
+                                       name="daily_var_{{ campaign.id }}"
+                                       step="0.1"
+                                       min="0"
+                                       max="2"
+                                       value="{{ daily_var }}"
+                                       class="w-12 px-1 py-1 border rounded text-xs focus:outline-none focus:border-blue-500"
+                                       placeholder="0.1">
+                            </div>
+
+                            <!-- Total Frequency -->
+                            <div class="flex flex-col">
+                                <label class="text-[10px] text-gray-500 mb-0.5">Тотал.</label>
+                                <input type="number"
+                                       name="total_freq_{{ campaign.id }}"
+                                       step="0.1"
+                                       min="1"
+                                       max="10"
+                                       value="{{ total_freq }}"
+                                       class="w-14 px-1 py-1 border rounded text-xs focus:outline-none focus:border-blue-500"
+                                       placeholder="3.0">
+                            </div>
+
+                            <!-- Total Variance -->
+                            <div class="flex flex-col">
+                                <label class="text-[10px] text-gray-500 mb-0.5">±</label>
+                                <input type="number"
+                                       name="total_var_{{ campaign.id }}"
+                                       step="0.1"
+                                       min="0"
+                                       max="2"
+                                       value="{{ total_var }}"
+                                       class="w-12 px-1 py-1 border rounded text-xs focus:outline-none focus:border-blue-500"
+                                       placeholder="0.1">
+                            </div>
+
+                            <!-- Help Icon -->
+                            <button type="button"
+                                    onclick="openFrequencyHelp()"
+                                    class="text-blue-500 hover:text-blue-700 transition ml-1"
+                                    title="Справка о частотах">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <p class="text-gray-600 text-xs mt-2">
+                <span id="campaignCounter">Выбрано: 0 кампаний</span>
+            </p>
+        </div>
+
+        <!-- Campaign Mode -->
+        <div class="mb-6" id="campaignModeSection" style="display: {% if report.campaign_ids|length > 1 %}block{% else %}none{% endif %};">
+            <label class="block text-gray-700 text-sm font-bold mb-2">
+                Режим заполнения данных *
+            </label>
+            <div class="space-y-2">
+                <label class="flex items-center">
+                    <input type="radio" name="campaign_mode" value="separate"
+                           {% if report.campaign_mode == 'separate' or report.campaign_mode == 'combined' %}checked{% endif %}
+                           class="mr-2">
+                    <span class="text-gray-700">
+                        <strong>По дням</strong> - каждая кампания в своей секции таблицы, разбивка по дням
+                    </span>
+                </label>
+                <label class="flex items-center">
+                    <input type="radio" name="campaign_mode" value="total"
+                           {% if report.campaign_mode == 'total' %}checked{% endif %}
+                           class="mr-2">
+                    <span class="text-gray-700">
+                        <strong>Сводный отчёт</strong> - итоговые показатели за период (без разбивки по дням)
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Google Sheets URL -->
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="google_sheet_url">
+                Ссылка на Google Sheets *
+            </label>
+            <input class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                   id="google_sheet_url"
+                   name="google_sheet_url"
+                   type="url"
+                   value="{{ report.google_sheet_url }}"
+                   placeholder="https://docs.google.com/spreadsheets/d/..."
+                   onchange="loadWorksheets()"
+                   required>
+            <p class="text-gray-600 text-xs mt-1">При изменении ссылки структура будет определена автоматически</p>
+        </div>
+
+        <!-- Worksheet Selection -->
+        <div class="mb-6" {% if not report.worksheet_name %}style="display: none;"{% endif %} id="worksheetSection">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="worksheet_name">
+                Выберите лист *
+            </label>
+            <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    id="worksheet_name"
+                    name="worksheet_name">
+                {% if report.worksheet_name %}
+                    <option value="{{ report.worksheet_name }}" selected>{{ report.worksheet_name }}</option>
+                {% else %}
+                    <option value="">Первый лист (по умолчанию)</option>
+                {% endif %}
+            </select>
+            <p class="text-gray-600 text-xs mt-1">Если таблица содержит несколько листов, выберите нужный</p>
+        </div>
+
+
+        <!-- Schedule -->
+        <div class="mb-6 p-4 bg-gray-50 rounded">
+            <h3 class="font-bold text-gray-800 mb-3">Расписание обновления</h3>
+            <div class="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-gray-700 text-sm mb-2" for="schedule_days">
+                        Дни недели
+                    </label>
+                    <input class="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline"
+                           id="schedule_days"
+                           name="schedule_days"
+                           type="text"
+                           value="{{ report.schedule_days or '' }}"
+                           placeholder="1,5">
+                    <p class="text-gray-600 text-xs mt-1">1=Пн, 2=Вт, 3=Ср, 4=Чт, 5=Пт, 6=Сб, 7=Вс</p>
+                </div>
+                <div>
+                    <label class="block text-gray-700 text-sm mb-2" for="schedule_time">
+                        Время
+                    </label>
+                    <input class="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline"
+                           id="schedule_time"
+                           name="schedule_time"
+                           type="time"
+                           value="{{ report.schedule_time or '09:00' }}">
+                </div>
+            </div>
+        </div>
+
+
+        <div class="flex items-center justify-between">
+            <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition"
+                    type="submit">
+                Сохранить изменения
+            </button>
+            <a href="{{ url_for('reports') }}" class="text-gray-600 hover:text-gray-800">
+                Отмена
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Frequency Help Modal -->
+<div id="frequencyHelpModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-2xl p-8 max-w-2xl w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-gray-800">ℹ️ Справка: Частоты и разбросы</h3>
+            <button type="button" onclick="closeFrequencyHelp()" class="text-gray-500 hover:text-gray-700 text-2xl">
+                ×
+            </button>
+        </div>
+
+        <div class="text-gray-700 space-y-4">
+            <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
+                <h4 class="font-bold mb-2">Как работает:</h4>
+                <p class="mb-2">Частота = случайное число от <strong>(Частота - Разброс)</strong> до <strong>Частоты</strong></p>
+            </div>
+
+            <div>
+                <h4 class="font-bold mb-2">Примеры с разбросом 0.5:</h4>
+                <ul class="list-disc list-inside space-y-1 ml-2">
+                    <li>Частота 2.0 → диапазон от <strong>1.5 до 2.0</strong></li>
+                    <li>Частота 3.0 → диапазон от <strong>2.5 до 3.0</strong></li>
+                    <li>Частота 4.0 → диапазон от <strong>3.5 до 4.0</strong></li>
+                </ul>
+            </div>
+
+            <div>
+                <h4 class="font-bold mb-2">Дневная и Тотальная частоты:</h4>
+                <ul class="list-disc list-inside space-y-1 ml-2">
+                    <li><strong>Дневная частота</strong> - используется для расчета охвата по каждому дню</li>
+                    <li><strong>Тотальная частота</strong> - используется для расчета общего охвата в строке "Всего"</li>
+                </ul>
+            </div>
+
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <h4 class="font-bold mb-2">⚠️ Важно:</h4>
+                <ul class="list-disc list-inside space-y-1 ml-2">
+                    <li>Частота <strong>НИКОГДА</strong> не превышает указанное максимальное значение</li>
+                    <li>Тотальная частота должна быть <strong>≤ Дневной частоты</strong></li>
+                    <li>По умолчанию разброс = <strong>0.1</strong></li>
+                    <li>Для отчетов с несколькими кампаниями используется среднее значение частот</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+            <button type="button" onclick="closeFrequencyHelp()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition">
+                Понятно
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateCampaignCounter() {
+    const checked = document.querySelectorAll('input[name="campaign_ids"]:checked');
+    const counter = document.getElementById('campaignCounter');
+    const count = checked.length;
+
+    if (count === 0) {
+        counter.textContent = 'Не выбрано ни одной кампании';
+    } else if (count === 1) {
+        counter.textContent = 'Выбрано: 1 кампания';
+    } else if (count < 5) {
+        counter.textContent = `Выбрано: ${count} кампании`;
+    } else {
+        counter.textContent = `Выбрано: ${count} кампаний`;
+    }
+}
+
+function sortCampaignsSelectedFirst() {
+    const container = document.getElementById('campaignsList');
+    const items = Array.from(container.querySelectorAll('.campaign-item'));
+
+    // Sort: checked first, then unchecked
+    items.sort((a, b) => {
+        const aChecked = a.querySelector('input[type="checkbox"]').checked;
+        const bChecked = b.querySelector('input[type="checkbox"]').checked;
+
+        if (aChecked && !bChecked) return -1;
+        if (!aChecked && bChecked) return 1;
+        return 0;
+    });
+
+    // Clear and re-append in sorted order
+    container.innerHTML = '';
+    items.forEach(item => container.appendChild(item));
+}
+
+function handleCampaignChange() {
+    updateCampaignCounter();
+    sortCampaignsSelectedFirst();
+    toggleCampaignMode();
+}
+
+function toggleCampaignMode() {
+    const checked = document.querySelectorAll('input[name="campaign_ids"]:checked');
+    const campaignModeSection = document.getElementById('campaignModeSection');
+
+    if (checked.length > 1) {
+        campaignModeSection.style.display = 'block';
+    } else {
+        campaignModeSection.style.display = 'none';
+    }
+}
+
+function applyBulkIds() {
+    const bulkInput = document.getElementById('bulkCampaignIds').value;
+    const errorDiv = document.getElementById('bulkIdErrors');
+
+    if (!bulkInput.trim()) {
+        return;
+    }
+
+    // Parse IDs (support comma-separated or line-separated)
+    const inputIds = bulkInput
+        .split(/[\n,]/)
+        .map(id => id.trim())
+        .filter(id => id.length > 0);
+
+    const notFoundIds = [];
+    let foundCount = 0;
+
+    // First, uncheck all
+    document.querySelectorAll('input[name="campaign_ids"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+
+    // Try to match each ID
+    inputIds.forEach(inputId => {
+        const checkbox = document.querySelector(`input[data-sape-id="${inputId}"]`);
+        if (checkbox) {
+            checkbox.checked = true;
+            foundCount++;
+        } else {
+            notFoundIds.push(inputId);
+        }
+    });
+
+    // Show errors if any IDs not found
+    if (notFoundIds.length > 0) {
+        errorDiv.innerHTML = `<strong>⚠️ Не найдены ID:</strong> ${notFoundIds.join(', ')}`;
+        errorDiv.classList.remove('hidden');
+    } else {
+        errorDiv.classList.add('hidden');
+    }
+
+    // Show success message
+    if (foundCount > 0) {
+        alert(`✅ Выбрано кампаний: ${foundCount}`);
+    }
+
+    handleCampaignChange();
+}
+
+function selectAllCampaigns() {
+    document.querySelectorAll('input[name="campaign_ids"]').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    handleCampaignChange();
+}
+
+function deselectAllCampaigns() {
+    document.querySelectorAll('input[name="campaign_ids"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    document.getElementById('bulkIdErrors').classList.add('hidden');
+    handleCampaignChange();
+}
+
+function loadWorksheets() {
+    const sheetUrl = document.getElementById('google_sheet_url').value;
+    const worksheetSection = document.getElementById('worksheetSection');
+    const worksheetSelect = document.getElementById('worksheet_name');
+
+    if (!sheetUrl) {
+        worksheetSection.style.display = 'none';
+        return;
+    }
+
+    worksheetSection.style.display = 'block';
+    worksheetSelect.innerHTML = '<option value="">Загрузка листов...</option>';
+
+    // Fetch worksheets
+    fetch('/api/worksheets', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ google_sheet_url: sheetUrl })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            worksheetSelect.innerHTML = '<option value="">Ошибка загрузки листов</option>';
+            alert('Ошибка: ' + data.error);
+            return;
+        }
+
+        // Populate worksheet options
+        worksheetSelect.innerHTML = '';
+        data.worksheets.forEach((name, index) => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            if (index === 0) option.selected = true;
+            worksheetSelect.appendChild(option);
+        });
+    })
+    .catch(error => {
+        console.error('Error loading worksheets:', error);
+        worksheetSelect.innerHTML = '<option value="">Ошибка загрузки</option>';
+    });
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateCampaignCounter();
+    sortCampaignsSelectedFirst();
+});
+
+// Frequency Help Modal functions
+function openFrequencyHelp() {
+    document.getElementById('frequencyHelpModal').classList.remove('hidden');
+}
+
+function closeFrequencyHelp() {
+    document.getElementById('frequencyHelpModal').classList.add('hidden');
+}
+</script>
+{% endblock %}

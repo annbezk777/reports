@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход - SAPE Reports Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center">
+    <div class="max-w-md w-full mx-4">
+        <!-- Logo/Title -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">📊 SAPE Reports</h1>
+            <p class="text-gray-600">Панель управления отчетами</p>
+        </div>
+
+        <!-- Login Card -->
+        <div class="bg-white rounded-2xl shadow-2xl p-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">Вход в систему</h2>
+
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="mb-4 p-4 rounded-lg {% if category == 'error' %}bg-red-50 border border-red-200 text-red-700{% else %}bg-green-50 border border-green-200 text-green-700{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Login Form -->
+            <form method="POST" action="{{ url_for('login') }}">
+                <!-- Email -->
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="email">
+                        Email
+                    </label>
+                    <input class="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                           id="email"
+                           name="email"
+                           type="email"
+                           placeholder="user@sape.ru"
+                           required
+                           autofocus>
+                    <p class="text-gray-500 text-xs mt-2">Формат: your.name@sape.ru</p>
+                </div>
+
+                <!-- Password with show/hide -->
+                <div class="mb-8">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="password">
+                        Пароль
+                    </label>
+                    <div class="relative">
+                        <input class="shadow appearance-none border rounded-lg w-full py-3 px-4 pr-12 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               id="password"
+                               name="password"
+                               type="password"
+                               placeholder="••••••••"
+                               required>
+                        <button type="button"
+                                onclick="togglePassword()"
+                                class="absolute right-3 top-3 text-gray-500 hover:text-gray-700 focus:outline-none">
+                            <svg id="eye-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            <svg id="eye-off-icon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-200"
+                        type="submit">
+                    🔐 Войти
+                </button>
+            </form>
+
+            <!-- Register & Forgot Password Links -->
+            <div class="mt-6 text-center space-y-2">
+                <p class="text-gray-600">
+                    <a href="{{ url_for('forgot_password') }}" class="text-blue-600 hover:text-blue-800 font-bold">
+                        🔑 Забыли пароль?
+                    </a>
+                </p>
+                <p class="text-gray-600">Нет аккаунта?
+                    <a href="{{ url_for('register') }}" class="text-blue-600 hover:text-blue-800 font-bold">
+                        Зарегистрироваться
+                    </a>
+                </p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-8 text-gray-600 text-sm">
+            <p>© 2026 SAPE Reports Panel</p>
+            <p class="mt-1">Автоматизация отчетов SAPE → Google Sheets</p>
+        </div>
+    </div>
+
+    <script>
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const eyeIcon = document.getElementById('eye-icon');
+            const eyeOffIcon = document.getElementById('eye-off-icon');
+
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                eyeIcon.classList.add('hidden');
+                eyeOffIcon.classList.remove('hidden');
+            } else {
+                passwordInput.type = 'password';
+                eyeIcon.classList.remove('hidden');
+                eyeOffIcon.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

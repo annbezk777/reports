@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Редактировать аккаунт - SAPE Reports Panel{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-800">✏️ Редактировать аккаунт SAPE</h1>
+    <p class="text-gray-600 mt-2">Обновите данные для подключения к SAPE API</p>
+</div>
+
+<div class="max-w-2xl bg-white rounded-lg shadow-lg p-8">
+    <form method="POST">
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="name">
+                Название аккаунта *
+            </label>
+            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                   id="name"
+                   name="name"
+                   type="text"
+                   value="{{ account.name }}"
+                   placeholder="Например: Основной аккаунт"
+                   required>
+            <p class="text-gray-600 text-xs mt-1">Произвольное название для удобства</p>
+        </div>
+
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="login">
+                Логин SAPE (email) *
+            </label>
+            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                   id="login"
+                   name="login"
+                   type="email"
+                   value="{{ account.login }}"
+                   placeholder="your@email.com"
+                   required>
+            <p class="text-gray-600 text-xs mt-1">Email для входа в SAPE</p>
+        </div>
+
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="api_token">
+                API Токен *
+            </label>
+            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline font-mono text-sm"
+                   id="api_token"
+                   name="api_token"
+                   type="text"
+                   value="{{ account.api_token }}"
+                   placeholder="Например: c46e580fdafdceeb38c50ee5e49f360d56b8a4bed33754094eb6d726b373e702"
+                   required>
+            <p class="text-blue-600 text-xs mt-1">💡 Получите токен: <a href="http://passport.sape.ru/security/token/" target="_blank" class="underline">passport.sape.ru/security/token</a></p>
+        </div>
+
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="sape_user_id">
+                SAPE User ID (необязательно)
+            </label>
+            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                   id="sape_user_id"
+                   name="sape_user_id"
+                   type="text"
+                   value="{{ account.sape_user_id or '' }}"
+                   placeholder="Например: 1861509">
+            <p class="text-gray-600 text-xs mt-1">ID для ссылки в личный кабинет SAPE</p>
+        </div>
+
+        <div class="flex items-center justify-between">
+            <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition"
+                    type="submit">
+                Сохранить изменения
+            </button>
+            <a href="{{ url_for('accounts') }}" class="text-gray-600 hover:text-gray-800">
+                Отмена
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Help Box -->
+<div class="max-w-2xl mt-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
+    <div class="flex">
+        <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+            </svg>
+        </div>
+        <div class="ml-3">
+            <h3 class="text-sm font-medium text-yellow-800">⚠️ Важно</h3>
+            <div class="mt-2 text-sm text-yellow-700">
+                <p>После изменения логина или токена рекомендуется повторно синхронизировать кампании для проверки подключения.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

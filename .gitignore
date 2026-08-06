@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Database
+database/
+*.db
+*.sqlite
+*.sqlite3
+
+# Google Credentials - НИКОГДА НЕ КОММИТИТЬ!
+google_credentials.json
+*credentials*.json
+
+# Secrets
+CREDENTIALS.md
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Flask
+instance/
+.webassets-cache
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+sape_credentials.json
+backups/
+sape_credentials.json
+sape_reports.db

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход - SAPE Reports Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center">
+    <div class="max-w-md w-full mx-4">
+        <!-- Logo/Title -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">📊 SAPE Reports</h1>
+            <p class="text-gray-600">Панель управления отчетами</p>
+        </div>
+
+        <!-- Login Card -->
+        <div class="bg-white rounded-2xl shadow-2xl p-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">Вход в систему</h2>
+
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="mb-4 p-4 rounded-lg {% if category == 'error' %}bg-red-50 border border-red-200 text-red-700{% else %}bg-green-50 border border-green-200 text-green-700{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Login Form -->
+            <form method="POST" action="{{ url_for('login') }}">
+                <!-- Username -->
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="username">
+                        Логин
+                    </label>
+                    <input class="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                           id="username"
+                           name="username"
+                           type="email"
+                           placeholder="user@sape.ru"
+                           required
+                           autofocus>
+                    <p class="text-gray-500 text-xs mt-2">Формат: your.name@sape.ru</p>
+                </div>
+
+                <!-- Password -->
+                <div class="mb-8">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="password">
+                        Пароль
+                    </label>
+                    <input class="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                           id="password"
+                           name="password"
+                           type="password"
+                           placeholder="••••••••"
+                           required>
+                </div>
+
+                <!-- Submit Button -->
+                <button class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-200"
+                        type="submit">
+                    🔐 Войти
+                </button>
+            </form>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-8 text-gray-600 text-sm">
+            <p>© 2026 SAPE Reports Panel</p>
+            <p class="mt-1">Автоматизация отчетов SAPE → Google Sheets</p>
+        </div>
+    </div>
+</body>
+</html>

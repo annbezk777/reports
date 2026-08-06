@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Подтверждение Email - SAPE Reports Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center">
+    <div class="max-w-md w-full mx-4">
+        <!-- Logo/Title -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">✉️ Подтверждение Email</h1>
+            <p class="text-gray-600">Проверьте вашу почту</p>
+        </div>
+
+        <!-- Verify Card -->
+        <div class="bg-white rounded-2xl shadow-2xl p-8">
+            <div class="text-center mb-6">
+                <div class="inline-block p-4 bg-blue-100 rounded-full mb-4">
+                    <svg class="w-12 h-12 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Проверьте вашу почту</h2>
+                <p class="text-gray-600">
+                    Мы отправили код подтверждения на<br>
+                    <span class="font-bold text-gray-800">{{ email }}</span>
+                </p>
+            </div>
+
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="mb-4 p-4 rounded-lg {% if category == 'error' %}bg-red-50 border border-red-200 text-red-700{% else %}bg-green-50 border border-green-200 text-green-700{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Verification Form -->
+            <form method="POST" action="{{ url_for('verify_email') }}">
+                <input type="hidden" name="email" value="{{ email }}">
+
+                <!-- Verification Code -->
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="code">
+                        Код подтверждения
+                    </label>
+                    <input class="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 text-center text-2xl font-mono tracking-widest leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                           id="code"
+                           name="code"
+                           type="text"
+                           placeholder="XXXXXX"
+                           maxlength="6"
+                           pattern="[0-9]{6}"
+                           required
+                           autofocus>
+                    <p class="text-gray-500 text-xs mt-2 text-center">Введите 6-значный код из письма</p>
+                </div>
+
+                <!-- Submit Button -->
+                <button class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-200"
+                        type="submit">
+                    ✅ Подтвердить Email
+                </button>
+            </form>
+
+            <!-- Resend Code -->
+            <div class="mt-6 text-center">
+                <p class="text-gray-600 mb-2">Не получили код?</p>
+                <form method="POST" action="{{ url_for('resend_verification') }}" class="inline">
+                    <input type="hidden" name="email" value="{{ email }}">
+                    <button type="submit" class="text-blue-600 hover:text-blue-800 font-bold">
+                        📧 Отправить код повторно
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-8 text-gray-600 text-sm">
+            <p>© 2026 SAPE Reports Panel</p>
+        </div>
+    </div>
+</body>
+</html>

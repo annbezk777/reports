@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}Аккаунты SAPE - SAPE Reports Panel{% endblock %}
+
+{% block content %}
+<div class="mb-8 flex justify-between items-center">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-800">👤 Аккаунты SAPE</h1>
+        <p class="text-gray-600 mt-2">Управление аккаунтами для выгрузки данных</p>
+        <p class="text-gray-500 text-sm mt-1">🔄 Автосинхронизация: каждый день в 00:00</p>
+    </div>
+    <div class="flex gap-3">
+        <a href="{{ url_for('sync_all_accounts') }}"
+           class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition"
+           onclick="return confirm('Синхронизировать все активные аккаунты? Это может занять несколько минут.')">
+            🔄 Синхронизировать все
+        </a>
+        <a href="{{ url_for('add_account') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
+            + Добавить аккаунт
+        </a>
+    </div>
+</div>
+
+<!-- Search Box -->
+<div class="mb-4">
+    <form method="GET" class="flex items-center gap-3">
+        <div class="flex-1">
+            <input type="text"
+                   name="search"
+                   value="{{ request.args.get('search', '') }}"
+                   placeholder="🔍 Поиск по названию аккаунта, email или кампании..."
+                   class="shadow border rounded w-full py-2 px-4 text-gray-700 focus:outline-none focus:shadow-outline">
+        </div>
+        <button type="submit"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition">
+            Найти
+        </button>
+        {% if request.args.get('search') %}
+            <a href="{{ url_for('accounts') }}"
+               class="text-blue-600 hover:text-blue-800 font-semibold">
+                ✖ Сбросить
+            </a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Accounts List -->
+<div class="bg-white rounded-lg shadow-lg overflow-hidden">
+    {% if accounts %}
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Название/Email
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Кампаний
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Последняя синхронизация
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Статус
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Действия
+                    </th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for account in accounts %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4">
+                        <div class="text-sm font-medium text-gray-900">{{ account.name }}</div>
+                        <div class="text-sm text-gray-500">{{ account.login }}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {{ account.campaigns|length }} шт.
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {% if account.last_sync %}
+                            {{ account.last_sync.strftime('%d.%m.%Y %H:%M') }}
+                        {% else %}
+                            <span class="text-gray-400">Не синхронизирован</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if account.active %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                Активен
+                            </span>
+                        {% else %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                Неактивен
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <a href="{{ url_for('edit_account', account_id=account.id) }}"
+                           class="text-gray-600 hover:text-gray-900 mr-3">
+                            ✏️ Редактировать
+                        </a>
+                        <a href="{{ url_for('sync_campaigns', account_id=account.id) }}"
+                           class="text-blue-600 hover:text-blue-900">
+                            🔄 Синхронизировать
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="p-8 text-center">
+            <p class="text-gray-500 mb-4">У вас пока нет добавленных аккаунтов SAPE</p>
+            <a href="{{ url_for('add_account') }}" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
+                + Добавить первый аккаунт
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Info Box -->
+<div class="mt-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
+    <div class="flex">
+        <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+            </svg>
+        </div>
+        <div class="ml-3">
+            <p class="text-sm text-yellow-700">
+                <strong>Важно:</strong> После добавления аккаунта обязательно нажмите "Синхронизировать" для загрузки списка кампаний (площадок) из SAPE.
+            </p>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

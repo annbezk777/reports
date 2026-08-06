@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SAPE Reports Panel{% endblock %}</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        .flash-message {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <!-- Navigation -->
+    <nav class="bg-blue-600 text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-8">
+                    <a href="{{ url_for('index') }}" class="text-2xl font-bold">📊 SAPE Reports</a>
+                    <div class="flex space-x-4">
+                        <a href="{{ url_for('index') }}" class="hover:text-blue-200 transition">Главная</a>
+                        <a href="{{ url_for('accounts') }}" class="hover:text-blue-200 transition">Аккаунты</a>
+                        <a href="{{ url_for('reports') }}" class="hover:text-blue-200 transition">Отчеты</a>
+                    </div>
+                </div>
+                <div>
+                    <a href="{{ url_for('logout') }}" class="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded transition">
+                        🚪 Выход
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container mx-auto px-6 mt-4">
+                {% for category, message in messages %}
+                    <div class="flash-message rounded-lg p-4 mb-2 {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-6 py-8">
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white mt-12">
+        <div class="container mx-auto px-6 py-4 text-center">
+            <p>&copy; 2026 SAPE Reports Panel | Created by <a href="https://t.me/ann_bezk" class="text-blue-400 hover:text-blue-300">Anna Bereznyak</a></p>
+        </div>
+    </footer>
+
+    {% block extra_js %}{% endblock %}
+
+</body>
+</html>
