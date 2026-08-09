@@ -2183,58 +2183,58 @@ def edit_report(report_id):
                 # For 'total' mode, structure is not needed (uses write_total_report_data)
                 print(f"✓ Skipping structure detection for 'total' mode report")
 
-            # Update campaign settings (frequencies, variances)
-            campaign_settings = {}
-            campaign_frequencies = {}  # Keep for backward compatibility
+        # Update campaign settings (frequencies, variances)
+        campaign_settings = {}
+        campaign_frequencies = {}  # Keep for backward compatibility
 
-            for cid in campaign_ids:
-                # Get new frequency settings (4 fields per campaign)
-                daily_freq = request.form.get(f'daily_freq_{cid}', '3.0')
-                daily_var = request.form.get(f'daily_var_{cid}', '0.1')
-                total_freq = request.form.get(f'total_freq_{cid}', '3.0')
-                total_var = request.form.get(f'total_var_{cid}', '0.1')
+        for cid in campaign_ids:
+            # Get new frequency settings (4 fields per campaign)
+            daily_freq = request.form.get(f'daily_freq_{cid}', '3.0')
+            daily_var = request.form.get(f'daily_var_{cid}', '0.1')
+            total_freq = request.form.get(f'total_freq_{cid}', '3.0')
+            total_var = request.form.get(f'total_var_{cid}', '0.1')
 
-                try:
-                    daily_frequency = float(daily_freq)
-                    daily_variance = float(daily_var)
-                    total_frequency = float(total_freq)
-                    total_variance = float(total_var)
+            try:
+                daily_frequency = float(daily_freq)
+                daily_variance = float(daily_var)
+                total_frequency = float(total_freq)
+                total_variance = float(total_var)
 
-                    # No validation - daily and total frequencies are independent parameters
-                    # User can set total_frequency higher or lower than daily_frequency
+                # No validation - daily and total frequencies are independent parameters
+                # User can set total_frequency higher or lower than daily_frequency
 
-                    campaign_settings[str(cid)] = {
-                        'daily_frequency': daily_frequency,
-                        'daily_variance': daily_variance,
-                        'total_frequency': total_frequency,
-                        'total_variance': total_variance
-                    }
+                campaign_settings[str(cid)] = {
+                    'daily_frequency': daily_frequency,
+                    'daily_variance': daily_variance,
+                    'total_frequency': total_frequency,
+                    'total_variance': total_variance
+                }
 
-                    # Backward compatibility: save to old format too
-                    campaign_frequencies[str(cid)] = daily_frequency
+                # Backward compatibility: save to old format too
+                campaign_frequencies[str(cid)] = daily_frequency
 
-                except ValueError:
-                    # Default values if parsing fails
-                    campaign_settings[str(cid)] = {
-                        'daily_frequency': 3.0,
-                        'daily_variance': 0.1,
-                        'total_frequency': 3.0,
-                        'total_variance': 0.1
-                    }
-                    campaign_frequencies[str(cid)] = 3.0
+            except ValueError:
+                # Default values if parsing fails
+                campaign_settings[str(cid)] = {
+                    'daily_frequency': 3.0,
+                    'daily_variance': 0.1,
+                    'total_frequency': 3.0,
+                    'total_variance': 0.1
+                }
+                campaign_frequencies[str(cid)] = 3.0
 
-                # Update format if changed
-                format_key = f'format_{cid}'
-                format_value = request.form.get(format_key)
-                if format_value:
-                    campaign = Campaign.query.get(cid)
-                    if campaign:
-                        campaign.format_type = format_value
+            # Update format if changed
+            format_key = f'format_{cid}'
+            format_value = request.form.get(format_key)
+            if format_value:
+                campaign = Campaign.query.get(cid)
+                if campaign:
+                    campaign.format_type = format_value
 
-            # Save campaign settings
-            report.campaign_settings = campaign_settings
-            report.campaign_frequencies = campaign_frequencies  # Keep for backward compatibility
-            report.frequency_variance = 0.1  # Default for backward compatibility
+        # Save campaign settings
+        report.campaign_settings = campaign_settings
+        report.campaign_frequencies = campaign_frequencies  # Keep for backward compatibility
+        report.frequency_variance = 0.1  # Default for backward compatibility
 
         # Update report name
         report.name = report_name.strip() if report_name and report_name.strip() else None
