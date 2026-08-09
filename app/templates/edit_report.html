@@ -229,12 +229,13 @@
                    type="url"
                    value="{{ report.google_sheet_url }}"
                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                   onchange="loadWorksheets(false)"
                    required>
-            <p class="text-gray-600 text-xs mt-1">При изменении ссылки нажмите кнопку 🔄 для загрузки списка листов</p>
+            <p class="text-gray-600 text-xs mt-1">Листы загрузятся автоматически после вставки ссылки</p>
         </div>
 
         <!-- Worksheet Selection -->
-        <div class="mb-6" {% if not report.worksheet_name %}style="display: none;"{% endif %} id="worksheetSection">
+        <div class="mb-6" id="worksheetSection" {% if not report.worksheet_name %}style="display: none;"{% endif %}>
             <label class="block text-gray-700 text-sm font-bold mb-2">
                 Лист таблицы
             </label>
@@ -247,19 +248,12 @@
                 <p class="text-gray-600 text-xs mt-1">Лист зафиксирован и не может быть изменен.</p>
             {% else %}
                 <!-- Editable dropdown for first-time selection -->
-                <div class="flex gap-2">
-                    <select class="shadow border rounded flex-1 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                            id="worksheet_name"
-                            name="worksheet_name">
-                        <option value="">Первый лист (по умолчанию)</option>
-                    </select>
-                    <button type="button" onclick="loadWorksheets(true)"
-                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded transition"
-                            title="Обновить список листов">
-                        🔄
-                    </button>
-                </div>
-                <p class="text-gray-600 text-xs mt-1">Выберите лист. После сохранения его нельзя будет изменить.</p>
+                <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        id="worksheet_name"
+                        name="worksheet_name">
+                    <option value="">Первый лист (по умолчанию)</option>
+                </select>
+                <p class="text-gray-600 text-xs mt-1">Листы загружены из таблицы.</p>
             {% endif %}
         </div>
 
