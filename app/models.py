@@ -130,6 +130,12 @@ class ReportConfig(db.Model):
     def __repr__(self):
         return f'<ReportConfig for Campaign ID {self.campaign_id}>'
 
+    def get_campaigns(self):
+        """Get list of Campaign objects for this report"""
+        if not self.campaign_ids:
+            return []
+        return Campaign.query.filter(Campaign.id.in_(self.campaign_ids)).all()
+
 
 class ReportLog(db.Model):
     """Report execution log"""
