@@ -94,7 +94,7 @@ class GoogleSheetsClient:
             active_worksheet_names = []
 
             for ws in all_worksheets:
-                title = ws.title
+                title = ws.title.strip()  # Remove leading/trailing whitespace
 
                 # Skip if title starts with archive markers
                 if (title.startswith('Архив') or
