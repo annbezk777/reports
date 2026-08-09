@@ -2142,10 +2142,17 @@ def edit_report(report_id):
         if url_changed:
             report.google_sheet_url = google_sheet_url
 
+        # Update campaigns FIRST before auto-detection
+        if campaign_ids_str:
+            campaign_ids = [int(cid) for cid in campaign_ids_str]
+            report.campaign_ids = campaign_ids
+            report.campaign_id = campaign_ids[0]  # Primary campaign
+
         # Re-detect structure if URL or worksheet changed (skip for 'total' mode reports)
         if url_changed or worksheet_changed:
             # Total mode reports don't have "Показатели кампании" headers, so auto-detection won't work
             if report.campaign_mode != 'total':
+                # Use UPDATED campaign_ids from form (already updated above)
                 campaigns = Campaign.query.filter(Campaign.id.in_(report.campaign_ids)).all()
                 if campaigns:
                     gs_client = GoogleSheetsClient(
@@ -2175,12 +2182,6 @@ def edit_report(report_id):
             else:
                 # For 'total' mode, structure is not needed (uses write_total_report_data)
                 print(f"✓ Skipping structure detection for 'total' mode report")
-
-        # Update campaigns if changed
-        if campaign_ids_str:
-            campaign_ids = [int(cid) for cid in campaign_ids_str]
-            report.campaign_ids = campaign_ids
-            report.campaign_id = campaign_ids[0]  # Primary campaign
 
             # Update campaign settings (frequencies, variances)
             campaign_settings = {}
