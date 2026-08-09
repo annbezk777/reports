@@ -2128,11 +2128,22 @@ def edit_report(report_id):
         schedule_time = request.form.get('schedule_time')
 
         # Update basic info
-        if google_sheet_url and google_sheet_url != report.google_sheet_url:
-            report.google_sheet_url = google_sheet_url
-            report.worksheet_name = worksheet_name
+        url_changed = google_sheet_url and google_sheet_url != report.google_sheet_url
 
-            # Re-detect structure if URL changed (skip for 'total' mode reports)
+        # Update worksheet_name (can change independently from URL)
+        if worksheet_name:  # Not None and not empty string
+            worksheet_changed = worksheet_name != report.worksheet_name
+            # ALWAYS update worksheet_name if provided from form
+            report.worksheet_name = worksheet_name
+        else:
+            worksheet_changed = False
+            # Keep existing worksheet_name if nothing provided
+
+        if url_changed:
+            report.google_sheet_url = google_sheet_url
+
+        # Re-detect structure if URL or worksheet changed (skip for 'total' mode reports)
+        if url_changed or worksheet_changed:
             # Total mode reports don't have "Показатели кампании" headers, so auto-detection won't work
             if report.campaign_mode != 'total':
                 campaigns = Campaign.query.filter(Campaign.id.in_(report.campaign_ids)).all()
@@ -2143,9 +2154,10 @@ def edit_report(report_id):
                     )
 
                     first_campaign = campaigns[0]
+                    # Use updated worksheet_name from report (already saved above)
                     structure = gs_client.auto_detect_structure(
-                        sheet_url=google_sheet_url,
-                        sheet_name=worksheet_name,  # Use selected worksheet
+                        sheet_url=report.google_sheet_url,
+                        sheet_name=report.worksheet_name,
                         campaign_id=first_campaign.campaign_id
                     )
 
@@ -2187,9 +2199,8 @@ def edit_report(report_id):
                     total_frequency = float(total_freq)
                     total_variance = float(total_var)
 
-                    # Validation: total_frequency <= daily_frequency
-                    if total_frequency > daily_frequency:
-                        total_frequency = daily_frequency
+                    # No validation - daily and total frequencies are independent parameters
+                    # User can set total_frequency higher or lower than daily_frequency
 
                     campaign_settings[str(cid)] = {
                         'daily_frequency': daily_frequency,
@@ -2368,10 +2379,13 @@ def init_db():
 
 # ==================== SCHEDULER ====================
 
-# Initialize and start scheduler only when running with Gunicorn
-# Check if we're not in a Flask CLI context
+# Initialize and start scheduler only when enabled
+# For production: set ENABLE_AUTO_SYNC=1 environment variable
+# For local development: disabled by default to prevent database locks
 import sys
-if 'flask' not in sys.argv[0]:
+ENABLE_AUTO_SYNC = os.getenv('ENABLE_AUTO_SYNC', '0') == '1'
+
+if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC:
     try:
         scheduler = BackgroundScheduler(timezone=pytz.timezone('Europe/Moscow'))
 
@@ -2401,6 +2415,9 @@ if 'flask' not in sys.argv[0]:
             sync_thread.start()
     except Exception as e:
         print(f"⚠️ Warning: Could not start scheduler: {e}")
+else:
+    if not ENABLE_AUTO_SYNC:
+        logging.info("ℹ️ Auto-sync disabled (ENABLE_AUTO_SYNC=0). Use manual sync from UI.")
 
 
 if __name__ == '__main__':

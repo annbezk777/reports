@@ -1338,6 +1338,14 @@ class GoogleSheetsClient:
                         resulting_frequency = total_impressions / final_total_reach
                         print(f"   Adjusted reach to {final_total_reach:,}, frequency now {resulting_frequency:.5f}")
 
+                    # VALIDATION: Total reach CANNOT be greater than sum of daily reaches
+                    # This is physically impossible (total reach = unique users, daily sum includes overlaps)
+                    if final_total_reach > sum_daily_reaches:
+                        print(f"⚠️ Validation failed: total reach ({final_total_reach:,}) > sum of daily reaches ({sum_daily_reaches:,})")
+                        final_total_reach = sum_daily_reaches
+                        resulting_frequency = total_impressions / final_total_reach if final_total_reach > 0 else 0
+                        print(f"   Corrected: total reach = {final_total_reach:,}, frequency = {resulting_frequency:.5f}")
+
                     print(f"📊 Total reach calculation (NEW):")
                     print(f"   Total impressions: {total_impressions:,}")
                     print(f"   Total frequency range: {min_total_freq:.2f} - {max_total_freq:.2f} (variance: {total_variance:.2f})")
@@ -1350,7 +1358,7 @@ class GoogleSheetsClient:
                         print(f"   Final total reach: {final_total_reach:,} ({percentage:.2f}% of daily sum)")
                     else:
                         print(f"   Final total reach: {final_total_reach:,} (daily sum is 0)")
-                    print(f"   ✅ Validation: {final_total_reach} < {sum_daily_reaches} = {final_total_reach < sum_daily_reaches}")
+                    print(f"   ✅ Validation: {final_total_reach} <= {sum_daily_reaches} = {final_total_reach <= sum_daily_reaches}")
                     print(f"   ✅ Resulting frequency: {resulting_frequency:.5f} (max allowed: {max_total_freq:.2f})")
 
                     # Write total reach to total row

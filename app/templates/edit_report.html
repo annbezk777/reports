@@ -194,7 +194,7 @@
         </div>
 
         <!-- Campaign Mode -->
-        <div class="mb-6" id="campaignModeSection" style="display: {% if report.campaign_ids|length > 1 %}block{% else %}none{% endif %};">
+        <div class="mb-6" id="campaignModeSection">
             <label class="block text-gray-700 text-sm font-bold mb-2">
                 Режим заполнения данных *
             </label>
@@ -229,33 +229,38 @@
                    type="url"
                    value="{{ report.google_sheet_url }}"
                    placeholder="https://docs.google.com/spreadsheets/d/..."
-                   onchange="loadWorksheets()"
                    required>
-            <p class="text-gray-600 text-xs mt-1">При изменении ссылки структура будет определена автоматически</p>
+            <p class="text-gray-600 text-xs mt-1">При изменении ссылки нажмите кнопку 🔄 для загрузки списка листов</p>
         </div>
 
         <!-- Worksheet Selection -->
         <div class="mb-6" {% if not report.worksheet_name %}style="display: none;"{% endif %} id="worksheetSection">
-            <label class="block text-gray-700 text-sm font-bold mb-2" for="worksheet_name">
-                Выберите лист *
+            <label class="block text-gray-700 text-sm font-bold mb-2">
+                Лист таблицы
             </label>
-            <div class="flex gap-2">
-                <select class="shadow border rounded flex-1 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        id="worksheet_name"
-                        name="worksheet_name">
-                    {% if report.worksheet_name %}
-                        <option value="{{ report.worksheet_name }}" selected>{{ report.worksheet_name }}</option>
-                    {% else %}
+            {% if report.worksheet_name %}
+                <!-- Show as readonly text - cannot be changed after initial selection -->
+                <div class="shadow border rounded w-full py-2 px-3 bg-gray-100 text-gray-700">
+                    {{ report.worksheet_name }}
+                </div>
+                <input type="hidden" name="worksheet_name" value="{{ report.worksheet_name }}">
+                <p class="text-gray-600 text-xs mt-1">Лист зафиксирован и не может быть изменен.</p>
+            {% else %}
+                <!-- Editable dropdown for first-time selection -->
+                <div class="flex gap-2">
+                    <select class="shadow border rounded flex-1 py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            id="worksheet_name"
+                            name="worksheet_name">
                         <option value="">Первый лист (по умолчанию)</option>
-                    {% endif %}
-                </select>
-                <button type="button" onclick="loadWorksheets(true)"
-                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded transition"
-                        title="Обновить список листов">
-                    🔄
-                </button>
-            </div>
-            <p class="text-gray-600 text-xs mt-1">Выберите лист из таблицы. Нажмите 🔄 чтобы обновить список.</p>
+                    </select>
+                    <button type="button" onclick="loadWorksheets(true)"
+                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded transition"
+                            title="Обновить список листов">
+                        🔄
+                    </button>
+                </div>
+                <p class="text-gray-600 text-xs mt-1">Выберите лист. После сохранения его нельзя будет изменить.</p>
+            {% endif %}
         </div>
 
 
@@ -535,11 +540,8 @@ document.addEventListener('DOMContentLoaded', function() {
     updateCampaignCounter();
     sortCampaignsSelectedFirst();
 
-    // Load available worksheets from Google Sheet (preserve current selection)
-    const sheetUrl = document.getElementById('google_sheet_url').value;
-    if (sheetUrl) {
-        loadWorksheets(true); // true = preserve current worksheet selection
-    }
+    // Don't auto-load worksheets - user can manually click refresh button if needed
+    // This prevents the dropdown from resetting on every page load
 });
 
 // Frequency Help Modal functions

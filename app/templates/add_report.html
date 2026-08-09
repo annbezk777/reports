@@ -204,7 +204,7 @@
         </div>
 
         <!-- Campaign Mode -->
-        <div class="mb-6" id="campaignModeSection" style="display: none;">
+        <div class="mb-6" id="campaignModeSection">
             <label class="block text-gray-700 text-sm font-bold mb-2">
                 Режим заполнения данных *
             </label>
@@ -514,7 +514,6 @@ function fetchCampaigns(accountId, clientId) {
                 }
 
                 renderCampaigns(filteredCampaigns);
-                campaignModeSection.style.display = 'none';
             })
             .catch(error => {
                 console.error('Error loading campaigns:', error);
@@ -548,7 +547,6 @@ function fetchCampaigns(accountId, clientId) {
             }
 
             renderCampaigns(campaigns);
-            campaignModeSection.style.display = 'none';
         })
         .catch(error => {
             console.error('Error loading campaigns:', error);
@@ -902,7 +900,8 @@ function toggleCampaignMode() {
     const checked = document.querySelectorAll('input[name="campaign_ids"]:checked');
     const campaignModeSection = document.getElementById('campaignModeSection');
 
-    if (checked.length > 1) {
+    // Always show campaign mode section (user can choose daily or total report even for 1 campaign)
+    if (checked.length > 0) {
         campaignModeSection.style.display = 'block';
     } else {
         campaignModeSection.style.display = 'none';
