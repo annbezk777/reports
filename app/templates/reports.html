@@ -115,7 +115,9 @@
                                 {% for campaign in campaigns %}
                                     {% set settings = report.campaign_settings.get(campaign.id|string, {}) if report.campaign_settings else {} %}
                                     <div class="text-xs">
-                                        <span class="font-mono bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">{{ campaign.campaign_id }}</span>
+                                        <span class="font-mono bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-200 transition"
+                                              onclick="copyToClipboard('{{ campaign.campaign_id }}', this)"
+                                              title="Нажмите чтобы скопировать ID">{{ campaign.campaign_id }}</span>
                                         <span class="ml-1 text-gray-700">{{ campaign.name[:20] }}{% if campaign.name|length > 20 %}...{% endif %}</span>
                                         {% if settings %}
                                             <span class="ml-2 text-gray-500">Днев: {{ settings.get('daily_frequency', '-') }}</span>
@@ -279,6 +281,53 @@ function showProgress(event, reportId) {
 
     // Form will submit normally and page will reload
     return true;
+}
+
+function copyToClipboard(text, element) {
+    // Copy to clipboard using modern API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            // Show feedback
+            const originalBg = element.className;
+            element.classList.remove('bg-blue-100', 'hover:bg-blue-200');
+            element.classList.add('bg-green-500', 'text-white');
+            element.textContent = '✓ Скопировано';
+
+            // Restore original state after 1.5 seconds
+            setTimeout(() => {
+                element.className = originalBg;
+                element.textContent = text;
+            }, 1500);
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+            alert('Не удалось скопировать ID');
+        });
+    } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            // Show feedback
+            const originalBg = element.className;
+            element.classList.remove('bg-blue-100', 'hover:bg-blue-200');
+            element.classList.add('bg-green-500', 'text-white');
+            element.textContent = '✓ Скопировано';
+
+            setTimeout(() => {
+                element.className = originalBg;
+                element.textContent = text;
+            }, 1500);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+            alert('Не удалось скопировать ID');
+        }
+        document.body.removeChild(textArea);
+    }
 }
 </script>
 {% endblock %}
