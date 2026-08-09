@@ -1462,11 +1462,11 @@ class GoogleSheetsClient:
                     print(f"   🔍 Row {actual_row_num}, Col {col_idx}: Found IDs {found_ids} in '{cell_value[:50]}'")
 
                     # Found row with IDs! Now detect column structure
-                    # Look for header row above (search all rows up to find header)
+                    # Look for header row (search both above AND below the ID row)
                     header_row_idx = None
                     header_col_start = col_idx
 
-                    # Search from current row up to beginning of sheet
+                    # First, search from current row up to beginning of sheet
                     for offset in range(1, row_idx + 1):
                         check_row = row_idx - offset
                         if check_row >= 0 and check_row < len(all_data):
@@ -1481,8 +1481,25 @@ class GoogleSheetsClient:
                         if header_row_idx is not None:
                             break
 
+                    # If not found above, search BELOW the ID row (up to 3 rows down)
                     if header_row_idx is None:
-                        print(f"   ⚠️ No header found for IDs at row {actual_row_num} (searched all rows above), skipping")
+                        for offset in range(1, 4):
+                            check_row = row_idx + offset
+                            if check_row < len(all_data):
+                                check_row_data = all_data[check_row]
+                                # Look for header keywords in this row
+                                for check_col in range(header_col_start, min(len(check_row_data), header_col_start + 10)):
+                                    if check_col < len(check_row_data) and check_row_data[check_col]:
+                                        cell_text = str(check_row_data[check_col]).lower()
+                                        if 'показ' in cell_text or 'клик' in cell_text or 'охват' in cell_text or 'дата' in cell_text:
+                                            header_row_idx = check_row
+                                            print(f"   ✅ Found header BELOW ID row at row {check_row + 1}")
+                                            break
+                            if header_row_idx is not None:
+                                break
+
+                    if header_row_idx is None:
+                        print(f"   ⚠️ No header found for IDs at row {actual_row_num} (searched above and below), skipping")
                         continue
 
                     # Parse header row to find column positions
@@ -1515,15 +1532,33 @@ class GoogleSheetsClient:
                                 reach_col = col_idx_to_letter(h_col)
 
                     # Store structure for each ID in this row
+                    # Find "Всего" row below this section (search up to 50 rows down)
+                    total_row = None
+                    for search_offset in range(1, 50):
+                        search_row_idx = row_idx + search_offset
+                        if search_row_idx < len(all_data):
+                            search_row = all_data[search_row_idx]
+                            if search_row and len(search_row) > col_idx:
+                                cell_text = str(search_row[col_idx]).lower().strip()
+                                if 'всего' in cell_text:
+                                    total_row = search_row_idx + 1  # Convert to 1-based row number
+                                    print(f"   ✅ Found 'Всего' row at {total_row} (below ID row)")
+                                    break
+
+                    # If "Всего" not found, use ID row as fallback
+                    target_row = total_row if total_row else actual_row_num
+
                     for single_id in found_ids:
                         id_to_row_structure[single_id] = {
-                            'row': actual_row_num,
+                            'row': target_row,  # Use "Всего" row if found, otherwise ID row
+                            'id_row': actual_row_num,  # Store original ID row for reference
                             'shows_col': shows_col,
                             'clicks_col': clicks_col,
                             'reach_col': reach_col
                         }
 
                     print(f"   ✅ Found IDs {found_ids} at row {actual_row_num}")
+                    print(f"      Target row for data: {target_row} {'(Всего row)' if total_row else '(ID row - fallback)'}")
                     print(f"      Shows: {shows_col}, Clicks: {clicks_col}, Reach: {reach_col}")
 
             print(f"\n📋 Total: {len(id_to_row_structure)} campaign IDs found with structure")

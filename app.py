@@ -926,20 +926,61 @@ def sync_all_accounts_simple():
     return redirect(url_for('accounts'))
 
 
+def get_last_sync_time():
+    """Get timestamp of last successful sync"""
+    sync_file = '.last_sync'
+    try:
+        if os.path.exists(sync_file):
+            with open(sync_file, 'r') as f:
+                timestamp_str = f.read().strip()
+                return datetime.fromisoformat(timestamp_str)
+    except Exception as e:
+        logging.warning(f"Could not read last sync time: {e}")
+    return None
+
+
+def update_last_sync_time():
+    """Update timestamp of last successful sync"""
+    sync_file = '.last_sync'
+    try:
+        with open(sync_file, 'w') as f:
+            f.write(datetime.now().isoformat())
+    except Exception as e:
+        logging.warning(f"Could not update last sync time: {e}")
+
+
+def should_sync_on_startup():
+    """Check if we should sync on startup (if last sync was >24h ago)"""
+    last_sync = get_last_sync_time()
+    if last_sync is None:
+        logging.info("📋 No previous sync found - will sync on startup")
+        return True
+
+    hours_since_sync = (datetime.now() - last_sync).total_seconds() / 3600
+    logging.info(f"📋 Last sync: {last_sync.strftime('%Y-%m-%d %H:%M:%S')} ({hours_since_sync:.1f} hours ago)")
+
+    if hours_since_sync >= 24:
+        logging.info("✅ More than 24 hours since last sync - will sync on startup")
+        return True
+    else:
+        logging.info(f"⏭️ Last sync was recent ({hours_since_sync:.1f}h ago) - skipping startup sync")
+        return False
+
+
 def scheduled_sync_all_accounts():
-    """Scheduled task to sync all accounts (runs at 00:00 daily)"""
+    """Scheduled task to sync all accounts (runs at 10:00 daily or on startup if needed)"""
     with app.app_context():
-        print(f"\n{'='*60}")
-        print(f"⏰ SCHEDULED SYNC - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"{'='*60}")
+        logging.info(f"\n{'='*60}")
+        logging.info(f"⏰ SCHEDULED SYNC - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logging.info(f"{'='*60}")
 
         accounts = SapeAccount.query.filter_by(active=True).all()
 
         if not accounts:
-            print("ℹ️ No active accounts to sync")
+            logging.info("ℹ️ No active accounts to sync")
             return
 
-        print(f"🔄 Syncing {len(accounts)} accounts...")
+        logging.info(f"🔄 Syncing {len(accounts)} accounts...")
 
         total_clients = 0
         total_new_campaigns = 0
@@ -953,11 +994,14 @@ def scheduled_sync_all_accounts():
                 total_new_campaigns += result.get('campaigns_new', 0)
                 total_updated_campaigns += result.get('campaigns_updated', 0)
 
-        print(f"\n✅ SCHEDULED SYNC COMPLETED:")
-        print(f"   Total clients: {total_clients}")
-        print(f"   New campaigns: {total_new_campaigns}")
-        print(f"   Updated campaigns: {total_updated_campaigns}")
-        print(f"{'='*60}\n")
+        logging.info(f"\n✅ SCHEDULED SYNC COMPLETED:")
+        logging.info(f"   Total clients: {total_clients}")
+        logging.info(f"   New campaigns: {total_new_campaigns}")
+        logging.info(f"   Updated campaigns: {total_updated_campaigns}")
+        logging.info(f"{'='*60}\n")
+
+        # Update last sync timestamp
+        update_last_sync_time()
 
 
 @app.route('/reports')
@@ -1441,7 +1485,7 @@ def run_report(report_id):
                     campaign_ids=[int(campaign.campaign_id)],
                     date_from=date_from,
                     date_to=date_to,
-                    include_video_metrics=(campaign.format_type == 'V')
+                    include_video_metrics=(campaign.format_type in ['V', 'CTV'])
                 )
 
                 if not daily_data:
@@ -1708,8 +1752,8 @@ def run_report(report_id):
                 print(f"🔍 DEBUG: header_ids: {header_ids}")
                 print(f"🔍 DEBUG: About to check video status...")
 
-                # Determine if any campaign in this section is video
-                is_video = any(c.format_type == 'V' for c in section_campaigns)
+                # Determine if any campaign in this section is video (V or CTV)
+                is_video = any(c.format_type in ['V', 'CTV'] for c in section_campaigns)
                 print(f"🔍 DEBUG: is_video = {is_video}, len(header_ids) = {len(header_ids)}")
 
                 # SMART RESUME temporarily disabled - fixing quota issues first
@@ -2331,18 +2375,30 @@ if 'flask' not in sys.argv[0]:
     try:
         scheduler = BackgroundScheduler(timezone=pytz.timezone('Europe/Moscow'))
 
-        # Add daily sync job at 00:00
+        # Add daily sync job at 10:00 (working hours)
         scheduler.add_job(
             func=scheduled_sync_all_accounts,
-            trigger=CronTrigger(hour=0, minute=0),
+            trigger=CronTrigger(hour=10, minute=0),
             id='daily_sync_accounts',
             name='Синхронизация всех аккаунтов SAPE',
-            replace_existing=True
+            replace_existing=True,
+            misfire_grace_time=3600,  # Run within 1 hour if missed
+            coalesce=True,  # Combine multiple missed runs into one
+            max_instances=1  # Don't run multiple instances simultaneously
         )
 
         # Start scheduler
         scheduler.start()
-        print("✅ Scheduler started: Daily account sync at 00:00 Moscow time")
+        logging.info("✅ Scheduler started: Daily account sync at 10:00 Moscow time")
+
+        # Check if we need to sync on startup (if last sync was >24h ago)
+        if should_sync_on_startup():
+            logging.info("🚀 Running sync on startup...")
+            import threading
+            # Run in separate thread to not block startup
+            sync_thread = threading.Thread(target=scheduled_sync_all_accounts)
+            sync_thread.daemon = True
+            sync_thread.start()
     except Exception as e:
         print(f"⚠️ Warning: Could not start scheduler: {e}")
 

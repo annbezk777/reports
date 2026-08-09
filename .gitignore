@@ -53,3 +53,7 @@ sape_credentials.json
 backups/
 sape_credentials.json
 sape_reports.db
+
+# Server PID and sync files
+.local_server.pid
+.last_sync

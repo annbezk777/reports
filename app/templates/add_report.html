@@ -2,25 +2,106 @@
 
 {% block title %}Создать отчет - SAPE Reports Panel{% endblock %}
 
+{% block content %}
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <style>
-    /* Улучшенный стиль для select аккаунтов */
-    .account-select option {
-        padding: 12px 8px !important;
-        line-height: 1.8 !important;
+    /* Select2 - современный дизайн */
+    .select2-container {
+        width: 100% !important;
+    }
+
+    /* Основное поле выбора */
+    .select2-container--default .select2-selection--single {
+        height: 44px !important;
+        padding: 10px 16px !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 0.5rem !important;
+        background: white !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+        transition: all 0.2s ease !important;
+    }
+
+    .select2-container--default .select2-selection--single:hover {
+        border-color: #9ca3af !important;
+    }
+
+    .select2-container--default.select2-container--focus .select2-selection--single {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+        outline: none !important;
+    }
+
+    /* Текст внутри поля */
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 24px !important;
+        padding-left: 0 !important;
+        color: #374151 !important;
         font-size: 14px !important;
-        background: white;
     }
 
-    .account-select option:hover {
-        background-color: #EFF6FF !important;
+    /* Placeholder */
+    .select2-container--default .select2-selection--single .select2-selection__placeholder {
+        color: #9ca3af !important;
     }
 
-    .account-select {
-        line-height: 2 !important;
+    /* Стрелка */
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 42px !important;
+        right: 8px !important;
+    }
+
+    /* Выпадающий список */
+    .select2-dropdown {
+        border-radius: 0.5rem !important;
+        border: 1px solid #d1d5db !important;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+        margin-top: 4px !important;
+    }
+
+    /* Поле поиска в выпадающем списке */
+    .select2-search--dropdown {
+        padding: 12px !important;
+        background: #f9fafb !important;
+    }
+
+    .select2-search--dropdown .select2-search__field {
+        border: 1px solid #d1d5db !important;
+        border-radius: 0.375rem !important;
+        padding: 10px 12px !important;
+        font-size: 14px !important;
+        width: 100% !important;
+    }
+
+    .select2-search--dropdown .select2-search__field:focus {
+        border-color: #3b82f6 !important;
+        outline: none !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    }
+
+    /* Элементы списка */
+    .select2-results__option {
+        padding: 12px 16px !important;
+        font-size: 14px !important;
+        color: #374151 !important;
+    }
+
+    .select2-results__option--highlighted {
+        background-color: #eff6ff !important;
+        color: #1e40af !important;
+    }
+
+    .select2-results__option--selected {
+        background-color: #dbeafe !important;
+        color: #1e40af !important;
+        font-weight: 500 !important;
+    }
+
+    /* Убрать подчеркивание у disabled опций */
+    .select2-results__option[aria-disabled=true] {
+        color: #9ca3af !important;
     }
 </style>
-
-{% block content %}
 <div class="mb-8">
     <h1 class="text-3xl font-bold text-gray-800">➕ Создать отчет</h1>
     <p class="text-gray-600 mt-2">Настройка автоматической выгрузки метрик</p>
@@ -33,21 +114,13 @@
             <label class="block text-gray-700 text-sm font-bold mb-2" for="account_id">
                 1️⃣ Выберите аккаунт SAPE *
             </label>
-            <!-- Search input -->
-            <input type="text"
-                   id="accountSearch"
-                   placeholder="🔍 Поиск по названию или email..."
-                   class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mb-2"
-                   onkeyup="filterAccounts()">
-
-            <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline account-select"
+            <select class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                     id="account_id"
                     onchange="loadCampaigns(this.value)"
-                    required
-                    style="font-size: 14px;">
+                    required>
                 <option value="">Выберите аккаунт</option>
                 {% for account in accounts %}
-                    <option value="{{ account.id }}" data-name="{{ account.name }}" data-login="{{ account.login }}">
+                    <option value="{{ account.id }}">
                         📁 {{ account.name }}   |   📧 {{ account.login }}
                     </option>
                 {% endfor %}
@@ -844,28 +917,22 @@ function openFrequencyHelp() {
 function closeFrequencyHelp() {
     document.getElementById('frequencyHelpModal').classList.add('hidden');
 }
-
-// Account search filter
-function filterAccounts() {
-    const searchInput = document.getElementById('accountSearch');
-    const select = document.getElementById('account_id');
-    const filter = searchInput.value.toLowerCase();
-
-    for (let i = 0; i < select.options.length; i++) {
-        const option = select.options[i];
-
-        if (i === 0) continue; // Skip "Выберите аккаунт"
-
-        const name = option.getAttribute('data-name') || '';
-        const login = option.getAttribute('data-login') || '';
-        const text = (name + ' ' + login).toLowerCase();
-
-        if (text.includes(filter)) {
-            option.style.display = '';
-        } else {
-            option.style.display = 'none';
-        }
-    }
-}
 </script>
+
+<!-- jQuery (required for Select2) -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Select2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+// Initialize Select2 for account selection with search
+$(document).ready(function() {
+    $('#account_id').select2({
+        placeholder: 'Выберите аккаунт',
+        allowClear: false,
+        width: '100%'
+    });
+});
+</script>
+
 {% endblock %}
