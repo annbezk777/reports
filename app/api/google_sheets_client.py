@@ -1579,8 +1579,8 @@ class GoogleSheetsClient:
                 campaign_id = str(campaign_data['campaign_id'])
                 shows = campaign_data['shows']
                 clicks = campaign_data['clicks']
-                # Use pre-calculated average reach from daily data
-                reach = campaign_data.get('average_reach', 0)
+                # Use period reach (shows / frequency) for total reports
+                reach = campaign_data.get('period_reach', campaign_data.get('average_reach', 0))
 
                 # Find row and structure for this campaign
                 if campaign_id not in id_to_row_structure:
@@ -1593,7 +1593,7 @@ class GoogleSheetsClient:
                 clicks_col = structure['clicks_col']
                 reach_col = structure['reach_col']
 
-                print(f"📝 Campaign {campaign_id}: Shows={shows:,}, Clicks={clicks:,}, Avg Reach={reach:,} → Row {row_num}, Cols {shows_col}/{clicks_col}")
+                print(f"📝 Campaign {campaign_id}: Shows={shows:,}, Clicks={clicks:,}, Period Reach={reach:,} → Row {row_num}, Cols {shows_col}/{clicks_col}")
 
                 # Create unique key for this table cell: (row, shows_col, clicks_col)
                 # This prevents mixing data from different tables with same row number

@@ -1531,17 +1531,22 @@ def run_report(report_id):
                 # Average reach across all days
                 average_reach = int(sum(daily_reaches) / len(daily_reaches)) if daily_reaches else 0
 
+                # For total report: calculate PERIOD reach (not average daily)
+                # Period reach = total shows for period / frequency
+                period_reach = int(period_shows / actual_frequency) if actual_frequency > 0 else 0
+
                 print(f"✅ Campaign {campaign.campaign_id} ({campaign.name}):")
                 print(f"   Shows: {period_shows:,}, Clicks: {period_clicks:,}")
                 print(f"   Frequency target: {frequency} ± {total_variance}, actual: {actual_frequency:.2f}")
                 print(f"   Average daily reach: {average_reach:,} (from {len(daily_reaches)} days)")
+                print(f"   Period reach: {period_reach:,} (shows / frequency)")
 
                 campaigns_data.append({
                     'campaign_id': campaign.campaign_id,
                     'shows': period_shows,
                     'clicks': period_clicks,
                     'frequency': frequency,
-                    'average_reach': average_reach  # NEW: pass average reach instead of calculating from total
+                    'period_reach': period_reach  # Use period reach for total reports
                 })
 
                 total_impressions += period_shows
