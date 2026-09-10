@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KPI Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #fafbfc 0%, #f3f4f6 50%, #e5e7eb 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            background: linear-gradient(135deg, #667eea 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 24px;
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .search-panel {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .search-panel h2 {
+            color: #374151;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .search-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1.5px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #a78bfa;
+            box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        button {
+            padding: 12px 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        button.secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        button.secondary:hover {
+            background: #d1d5db;
+            box-shadow: none;
+        }
+
+        .results {
+            display: none;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .results-header h2 {
+            color: #374151;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .results-count {
+            color: #667eea;
+            font-weight: 700;
+            font-size: 20px;
+        }
+
+        .campaigns-grid {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            min-height: 300px;
+            max-height: calc(100vh - 500px);
+            overflow-y: auto;
+        }
+
+        .campaign-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+        }
+
+        .campaign-card:hover {
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+            border-color: #667eea;
+        }
+
+        .campaign-header {
+            margin-bottom: 16px;
+        }
+
+        .campaign-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+
+        .campaign-meta {
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .campaign-meta strong {
+            color: #667eea;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .metrics-block {
+            padding: 16px;
+            border-radius: 8px;
+        }
+
+        .metrics-block.plan {
+            background: #f0f2ff;
+        }
+
+        .metrics-block.fact {
+            background: #ecfdf5;
+        }
+
+        .metrics-title {
+            font-weight: 600;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .metrics-title.plan {
+            color: #667eea;
+        }
+
+        .metrics-title.fact {
+            color: #10b981;
+        }
+
+        .metrics-items {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 13px;
+        }
+
+        .metric-item {
+            color: #6b7280;
+        }
+
+        .metric-item strong {
+            color: #374151;
+        }
+
+        .weeks-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .weeks-title {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .weeks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+        }
+
+        .week-item {
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .week-name {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+
+        .week-metric {
+            color: #6b7280;
+            margin: 4px 0;
+        }
+
+        .week-metric strong {
+            color: #667eea;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 80px 20px;
+            color: #6b7280;
+            display: none;
+        }
+
+        .no-results.active {
+            display: block;
+        }
+
+        .no-results-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .no-results-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .no-results-text {
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #667eea;
+            display: none;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #f3f4f6;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f3f4f6;
+            border-radius: 6px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea 0%, #a78bfa 100%);
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 KPI Dashboard</h1>
+
+        <div class="search-panel">
+            <h2>Поиск кампаний</h2>
+
+            <div class="search-grid">
+                <div class="form-group">
+                    <label>Account:</label>
+                    <input type="text" id="accountInput" placeholder="Введите название аккаунта">
+                </div>
+
+                <div class="form-group">
+                    <label>ID РК:</label>
+                    <input type="text" id="campaignIdInput" placeholder="Введите ID кампании">
+                </div>
+
+                <div class="form-group">
+                    <label>Название:</label>
+                    <input type="text" id="campaignNameInput" placeholder="Введите название кампании">
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button onclick="searchCampaigns()">🔍 Найти кампании</button>
+                <button class="secondary" onclick="clearSearch()">Очистить</button>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div style="font-size: 18px; font-weight: 600;">Поиск кампаний...</div>
+        </div>
+
+        <div class="results" id="results">
+            <div class="results-header">
+                <h2>Результаты: <span class="results-count" id="resultsCount">0</span> кампаний</h2>
+            </div>
+
+            <div class="campaigns-grid" id="campaignsGrid">
+                <!-- Карточки кампаний будут добавлены через JavaScript -->
+            </div>
+        </div>
+
+        <div class="no-results" id="noResults">
+            <div class="no-results-icon">🔍</div>
+            <div class="no-results-title">Кампании не найдены</div>
+            <div class="no-results-text">Попробуйте изменить параметры поиска</div>
+        </div>
+    </div>
+
+    <script>
+        async function searchCampaigns() {
+            const account = document.getElementById('accountInput').value.trim();
+            const campaignId = document.getElementById('campaignIdInput').value.trim();
+            const campaignName = document.getElementById('campaignNameInput').value.trim();
+
+            // Проверяем что хотя бы одно поле заполнено
+            if (!account && !campaignId && !campaignName) {
+                alert('Заполните хотя бы одно поле для поиска');
+                return;
+            }
+
+            // Показываем loading
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('results').classList.remove('active');
+            document.getElementById('noResults').classList.remove('active');
+
+            try {
+                const response = await fetch('/api/kpi/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        account: account,
+                        campaign_id: campaignId,
+                        campaign_name: campaignName
+                    })
+                });
+
+                const data = await response.json();
+
+                // Скрываем loading
+                document.getElementById('loading').classList.remove('active');
+
+                if (data.success && data.campaigns && data.campaigns.length > 0) {
+                    renderCampaigns(data.campaigns);
+                    document.getElementById('results').classList.add('active');
+                } else {
+                    document.getElementById('noResults').classList.add('active');
+                }
+            } catch (error) {
+                console.error('Ошибка поиска:', error);
+                document.getElementById('loading').classList.remove('active');
+                alert('Ошибка при поиске кампаний: ' + error.message);
+            }
+        }
+
+        function renderCampaigns(campaigns) {
+            const grid = document.getElementById('campaignsGrid');
+            const count = document.getElementById('resultsCount');
+
+            count.textContent = campaigns.length;
+
+            grid.innerHTML = campaigns.map(campaign => {
+                const weeksHtml = campaign.weeks && campaign.weeks.length > 0
+                    ? campaign.weeks.map(week => `
+                        <div class="week-item">
+                            <div class="week-name">${week.name}</div>
+                            <div class="week-metric">Визиты: <strong>${week.visits || '-'}</strong></div>
+                            <div class="week-metric">PI: <strong>${week.pi || '-'}%</strong></div>
+                        </div>
+                    `).join('')
+                    : '';
+
+                return `
+                    <div class="campaign-card">
+                        <div class="campaign-header">
+                            <div class="campaign-name">${campaign.name}</div>
+                            <div class="campaign-meta">
+                                ${campaign.account ? `Account: <strong>${campaign.account}</strong> • ` : ''}
+                                ${campaign.manager ? `Менеджер: <strong>${campaign.manager}</strong> • ` : ''}
+                                ${campaign.campaign_ids && campaign.campaign_ids.length > 0 ? `ID: <strong>${campaign.campaign_ids.join(', ')}</strong>` : ''}
+                            </div>
+                        </div>
+
+                        <div class="metrics-grid">
+                            <div class="metrics-block plan">
+                                <div class="metrics-title plan">📋 ПЛАН</div>
+                                <div class="metrics-items">
+                                    <div class="metric-item">Визиты: <strong>${campaign.plan.visits || '-'}</strong></div>
+                                    <div class="metric-item">Отказы: <strong>${campaign.plan.bounces || '-'}%</strong></div>
+                                    <div class="metric-item">Глубина: <strong>${campaign.plan.depth || '-'}</strong></div>
+                                    <div class="metric-item">Время: <strong>${campaign.plan.time || '-'}с</strong></div>
+                                    <div class="metric-item">Роб: <strong>${campaign.plan.robotness || '-'}%</strong></div>
+                                    <div class="metric-item">PI: <strong>${campaign.plan.pi || '-'}%</strong></div>
+                                </div>
+                            </div>
+
+                            <div class="metrics-block fact">
+                                <div class="metrics-title fact">✅ ФАКТ</div>
+                                <div class="metrics-items">
+                                    <div class="metric-item">Визиты: <strong>${campaign.fact.visits || '-'}</strong></div>
+                                    <div class="metric-item">Отказы: <strong>${campaign.fact.bounces || '-'}%</strong></div>
+                                    <div class="metric-item">Глубина: <strong>${campaign.fact.depth || '-'}</strong></div>
+                                    <div class="metric-item">Время: <strong>${campaign.fact.time || '-'}с</strong></div>
+                                    <div class="metric-item">Роб: <strong>${campaign.fact.robotness || '-'}%</strong></div>
+                                    <div class="metric-item">PI: <strong>${campaign.fact.pi || '-'}%</strong></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        ${weeksHtml ? `
+                            <div class="weeks-section">
+                                <div class="weeks-title">📅 Данные по неделям</div>
+                                <div class="weeks-grid">
+                                    ${weeksHtml}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function clearSearch() {
+            document.getElementById('accountInput').value = '';
+            document.getElementById('campaignIdInput').value = '';
+            document.getElementById('campaignNameInput').value = '';
+            document.getElementById('results').classList.remove('active');
+            document.getElementById('noResults').classList.remove('active');
+        }
+
+        // Enter для поиска
+        document.addEventListener('DOMContentLoaded', () => {
+            const inputs = ['accountInput', 'campaignIdInput', 'campaignNameInput'];
+            inputs.forEach(id => {
+                document.getElementById(id).addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        searchCampaigns();
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
