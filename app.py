@@ -1515,9 +1515,10 @@ def run_report(report_id):
 
                 # Calculate AVERAGE reach across days (not sum!)
                 # Apply variance ONCE per campaign (not per day!)
+                # For total reports: frequency must be below target value
                 import random
                 min_freq = max(frequency - total_variance, 0.1)
-                max_freq = frequency + total_variance
+                max_freq = frequency - 0.01  # Must be strictly less than target
                 actual_frequency = random.uniform(min_freq, max_freq)
 
                 # Now calculate reach for each day using this frequency

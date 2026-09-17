@@ -1,0 +1,23 @@
+[Unit]
+Description=SAPE Reports Panel
+After=network.target
+
+[Service]
+Type=notify
+User=root
+WorkingDirectory=/root/web-projects/sape-reports
+Environment="PATH=/root/web-projects/sape-reports/venv/bin"
+Environment="ENABLE_AUTO_SYNC=1"
+ExecStart=/root/web-projects/sape-reports/venv/bin/gunicorn \
+    --workers 4 \
+    --bind 0.0.0.0:5500 \
+    --timeout 300 \
+    --access-logfile /var/log/sape-reports-access.log \
+    --error-logfile /var/log/sape-reports-error.log \
+    --log-level info \
+    wsgi:application
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

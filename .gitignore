@@ -5,55 +5,46 @@ __pycache__/
 *.so
 .Python
 venv/
-env/
 ENV/
-*.egg-info/
-dist/
-build/
+env/
 
 # Database
-database/
+database/*.db
+database/*.db-journal
 *.db
-*.sqlite
-*.sqlite3
+*.db-journal
 
-# Google Credentials - НИКОГДА НЕ КОММИТИТЬ!
+# Logs
+*.log
+logs/
+
+# Credentials
 google_credentials.json
-*credentials*.json
-
-# Secrets
-CREDENTIALS.md
-.env
-.env.local
+service_account.json
+google-sheets-service-account.json
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-logs/
-
 # Flask
 instance/
 .webassets-cache
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-sape_credentials.json
+# Backups
 backups/
-sape_credentials.json
-sape_reports.db
+*.backup
+*.bak
 
-# Server PID and sync files
+# Local server
 .local_server.pid
-.last_sync
+
+# Temporary files
+*.tmp
+sync_august_accounts.py
