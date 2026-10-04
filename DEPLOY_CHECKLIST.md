@@ -1,6 +1,6 @@
 # 🚀 Чек-лист развертывания SAPE Reports на IONOS
 
-**Сервер:** 69.48.201.233
+**Сервер:** 74.208.242.125
 **Порт:** 5500
 **Путь:** /root/web-projects/sape-reports
 
@@ -58,12 +58,12 @@ git push -u origin main
 
 ### 2.1 Подключиться к IONOS
 ```bash
-ssh root@69.48.201.233
+ssh root@74.208.242.125
 ```
 
 **Если нужен SSH ключ:**
 ```bash
-ssh -i ~/.ssh/ionos_sape_reports root@69.48.201.233
+ssh -i ~/.ssh/ionos_sape_reports root@74.208.242.125
 ```
 
 **Если не работает:** Спросить у администратора пароль или добавить SSH ключ.
@@ -110,13 +110,13 @@ pip install -r requirements.txt
 ### 4.1 Google Sheets credentials
 **На локальной машине** выполнить:
 ```bash
-scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/google_credentials.json" root@69.48.201.233:/root/web-projects/sape-reports/
+scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/google_credentials.json" root@74.208.242.125:/root/web-projects/sape-reports/
 ```
 
 ### 4.2 База данных
 **На локальной машине** выполнить:
 ```bash
-scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/database/sape_reports.db" root@69.48.201.233:/root/web-projects/sape-reports/database/
+scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/database/sape_reports.db" root@74.208.242.125:/root/web-projects/sape-reports/database/
 ```
 
 ### 4.3 Проверить на сервере
@@ -191,7 +191,7 @@ tail -f /var/log/sape-reports-error.log
 
 ### 7.3 Открыть в браузере
 ```
-http://69.48.201.233:5500/
+http://74.208.242.125:5500/
 ```
 
 Должна открыться страница входа или главная страница.
@@ -211,7 +211,7 @@ journalctl -u sape-reports -f
 ## ✅ Шаг 8: Тестирование
 
 ### 8.1 Войти в систему
-- Открыть http://69.48.201.233:5500/
+- Открыть http://74.208.242.125:5500/
 - Войти под существующим пользователем
 
 ### 8.2 Проверить аккаунты
@@ -234,7 +234,7 @@ journalctl -u sape-reports -f
 
 ```bash
 # Подключиться к серверу
-ssh root@69.48.201.233
+ssh root@74.208.242.125
 
 # Перейти в директорию
 cd /root/web-projects/sape-reports
@@ -309,7 +309,7 @@ mkdir -p /root/web-projects/sape-reports/database
 
 # Загрузить БД с локальной машины
 # (выполнить на локальной машине)
-scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/database/sape_reports.db" root@69.48.201.233:/root/web-projects/sape-reports/database/
+scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/database/sape_reports.db" root@74.208.242.125:/root/web-projects/sape-reports/database/
 ```
 
 ### Google Sheets не обновляется
@@ -318,7 +318,7 @@ scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/databa
 ls -la /root/web-projects/sape-reports/google_credentials.json
 
 # Загрузить с локальной машины если отсутствует
-scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/google_credentials.json" root@69.48.201.233:/root/web-projects/sape-reports/
+scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/google_credentials.json" root@74.208.242.125:/root/web-projects/sape-reports/
 ```
 
 ---
@@ -327,7 +327,7 @@ scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/google
 
 - [ ] Сервис запущен: `systemctl status sape-reports`
 - [ ] Порт открыт: `netstat -tulpn | grep 5500`
-- [ ] Сайт доступен: http://69.48.201.233:5500/
+- [ ] Сайт доступен: http://74.208.242.125:5500/
 - [ ] Автосинхронизация работает: `journalctl -u sape-reports | grep Scheduler`
 - [ ] Отчеты обновляются вручную
 - [ ] Логи пишутся: `tail /var/log/sape-reports-error.log`
@@ -338,4 +338,4 @@ scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/google
 
 Ваша SAPE Reports Panel развернута на сервере и работает 24/7 с автоматическим расписанием!
 
-URL: http://69.48.201.233:5500/
+URL: http://74.208.242.125:5500/

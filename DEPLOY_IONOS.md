@@ -2,7 +2,7 @@
 
 ## 📋 Предварительные требования
 
-- Доступ к серверу IONOS VPS (69.48.201.233)
+- Доступ к серверу IONOS VPS (74.208.242.125)
 - Python 3.8+
 - Git
 - Права sudo/root
@@ -13,7 +13,7 @@
 
 ### Подключение к серверу
 ```bash
-ssh root@69.48.201.233
+ssh root@74.208.242.125
 ```
 
 ### Установка необходимых пакетов (если еще не установлены)
@@ -157,7 +157,7 @@ mkdir -p backups
 6. **Загрузка credentials.json**
 ```bash
 # На локальной машине
-scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/credentials.json" root@69.48.201.233:/root/web-projects/sape-reports/
+scp "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/credentials.json" root@74.208.242.125:/root/web-projects/sape-reports/
 ```
 
 7. **Инициализация базы данных**
@@ -241,12 +241,12 @@ iptables-save > /etc/iptables/rules.v4
 curl http://localhost:5007
 
 # С локальной машины
-curl http://69.48.201.233:5007
+curl http://74.208.242.125:5007
 ```
 
 ### Открытие в браузере
 ```
-http://69.48.201.233:5007
+http://74.208.242.125:5007
 ```
 
 ---
@@ -324,7 +324,7 @@ cd /root/web-projects/sape-reports
 cp database/sape_reports.db backups/sape_reports_$(date +%Y%m%d_%H%M%S).db
 
 # Скачать бекап на локальную машину
-scp root@69.48.201.233:/root/web-projects/sape-reports/backups/sape_reports_*.db "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/backups/"
+scp root@74.208.242.125:/root/web-projects/sape-reports/backups/sape_reports_*.db "/Users/annabereznyak/Desktop/Все проекты/api_google sheets/backups/"
 ```
 
 ### Автоматический бекап (cron)
@@ -439,7 +439,7 @@ chmod +x /root/web-projects/sape-reports/healthcheck.sh
 
 ## 1️⃣2️⃣ Информация о сервисе
 
-- **URL**: http://69.48.201.233:5007
+- **URL**: http://74.208.242.125:5007
 - **Порт**: 5007
 - **Путь на сервере**: /root/web-projects/sape-reports
 - **Systemd сервис**: sape-reports.service

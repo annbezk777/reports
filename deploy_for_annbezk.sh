@@ -1,7 +1,7 @@
 #!/bin/bash
 # Скрипт развертывания SAPE Reports на IONOS
 # Пользователь: annbezk
-# Сервер: 69.48.201.233
+# Сервер: 74.208.242.125
 # Порт: 5500
 
 set -e
@@ -59,10 +59,10 @@ echo ""
 echo "На вашей ЛОКАЛЬНОЙ машине выполните:"
 echo ""
 echo -e "${GREEN}# 1. Google Sheets credentials${NC}"
-echo "scp '/Users/annabereznyak/Desktop/Все проекты/api_google sheets/google_credentials.json' annbezk@69.48.201.233:~/web-projects/sape-reports/"
+echo "scp '/Users/annabereznyak/Desktop/Все проекты/api_google sheets/google_credentials.json' annbezk@74.208.242.125:~/web-projects/sape-reports/"
 echo ""
 echo -e "${GREEN}# 2. База данных${NC}"
-echo "scp '/Users/annabereznyak/Desktop/Все проекты/api_google sheets/database/sape_reports.db' annbezk@69.48.201.233:~/web-projects/sape-reports/database/"
+echo "scp '/Users/annabereznyak/Desktop/Все проекты/api_google sheets/database/sape_reports.db' annbezk@74.208.242.125:~/web-projects/sape-reports/database/"
 echo ""
 echo -e "${YELLOW}Нажмите Enter после загрузки файлов...${NC}"
 read -p ""
@@ -157,7 +157,7 @@ echo "=================================================="
 echo -e "${GREEN}✅ Развертывание завершено!${NC}"
 echo "=================================================="
 echo ""
-echo "🌐 URL: http://69.48.201.233:5500/"
+echo "🌐 URL: http://74.208.242.125:5500/"
 echo ""
 echo "📋 Полезные команды:"
 echo ""
@@ -169,5 +169,5 @@ echo ""
 echo "🔍 Проверьте что сервис запущен:"
 echo "  sudo netstat -tulpn | grep 5500"
 echo ""
-echo "🎉 Готово! Откройте в браузере: http://69.48.201.233:5500/"
+echo "🎉 Готово! Откройте в браузере: http://74.208.242.125:5500/"
 echo ""
