@@ -7,7 +7,7 @@
     <div>
         <h1 class="text-3xl font-bold text-gray-800">👤 Аккаунты SAPE</h1>
         <p class="text-gray-600 mt-2">Управление аккаунтами для выгрузки данных</p>
-        <p class="text-gray-500 text-sm mt-1">🔄 Автосинхронизация: каждый день в 00:00</p>
+        <p class="text-gray-500 text-sm mt-1">🔄 Автосинхронизация: ПН-ПТ в 09:00 (только активные аккаунты)</p>
     </div>
     <div class="flex gap-3">
         <a href="{{ url_for('sync_all_accounts') }}"
@@ -85,15 +85,17 @@
                         {% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        {% if account.active %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                Активен
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox"
+                                   class="sr-only peer"
+                                   {% if account.active %}checked{% endif %}
+                                   onchange="toggleAccountStatus({{ account.id }}, this.checked)">
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                            <span class="ml-3 text-sm font-medium text-gray-700">
+                                <span class="peer-checked:hidden">OFF</span>
+                                <span class="hidden peer-checked:inline">ON</span>
                             </span>
-                        {% else %}
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                                Неактивен
-                            </span>
-                        {% endif %}
+                        </label>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <a href="{{ url_for('edit_account', account_id=account.id) }}"
@@ -134,5 +136,47 @@
         </div>
     </div>
 </div>
+
+<script>
+function toggleAccountStatus(accountId, isActive) {
+    fetch(`/accounts/${accountId}/toggle`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ active: isActive })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show notification
+            const message = isActive ? 'Аккаунт активирован' : 'Аккаунт деактивирован';
+            showNotification(message, 'success');
+        } else {
+            // Revert checkbox on error
+            event.target.checked = !isActive;
+            showNotification('Ошибка при изменении статуса', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        event.target.checked = !isActive;
+        showNotification('Ошибка соединения', 'error');
+    });
+}
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
+        type === 'success' ? 'bg-green-500' : 'bg-red-500'
+    } text-white font-medium`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+</script>
 
 {% endblock %}

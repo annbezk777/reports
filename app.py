@@ -709,6 +709,25 @@ def sync_campaigns(account_id):
     return redirect(url_for('accounts'))
 
 
+@app.route('/accounts/<int:account_id>/toggle', methods=['POST'])
+def toggle_account_status(account_id):
+    """Toggle account active/inactive status"""
+    account = SapeAccount.query.get_or_404(account_id)
+
+    data = request.get_json()
+    account.active = data.get('active', True)
+
+    try:
+        db.session.commit()
+        status_text = "активирован" if account.active else "деактивирован"
+        logging.info(f"Account {account.name} ({account.login}) {status_text}")
+        return jsonify({'success': True, 'active': account.active})
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error toggling account status: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 def sync_single_account(account):
     """Sync campaigns for a single account (used by scheduler and bulk sync)"""
     try:
@@ -2393,10 +2412,10 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC:
     try:
         scheduler = BackgroundScheduler(timezone=pytz.timezone('Europe/Moscow'))
 
-        # Add daily sync job at 10:00 (working hours)
+        # Add weekday sync job at 09:00 (Monday-Friday, working hours)
         scheduler.add_job(
             func=scheduled_sync_all_accounts,
-            trigger=CronTrigger(hour=10, minute=0),
+            trigger=CronTrigger(day_of_week='mon-fri', hour=9, minute=0),
             id='daily_sync_accounts',
             name='Синхронизация всех аккаунтов SAPE',
             replace_existing=True,
@@ -2407,7 +2426,7 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC:
 
         # Start scheduler
         scheduler.start()
-        logging.info("✅ Scheduler started: Daily account sync at 10:00 Moscow time")
+        logging.info("✅ Scheduler started: Weekday account sync at 09:00 Moscow time (Mon-Fri)")
 
         # Check if we need to sync on startup (if last sync was >24h ago)
         if should_sync_on_startup():
