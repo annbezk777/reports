@@ -1,0 +1,70 @@
+name: Deploy to IONOS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v3
+
+    - name: 🔐 Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.IONOS_SSH_KEY }}
+
+    - name: 📝 Add server to known_hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.IONOS_HOST }} >> ~/.ssh/known_hosts
+
+    - name: 🚀 Deploy to IONOS
+      env:
+        IONOS_HOST: ${{ secrets.IONOS_HOST }}
+        IONOS_USER: ${{ secrets.IONOS_USER }}
+        DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      run: |
+        echo "🔄 Deploying to IONOS server..."
+        ssh $IONOS_USER@$IONOS_HOST << 'EOF'
+          set -e
+
+          # Navigate to project directory
+          cd ${DEPLOY_PATH:-/root/web-projects/sape-reports}
+
+          # Pull latest changes
+          echo "📥 Pulling latest code..."
+          git pull origin main
+
+          # Activate virtual environment
+          echo "🐍 Activating virtual environment..."
+          source venv/bin/activate
+
+          # Install/update dependencies
+          echo "📦 Installing dependencies..."
+          pip install -r requirements.txt
+
+          # Restart the service
+          echo "🔄 Restarting service..."
+          sudo systemctl restart sape-reports
+
+          # Check service status
+          echo "✅ Checking service status..."
+          sudo systemctl status sape-reports --no-pager
+
+          echo "🎉 Deployment completed successfully!"
+        EOF
+
+    - name: ✅ Deployment Success
+      if: success()
+      run: echo "🎉 Successfully deployed to IONOS!"
+
+    - name: ❌ Deployment Failed
+      if: failure()
+      run: |
+        echo "❌ Deployment failed!"
+        exit 1

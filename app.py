@@ -661,32 +661,32 @@ def sync_campaigns(account_id):
     for camp in campaigns_data:
         campaign_name = camp.get('name', f"Campaign {camp['id']}")
 
-        # Get detailed campaign info to fetch clientId and type
-        campaign_detail = client.get_campaign_detail(camp['id'])
-        sape_client_id = None
-        sape_type = None
-        if campaign_detail:
-            sape_client_id = campaign_detail.get('clientId')
-            sape_type = campaign_detail.get('type')  # Get campaign type from API
-
-        # Detect format using SAPE API type (preferred) or name (fallback)
-        format_type = detect_campaign_format(campaign_name, sape_type)
-
-        # Find client in our DB
-        db_client = None
-        if sape_client_id:
-            db_client = Client.query.filter_by(
-                account_id=account.id,
-                client_id=str(sape_client_id)
-            ).first()
-
-        # Check if campaign exists
+        # Check if campaign exists first
         campaign = Campaign.query.filter_by(
             account_id=account.id,
             campaign_id=str(camp['id'])
         ).first()
 
         if not campaign:
+            # NEW CAMPAIGN: Get detailed info to fetch clientId and type
+            campaign_detail = client.get_campaign_detail(camp['id'])
+            sape_client_id = None
+            sape_type = None
+            if campaign_detail:
+                sape_client_id = campaign_detail.get('clientId')
+                sape_type = campaign_detail.get('type')
+
+            # Detect format using SAPE API type (preferred) or name (fallback)
+            format_type = detect_campaign_format(campaign_name, sape_type)
+
+            # Find client in our DB
+            db_client = None
+            if sape_client_id:
+                db_client = Client.query.filter_by(
+                    account_id=account.id,
+                    client_id=str(sape_client_id)
+                ).first()
+
             campaign = Campaign(
                 account_id=account.id,
                 campaign_id=str(camp['id']),
@@ -697,10 +697,8 @@ def sync_campaigns(account_id):
             db.session.add(campaign)
             synced_count += 1
         else:
-            # Update existing campaign
+            # EXISTING CAMPAIGN: Just update name, skip expensive API call
             campaign.name = campaign_name
-            campaign.format_type = format_type
-            campaign.client_id = db_client.id if db_client else None
             updated_count += 1
 
     # Update last sync time
@@ -771,32 +769,32 @@ def sync_single_account(account):
         for camp in campaigns_data:
             campaign_name = camp.get('name', f"Campaign {camp['id']}")
 
-            # Get campaign details for client ID and type
-            campaign_detail = client.get_campaign_detail(camp['id'])
-            sape_client_id = None
-            sape_type = None
-            if campaign_detail:
-                sape_client_id = campaign_detail.get('clientId')
-                sape_type = campaign_detail.get('type')  # Get campaign type from API
-
-            # Detect format using SAPE API type (preferred) or name (fallback)
-            format_type = detect_campaign_format(campaign_name, sape_type)
-
-            # Find client in DB
-            db_client = None
-            if sape_client_id:
-                db_client = Client.query.filter_by(
-                    account_id=account.id,
-                    client_id=str(sape_client_id)
-                ).first()
-
-            # Check if campaign exists
+            # Check if campaign exists first
             campaign = Campaign.query.filter_by(
                 account_id=account.id,
                 campaign_id=str(camp['id'])
             ).first()
 
             if not campaign:
+                # NEW CAMPAIGN: Get detailed info (this is slow, only for new campaigns)
+                campaign_detail = client.get_campaign_detail(camp['id'])
+                sape_client_id = None
+                sape_type = None
+                if campaign_detail:
+                    sape_client_id = campaign_detail.get('clientId')
+                    sape_type = campaign_detail.get('type')
+
+                # Detect format using SAPE API type (preferred) or name (fallback)
+                format_type = detect_campaign_format(campaign_name, sape_type)
+
+                # Find client in DB
+                db_client = None
+                if sape_client_id:
+                    db_client = Client.query.filter_by(
+                        account_id=account.id,
+                        client_id=str(sape_client_id)
+                    ).first()
+
                 campaign = Campaign(
                     account_id=account.id,
                     campaign_id=str(camp['id']),
@@ -807,9 +805,8 @@ def sync_single_account(account):
                 db.session.add(campaign)
                 synced_count += 1
             else:
+                # EXISTING CAMPAIGN: Just update name (fast, no API call)
                 campaign.name = campaign_name
-                campaign.format_type = format_type
-                campaign.client_id = db_client.id if db_client else None
                 updated_count += 1
 
         # Update last sync time

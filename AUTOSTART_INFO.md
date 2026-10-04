@@ -1,12 +1,25 @@
 # Настройка автозапуска сервера при загрузке системы
 
+## ⚡ БЫСТРЫЙ СТАРТ
+
+Если сервер не запущен, запустите его командой:
+
+```bash
+cd ~/api_google_sheets && nohup venv/bin/python3 app.py > server_local.log 2>&1 &
+```
+
+Проверить, работает ли сервер:
+```bash
+lsof -Pi :5006 -sTCP:LISTEN
+```
+
 ## ✅ Текущий статус
 
-Сервер настроен для автоматического запуска при загрузке macOS через LaunchAgent.
+Сервер можно запускать вручную или автоматически через LaunchAgent (в процессе настройки).
 
 - **URL сервера:** http://127.0.0.1:5006/reports
-- **LaunchAgent:** `~/Library/LaunchAgents/com.local.api-google-sheets.plist`
-- **Рабочая директория:** `/Users/annabereznyak/Desktop/Все проекты/api_google sheets`
+- **LaunchAgent:** `~/Library/LaunchAgents/com.local.api-google-sheets.plist` (в процессе отладки)
+- **Рабочая директория:** `/Users/annabereznyak/api_google_sheets` (символическая ссылка на `/Users/annabereznyak/Desktop/Все проекты/api_google sheets`)
 
 ## 📋 Управление автозапуском
 
@@ -51,25 +64,22 @@ tail -f server_local.log
 
 ## 🔧 Ручной запуск/остановка
 
-Если нужно управлять сервером вручную (без автозагрузки):
-
-### Запуск
+### Запуск:
 ```bash
-cd "/Users/annabereznyak/Desktop/Все проекты/api_google sheets"
-./start_local.sh
+cd ~/api_google_sheets && nohup venv/bin/python3 app.py > server_local.log 2>&1 &
 ```
 
-### Остановка
+### Остановка:
 ```bash
-cd "/Users/annabereznyak/Desktop/Все проекты/api_google sheets"
-./stop_local.sh
+lsof -ti :5006 | xargs kill -9
 ```
 
-### Проверка статуса
+### Проверка статуса:
 ```bash
-cd "/Users/annabereznyak/Desktop/Все проекты/api_google sheets"
-./status_local.sh
+lsof -Pi :5006 -sTCP:LISTEN
 ```
+
+Или откройте в браузере: http://127.0.0.1:5006/reports
 
 ## ⚙️ Конфигурация LaunchAgent
 
