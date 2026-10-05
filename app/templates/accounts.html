@@ -1,181 +1,1124 @@
-{% extends "base.html" %}
+{% extends "base_new.html" %}
 
-{% block title %}Аккаунты SAPE - SAPE Reports Panel{% endblock %}
+{% block title %}Аккаунты - ОТЧЕТЫ{% endblock %}
 
 {% block content %}
-<div class="mb-8 flex justify-between items-center">
-    <div>
-        <h1 class="text-3xl font-bold text-gray-800">👤 Аккаунты SAPE</h1>
-        <p class="text-gray-600 mt-2">Управление аккаунтами для выгрузки данных</p>
-        <p class="text-gray-500 text-sm mt-1">🔄 Автосинхронизация: ПН-ПТ в 09:00 (только активные аккаунты)</p>
-    </div>
-    <div class="flex gap-3">
-        <a href="{{ url_for('sync_all_accounts') }}"
-           class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition"
-           onclick="return confirm('Синхронизировать все активные аккаунты? Это может занять несколько минут.')">
-            🔄 Синхронизировать все
-        </a>
-        <a href="{{ url_for('add_account') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
-            + Добавить аккаунт
-        </a>
-    </div>
+<!-- Header -->
+<div class="content-header">
+    <h1>АККАУНТЫ</h1>
+    <p>Управление аккаунтами для выгрузки данных</p>
 </div>
 
-<!-- Search Box -->
-<div class="mb-4">
-    <form method="GET" class="flex items-center gap-3">
-        <div class="flex-1">
-            <input type="text"
-                   name="search"
-                   value="{{ request.args.get('search', '') }}"
-                   placeholder="🔍 Поиск по названию аккаунта, email или кампании..."
-                   class="shadow border rounded w-full py-2 px-4 text-gray-700 focus:outline-none focus:shadow-outline">
-        </div>
-        <button type="submit"
-                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition">
-            Найти
-        </button>
-        {% if request.args.get('search') %}
-            <a href="{{ url_for('accounts') }}"
-               class="text-blue-600 hover:text-blue-800 font-semibold">
-                ✖ Сбросить
-            </a>
-        {% endif %}
-    </form>
-</div>
-
-<!-- Accounts List -->
-<div class="bg-white rounded-lg shadow-lg overflow-hidden">
-    {% if accounts %}
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Название/Email
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Кампаний
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Последняя синхронизация
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Статус
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Действия
-                    </th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                {% for account in accounts %}
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4">
-                        <div class="text-sm font-medium text-gray-900">{{ account.name }}</div>
-                        <div class="text-sm text-gray-500">{{ account.login }}</div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {{ account.campaigns|length }} шт.
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {% if account.last_sync %}
-                            {{ account.last_sync.strftime('%d.%m.%Y %H:%M') }}
-                        {% else %}
-                            <span class="text-gray-400">Не синхронизирован</span>
-                        {% endif %}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox"
-                                   class="sr-only peer"
-                                   {% if account.active %}checked{% endif %}
-                                   onchange="toggleAccountStatus({{ account.id }}, this.checked)">
-                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-                            <span class="ml-3 text-sm font-medium text-gray-700">
-                                <span class="peer-checked:hidden">OFF</span>
-                                <span class="hidden peer-checked:inline">ON</span>
-                            </span>
-                        </label>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <a href="{{ url_for('edit_account', account_id=account.id) }}"
-                           class="text-gray-600 hover:text-gray-900 mr-3">
-                            ✏️ Редактировать
-                        </a>
-                        <a href="{{ url_for('sync_campaigns', account_id=account.id) }}"
-                           class="text-blue-600 hover:text-blue-900">
-                            🔄 Синхронизировать
-                        </a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <div class="p-8 text-center">
-            <p class="text-gray-500 mb-4">У вас пока нет добавленных аккаунтов SAPE</p>
-            <a href="{{ url_for('add_account') }}" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
-                + Добавить первый аккаунт
-            </a>
-        </div>
-    {% endif %}
-</div>
-
-<!-- Info Box -->
-<div class="mt-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
-    <div class="flex">
-        <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+<!-- Content Body -->
+<div class="content-body">
+    <!-- Toolbar: Search + Filters + Actions -->
+    <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start;">
+        <!-- Search -->
+        <div style="flex: 1; position: relative;">
+            <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
+            <input type="text"
+                   id="searchInput"
+                   placeholder="Поиск по названию, email или кампании..."
+                   style="width: 100%; padding: 10px 16px 10px 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary);"
+                   oninput="liveSearch()">
         </div>
-        <div class="ml-3">
-            <p class="text-sm text-yellow-700">
-                <strong>Важно:</strong> После добавления аккаунта обязательно нажмите "Синхронизировать" для загрузки списка кампаний (площадок) из SAPE.
-            </p>
-        </div>
+
+        <!-- Filter: Status -->
+        <select id="statusFilter" onchange="applyFilters()" style="padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary); background: white; cursor: pointer;">
+            <option value="all">Все статусы</option>
+            <option value="active">Активные</option>
+            <option value="inactive">Отключенные</option>
+        </select>
+
+        <!-- Action Buttons -->
+        <button onclick="startSyncAll()" class="btn btn-primary">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Синхронизировать все
+        </button>
+        <button onclick="openAddAccountModal()" class="btn btn-secondary">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Добавить аккаунт
+        </button>
+    </div>
+
+    <!-- Bulk Actions Bar (hidden by default) -->
+    <div id="bulkActionsBar" style="display: none; background: var(--peach-light); padding: 12px 20px; border-radius: 8px; margin-bottom: 16px; align-items: center; gap: 16px;">
+        <span id="selectedCount" style="font-weight: 600; color: var(--text-primary);"></span>
+        <button onclick="bulkSync()" class="btn btn-secondary" style="padding: 6px 16px; font-size: 13px;">Синхронизировать</button>
+        <button onclick="bulkActivate()" class="btn btn-secondary" style="padding: 6px 16px; font-size: 13px;">Активировать</button>
+        <button onclick="bulkDeactivate()" class="btn btn-secondary" style="padding: 6px 16px; font-size: 13px;">Отключить</button>
+        <button onclick="clearSelection()" style="background: none; border: none; color: var(--text-secondary); font-size: 13px; cursor: pointer; margin-left: auto;">Отменить</button>
+    </div>
+
+    <!-- Accounts Table -->
+    <div class="table-container">
+        {% if accounts %}
+            <table id="accountsTable">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" id="selectAll" onchange="toggleSelectAll()" style="cursor: pointer;">
+                        </th>
+                        <th onclick="sortTable('name')" style="cursor: pointer; user-select: none;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                Название/Email
+                                <svg id="sort-name" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity: 0.3;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/>
+                                </svg>
+                            </div>
+                        </th>
+                        <th onclick="sortTable('campaigns')" style="text-align: center; cursor: pointer; user-select: none;">
+                            <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+                                Кампаний
+                                <svg id="sort-campaigns" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity: 0.3;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/>
+                                </svg>
+                            </div>
+                        </th>
+                        <th onclick="sortTable('sync')" style="cursor: pointer; user-select: none;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                Последняя синхронизация
+                                <svg id="sort-sync" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity: 0.3;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/>
+                                </svg>
+                            </div>
+                        </th>
+                        <th onclick="sortTable('status')" style="cursor: pointer; user-select: none;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                Статус
+                                <svg id="sort-status" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity: 0.3;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/>
+                                </svg>
+                            </div>
+                        </th>
+                        <th style="width: 60px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for account in accounts %}
+                    <tr class="account-row"
+                        data-account-id="{{ account.id }}"
+                        data-active="{{ 'true' if account.active else 'false' }}"
+                        data-name="{{ account.name|lower }}"
+                        data-login="{{ account.login|lower }}"
+                        data-campaigns="{{ account.campaigns|length }}"
+                        data-sync="{{ account.last_sync.timestamp() if account.last_sync else 0 }}">
+                        <td>
+                            <input type="checkbox" class="account-checkbox" value="{{ account.id }}" onchange="updateBulkActions()" style="cursor: pointer;">
+                        </td>
+                        <td>
+                            <div style="font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">{{ account.name }}</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">{{ account.login }}</div>
+                        </td>
+                        <td style="text-align: center; font-weight: 500; color: var(--text-primary); font-variant-numeric: tabular-nums;">{{ account.campaigns|length }}</td>
+                        <td>
+                            {% if account.last_sync %}
+                                <span class="sync-time" data-timestamp="{{ account.last_sync.timestamp() }}">
+                                    {{ account.last_sync.strftime('%d.%m.%Y %H:%M') }}
+                                </span>
+                            {% else %}
+                                <span style="color: var(--text-light); font-size: 13px;">Не синхронизирован</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {% if account.active %}badge-success{% else %}badge-neutral{% endif %}">
+                                {% if account.active %}
+                                    <span style="display: inline-block; width: 6px; height: 6px; background: #10B981; border-radius: 50%; margin-right: 6px;"></span>
+                                    Активен
+                                {% else %}
+                                    <span style="display: inline-block; width: 6px; height: 6px; background: #9CA3AF; border-radius: 50%; margin-right: 6px;"></span>
+                                    Отключен
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td style="text-align: center;">
+                            <div class="kebab-menu">
+                                <button class="kebab-button" onclick="toggleKebabMenu(event, {{ account.id }})">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                        <circle cx="8" cy="3" r="1.5"/>
+                                        <circle cx="8" cy="8" r="1.5"/>
+                                        <circle cx="8" cy="13" r="1.5"/>
+                                    </svg>
+                                </button>
+                                <div class="kebab-dropdown" id="kebab-{{ account.id }}">
+                                    <a href="#" onclick="startSyncSingle({{ account.id }}, '{{ account.name }}'); return false;" class="kebab-item">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                        </svg>
+                                        Синхронизировать
+                                    </a>
+                                    <a href="{{ url_for('edit_account', account_id=account.id) }}" class="kebab-item">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                        </svg>
+                                        Редактировать
+                                    </a>
+                                    <div class="kebab-divider"></div>
+                                    <a href="#" onclick="toggleAccountFromMenu({{ account.id }}, {{ 'false' if account.active else 'true' }}); return false;" class="kebab-item">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                        </svg>
+                                        {% if account.active %}Отключить{% else %}Активировать{% endif %}
+                                    </a>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div style="padding: 60px 24px; text-align: center;">
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">У вас пока нет добавленных аккаунтов SAPE</p>
+                <button onclick="openAddAccountModal()" class="btn btn-primary">
+                    <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Добавить первый аккаунт
+                </button>
+            </div>
+        {% endif %}
     </div>
 </div>
+
+<style>
+/* Badges */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge-success {
+    background: #D1FAE5;
+    color: #065F46;
+}
+
+.badge-neutral {
+    background: #F3F4F6;
+    color: #6B7280;
+}
+
+/* Kebab Menu */
+.kebab-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.kebab-button {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.kebab-button:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+}
+
+.kebab-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    min-width: 180px;
+    z-index: 1000;
+}
+
+.kebab-dropdown.show {
+    display: block;
+}
+
+.kebab-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.kebab-item:hover {
+    background: var(--bg-light);
+}
+
+.kebab-item svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
+}
+
+.kebab-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
+}
+
+/* Table hover effect */
+tbody tr:hover {
+    background: var(--bg-light);
+}
+
+/* Sort arrow animations */
+thead th svg {
+    transition: all 0.2s;
+}
+
+thead th:hover svg {
+    opacity: 0.6 !important;
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 16px;
+    max-width: 560px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    animation: modalSlideIn 0.2s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 28px;
+}
+
+/* Form styles */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.form-input {
+    width: 100%;
+    padding: 10px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-primary);
+    transition: all 0.2s;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--primary-orange);
+    box-shadow: 0 0 0 3px rgba(255, 138, 91, 0.1);
+}
+
+.form-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 6px 0 0 0;
+}
+</style>
 
 <script>
-function toggleAccountStatus(accountId, isActive) {
+// Sorting
+let currentSort = { column: null, direction: 'asc' };
+
+function sortTable(column) {
+    const tbody = document.querySelector('#accountsTable tbody');
+    const rows = Array.from(tbody.querySelectorAll('.account-row'));
+
+    // Toggle direction if same column
+    if (currentSort.column === column) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.column = column;
+        currentSort.direction = 'asc';
+    }
+
+    // Sort rows
+    rows.sort((a, b) => {
+        let aVal, bVal;
+
+        switch(column) {
+            case 'name':
+                aVal = a.dataset.name;
+                bVal = b.dataset.name;
+                break;
+            case 'campaigns':
+                aVal = parseInt(a.dataset.campaigns);
+                bVal = parseInt(b.dataset.campaigns);
+                break;
+            case 'sync':
+                aVal = parseFloat(a.dataset.sync);
+                bVal = parseFloat(b.dataset.sync);
+                break;
+            case 'status':
+                aVal = a.dataset.active === 'true' ? 1 : 0;
+                bVal = b.dataset.active === 'true' ? 1 : 0;
+                break;
+        }
+
+        if (currentSort.direction === 'asc') {
+            return aVal > bVal ? 1 : -1;
+        } else {
+            return aVal < bVal ? 1 : -1;
+        }
+    });
+
+    // Reorder DOM
+    rows.forEach(row => tbody.appendChild(row));
+
+    // Update sort icons
+    updateSortIcons();
+}
+
+function updateSortIcons() {
+    // Reset all icons
+    document.querySelectorAll('thead svg').forEach(svg => {
+        svg.style.opacity = '0.3';
+        svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/>';
+    });
+
+    // Update active column icon
+    if (currentSort.column) {
+        const icon = document.getElementById(`sort-${currentSort.column}`);
+        if (icon) {
+            icon.style.opacity = '1';
+            if (currentSort.direction === 'desc') {
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 13l-5 5m0 0l-5-5m5 5V6"/>';
+            }
+        }
+    }
+}
+
+// Live Search
+let searchTimeout;
+function liveSearch() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        applyFilters();
+    }, 300);
+}
+
+// Apply Filters
+function applyFilters() {
+    const searchValue = document.getElementById('searchInput').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    const rows = document.querySelectorAll('.account-row');
+
+    rows.forEach(row => {
+        const name = row.dataset.name;
+        const login = row.dataset.login;
+        const isActive = row.dataset.active === 'true';
+
+        // Search filter
+        const matchesSearch = !searchValue || name.includes(searchValue) || login.includes(searchValue);
+
+        // Status filter
+        let matchesStatus = true;
+        if (statusFilter === 'active') matchesStatus = isActive;
+        if (statusFilter === 'inactive') matchesStatus = !isActive;
+
+        row.style.display = (matchesSearch && matchesStatus) ? '' : 'none';
+    });
+}
+
+// Format relative time
+function formatRelativeTime() {
+    const now = Date.now() / 1000;
+    document.querySelectorAll('.sync-time').forEach(el => {
+        const timestamp = parseFloat(el.dataset.timestamp);
+        const diff = now - timestamp;
+        const diffDays = Math.floor(diff / 86400);
+        const diffHours = Math.floor(diff / 3600);
+        const diffMinutes = Math.floor(diff / 60);
+
+        let relativeText = '';
+        if (diffDays === 0) {
+            if (diffHours === 0) {
+                if (diffMinutes < 5) relativeText = 'Только что';
+                else relativeText = `${diffMinutes} мин. назад`;
+            } else {
+                const date = new Date(timestamp * 1000);
+                relativeText = `Сегодня в ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            }
+        } else if (diffDays === 1) {
+            const date = new Date(timestamp * 1000);
+            relativeText = `Вчера в ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        } else if (diffDays < 7) {
+            relativeText = `${diffDays} дн. назад`;
+        } else if (diffDays < 30) {
+            const weeks = Math.floor(diffDays / 7);
+            relativeText = `${weeks} нед. назад`;
+        } else {
+            const months = Math.floor(diffDays / 30);
+            relativeText = `${months} мес. назад`;
+        }
+
+        if (relativeText) {
+            const originalText = el.textContent;
+            el.textContent = relativeText;
+            el.title = originalText;
+        }
+    });
+}
+
+// Kebab Menu
+function toggleKebabMenu(event, accountId) {
+    event.stopPropagation();
+    const dropdown = document.getElementById(`kebab-${accountId}`);
+    const allDropdowns = document.querySelectorAll('.kebab-dropdown');
+
+    allDropdowns.forEach(d => {
+        if (d !== dropdown) d.classList.remove('show');
+    });
+
+    dropdown.classList.toggle('show');
+}
+
+// Close kebab menus when clicking outside
+document.addEventListener('click', () => {
+    document.querySelectorAll('.kebab-dropdown').forEach(d => d.classList.remove('show'));
+});
+
+// Toggle account from kebab menu
+function toggleAccountFromMenu(accountId, newStatus) {
     fetch(`/accounts/${accountId}/toggle`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ active: isActive })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: newStatus })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show notification
-            const message = isActive ? 'Аккаунт активирован' : 'Аккаунт деактивирован';
-            showNotification(message, 'success');
+            location.reload();
         } else {
-            // Revert checkbox on error
-            event.target.checked = !isActive;
             showNotification('Ошибка при изменении статуса', 'error');
         }
     })
-    .catch(error => {
-        console.error('Error:', error);
-        event.target.checked = !isActive;
-        showNotification('Ошибка соединения', 'error');
-    });
+    .catch(() => showNotification('Ошибка соединения', 'error'));
+}
+
+// Bulk Actions
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.account-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+    updateBulkActions();
+}
+
+function updateBulkActions() {
+    const selected = document.querySelectorAll('.account-checkbox:checked');
+    const bar = document.getElementById('bulkActionsBar');
+    const count = document.getElementById('selectedCount');
+
+    if (selected.length > 0) {
+        bar.style.display = 'flex';
+        count.textContent = `Выбрано: ${selected.length}`;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+function clearSelection() {
+    document.getElementById('selectAll').checked = false;
+    document.querySelectorAll('.account-checkbox').forEach(cb => cb.checked = false);
+    updateBulkActions();
+}
+
+function bulkSync() {
+    const selected = Array.from(document.querySelectorAll('.account-checkbox:checked')).map(cb => cb.value);
+
+    if (selected.length === 0) {
+        showNotification('Выберите аккаунты для синхронизации', 'error');
+        return;
+    }
+
+    if (selected.length === 1) {
+        // Single account - use modal
+        const accountId = selected[0];
+        const accountRow = document.querySelector(`tr[data-account-id="${accountId}"]`);
+        const accountName = accountRow.querySelectorAll('td')[1].querySelector('div').textContent.trim();
+        clearSelection();
+        startSyncSingle(parseInt(accountId), accountName);
+    } else {
+        // Multiple accounts - use sync all modal
+        clearSelection();
+        // TODO: Implement bulk sync for selected accounts
+        showNotification('Массовая синхронизация выбранных аккаунтов в разработке. Используйте "Синхронизировать все"', 'info');
+    }
+}
+
+function bulkActivate() {
+    const selected = Array.from(document.querySelectorAll('.account-checkbox:checked')).map(cb => cb.value);
+    bulkToggleStatus(selected, true);
+}
+
+function bulkDeactivate() {
+    const selected = Array.from(document.querySelectorAll('.account-checkbox:checked')).map(cb => cb.value);
+    bulkToggleStatus(selected, false);
+}
+
+function bulkToggleStatus(accountIds, active) {
+    Promise.all(accountIds.map(id =>
+        fetch(`/accounts/${id}/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active })
+        })
+    )).then(() => {
+        showNotification(`${accountIds.length} аккаунтов обновлено`, 'success');
+        setTimeout(() => location.reload(), 1000);
+    }).catch(() => showNotification('Ошибка при обновлении', 'error'));
 }
 
 function showNotification(message, type) {
     const notification = document.createElement('div');
-    notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
-        type === 'success' ? 'bg-green-500' : 'bg-red-500'
-    } text-white font-medium`;
+    let bgColor = '#EF4444'; // error
+    if (type === 'success') bgColor = '#10B981';
+    if (type === 'info') bgColor = '#3B82F6';
+
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 16px 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        font-size: 14px;
+        font-weight: 500;
+        color: white;
+        background: ${bgColor};
+    `;
     notification.textContent = message;
     document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
+}
 
-    setTimeout(() => {
-        notification.remove();
-    }, 3000);
+// Modal functions
+function openAddAccountModal() {
+    document.getElementById('addAccountModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAddAccountModal() {
+    document.getElementById('addAccountModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function closeModalOnBackdrop(event) {
+    if (event.target.id === 'addAccountModal') {
+        closeAddAccountModal();
+    }
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeAddAccountModal();
+    }
+});
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    formatRelativeTime();
+    setInterval(formatRelativeTime, 60000);
+});
+</script>
+
+<!-- Add Account Modal -->
+<div id="addAccountModal" class="modal" onclick="closeModalOnBackdrop(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <!-- Modal Header -->
+        <div class="modal-header">
+            <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;">Добавить аккаунт</h2>
+            <button onclick="closeAddAccountModal()" class="modal-close">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="modal-body">
+            <form method="POST" action="{{ url_for('add_account') }}" id="addAccountForm">
+                <!-- Название аккаунта -->
+                <div class="form-group">
+                    <label class="form-label">
+                        Название аккаунта
+                        <span style="color: var(--primary-orange);">*</span>
+                    </label>
+                    <input type="text"
+                           name="name"
+                           placeholder="Например: Основной аккаунт"
+                           required
+                           class="form-input">
+                    <p class="form-hint">Произвольное название для удобства</p>
+                </div>
+
+                <!-- Логин SAPE -->
+                <div class="form-group">
+                    <label class="form-label">
+                        Логин SAPE (email)
+                        <span style="color: var(--primary-orange);">*</span>
+                    </label>
+                    <input type="email"
+                           name="login"
+                           placeholder="your@email.com"
+                           required
+                           class="form-input">
+                    <p class="form-hint">Email для входа в SAPE</p>
+                </div>
+
+                <!-- API Токен -->
+                <div class="form-group">
+                    <label class="form-label">
+                        API Токен
+                        <span style="color: var(--primary-orange);">*</span>
+                    </label>
+                    <input type="text"
+                           name="api_token"
+                           placeholder="Например: c46e580fdafdceeb38c50ee5e49f360d56b8a4bed33754094eb6d726b373e702"
+                           required
+                           class="form-input"
+                           style="font-family: 'Courier New', monospace; font-size: 13px;">
+                    <p class="form-hint">
+                        Получите токен: <a href="http://passport.sape.ru/security/token/" target="_blank" style="color: var(--primary-orange); text-decoration: none; font-weight: 500;">passport.sape.ru/security/token</a>
+                    </p>
+                </div>
+
+                <!-- SAPE User ID -->
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label class="form-label">
+                        SAPE User ID
+                        <span style="font-size: 12px; font-weight: 400; color: var(--text-secondary);">(необязательно)</span>
+                    </label>
+                    <input type="text"
+                           name="sape_user_id"
+                           placeholder="Например: 1861509"
+                           class="form-input">
+                    <p class="form-hint">ID для ссылки в личный кабинет SAPE</p>
+                </div>
+
+                <!-- Info Box (integrated) -->
+                <div style="background: var(--peach-light); border-radius: 8px; padding: 14px 16px; margin-bottom: 24px;">
+                    <p style="font-size: 13px; color: var(--text-primary); margin: 0; line-height: 1.5;">
+                        После добавления начнется автоматическая синхронизация кампаний из SAPE. Дождитесь завершения и создайте первый отчет.
+                    </p>
+                </div>
+
+                <!-- Buttons -->
+                <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                    <button type="button" onclick="closeAddAccountModal()" class="btn btn-secondary" style="background: white; color: var(--text-secondary);">
+                        Отмена
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        Сохранить аккаунт
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Sync Progress Modal -->
+<div id="syncProgressModal" class="modal" style="display: none;">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 480px;">
+        <!-- Modal Header -->
+        <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+            <h2 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0;" id="syncModalTitle">Синхронизация</h2>
+            <button onclick="closeSyncModal()" class="modal-close">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="modal-body" style="padding: 32px 28px;">
+            <!-- Loading State -->
+            <div id="syncLoadingState">
+                <div style="display: flex; flex-direction: column; align-items: center;">
+                    <!-- Circular Progress (for multiple accounts) -->
+                    <div id="syncProgressContainer" class="sync-circular-progress">
+                        <svg width="160" height="160" viewBox="0 0 160 160">
+                            <circle cx="80" cy="80" r="70" fill="none" stroke="#F3F4F6" stroke-width="10"/>
+                            <circle id="syncProgressCircle" cx="80" cy="80" r="70" fill="none"
+                                    stroke="url(#syncGradient)" stroke-width="10"
+                                    stroke-linecap="round"
+                                    stroke-dasharray="439.82"
+                                    stroke-dashoffset="439.82"
+                                    transform="rotate(-90 80 80)"
+                                    style="transition: stroke-dashoffset 0.3s ease;"/>
+                            <defs>
+                                <linearGradient id="syncGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#FF8A5B;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#FFA577;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                        <div class="sync-progress-text">
+                            <div id="syncProgressPercent" style="font-size: 42px; font-weight: 700; color: var(--text-primary); line-height: 1;">0%</div>
+                            <div id="syncProgressCount" style="font-size: 13px; color: var(--text-secondary); margin-top: 6px;">0 из 0</div>
+                        </div>
+                    </div>
+
+                    <!-- Spinner (for single account) -->
+                    <div id="syncSpinnerContainer" class="sync-spinner-wrapper" style="display: none;">
+                        <svg class="sync-spinner" width="120" height="120" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="54" fill="none" stroke="#F3F4F6" stroke-width="8"/>
+                            <circle cx="60" cy="60" r="54" fill="none" stroke="url(#spinnerGradient)" stroke-width="8"
+                                    stroke-linecap="round" stroke-dasharray="85 255" transform="rotate(-90 60 60)">
+                                <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60"
+                                                dur="1s" repeatCount="indefinite"/>
+                            </circle>
+                            <defs>
+                                <linearGradient id="spinnerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#FF8A5B;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#FFA577;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+
+                    <!-- Current Status -->
+                    <div style="text-align: center; margin-top: 28px; width: 100%;">
+                        <p id="syncCurrentAccount" style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0;">Подготовка...</p>
+                    </div>
+                </div>
+
+                <!-- Minimize Button -->
+                <div style="margin-top: 32px; text-align: center;">
+                    <button onclick="minimizeSyncModal()" class="btn btn-secondary" style="background: white; color: var(--text-secondary);">
+                        Свернуть в фоновый режим
+                    </button>
+                </div>
+            </div>
+
+            <!-- Success State (hidden initially) -->
+            <div id="syncSuccessState" style="display: none; text-align: center;">
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; background: #D1FAE5; border-radius: 50%; margin-bottom: 20px;">
+                    <svg width="40" height="40" fill="none" stroke="#10B981" viewBox="0 0 24 24" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                    </svg>
+                </div>
+                <h3 style="font-size: 20px; font-weight: 700; color: #065F46; margin: 0 0 8px 0;">Синхронизация завершена!</h3>
+                <p style="font-size: 14px; color: #047857; margin-bottom: 24px;">Данные успешно загружены из SAPE</p>
+
+                <div style="background: var(--bg-light); border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center;">
+                        <div>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Клиентов</p>
+                            <p id="syncTotalClients" style="font-size: 24px; font-weight: 700; color: var(--primary-orange); margin: 0;">0</p>
+                        </div>
+                        <div>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Новых кампаний</p>
+                            <p id="syncTotalNew" style="font-size: 24px; font-weight: 700; color: var(--primary-orange); margin: 0;">0</p>
+                        </div>
+                        <div>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Обновлено кампаний</p>
+                            <p id="syncTotalUpdated" style="font-size: 24px; font-weight: 700; color: var(--primary-orange); margin: 0;">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="closeSyncModal(); location.reload();" class="btn btn-primary" style="width: 100%;">
+                    Закрыть
+                </button>
+            </div>
+
+            <!-- Error State (hidden initially) -->
+            <div id="syncErrorState" style="display: none; text-align: center;">
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; background: #FEE2E2; border-radius: 50%; margin-bottom: 20px;">
+                    <svg width="40" height="40" fill="none" stroke="#EF4444" viewBox="0 0 24 24" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </div>
+                <h3 style="font-size: 20px; font-weight: 700; color: #991B1B; margin: 0 0 8px 0;">Ошибка синхронизации</h3>
+                <p id="syncErrorMessage" style="font-size: 14px; color: #B91C1C; margin-bottom: 24px;"></p>
+
+                <div style="display: flex; gap: 12px;">
+                    <button onclick="retrySyncModal()" class="btn btn-primary" style="flex: 1;">
+                        Попробовать снова
+                    </button>
+                    <button onclick="closeSyncModal()" class="btn btn-secondary" style="flex: 1; background: white; color: var(--text-secondary);">
+                        Закрыть
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.sync-circular-progress {
+    position: relative;
+    width: 160px;
+    height: 160px;
+}
+
+.sync-progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.sync-spinner-wrapper {
+    width: 120px;
+    height: 120px;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.sync-spinner {
+    width: 100%;
+    height: 100%;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+</style>
+
+<script>
+// Sync Modal State
+let currentSyncType = null; // 'all' or 'single'
+let currentAccountId = null;
+let currentEvtSource = null;
+
+function startSyncAll() {
+    currentSyncType = 'all';
+    document.getElementById('syncModalTitle').textContent = 'Синхронизация всех аккаунтов';
+    openSyncModal();
+
+    const evtSource = new EventSource('{{ url_for("execute_sync_all") }}');
+    currentEvtSource = evtSource;
+    const circumference = 439.82; // 2 * π * 70
+    const progressCircle = document.getElementById('syncProgressCircle');
+
+    let totalClients = 0;
+    let totalNew = 0;
+    let totalUpdated = 0;
+
+    evtSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'start') {
+            console.log('Starting sync for', data.total, 'accounts');
+        }
+        else if (data.type === 'progress') {
+            const progress = (data.current / data.total) * 100;
+            const offset = circumference - (progress / 100) * circumference;
+
+            progressCircle.style.strokeDashoffset = offset;
+            document.getElementById('syncProgressPercent').textContent = Math.round(progress) + '%';
+            document.getElementById('syncProgressCount').textContent = data.current + ' из ' + data.total;
+            document.getElementById('syncCurrentAccount').textContent = data.account;
+        }
+        else if (data.type === 'account_success') {
+            totalClients += data.clients;
+            totalNew += data.new;
+            totalUpdated += data.updated;
+        }
+        else if (data.type === 'complete') {
+            progressCircle.style.strokeDashoffset = 0;
+            document.getElementById('syncProgressPercent').textContent = '100%';
+
+            document.getElementById('syncLoadingState').style.display = 'none';
+            document.getElementById('syncSuccessState').style.display = 'block';
+
+            document.getElementById('syncTotalClients').textContent = data.total_clients;
+            document.getElementById('syncTotalNew').textContent = data.total_new;
+            document.getElementById('syncTotalUpdated').textContent = data.total_updated;
+
+            evtSource.close();
+            currentEvtSource = null;
+        }
+    };
+
+    evtSource.onerror = (err) => {
+        console.error('EventSource error:', err);
+        document.getElementById('syncLoadingState').style.display = 'none';
+        document.getElementById('syncErrorState').style.display = 'block';
+        document.getElementById('syncErrorMessage').textContent = 'Ошибка соединения с сервером';
+        evtSource.close();
+        currentEvtSource = null;
+    };
+}
+
+function startSyncSingle(accountId, accountName) {
+    currentSyncType = 'single';
+    currentAccountId = accountId;
+    document.getElementById('syncModalTitle').textContent = 'Синхронизация аккаунта';
+    document.getElementById('syncCurrentAccount').textContent = accountName;
+    openSyncModal('spinner'); // Show spinner instead of progress
+
+    const evtSource = new EventSource('/accounts/' + accountId + '/sync/execute');
+    currentEvtSource = evtSource;
+
+    evtSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'start') {
+            document.getElementById('syncCurrentAccount').textContent = 'Загрузка данных из SAPE...';
+        }
+        else if (data.type === 'complete') {
+            evtSource.close();
+            currentEvtSource = null;
+
+            if (data.success) {
+                document.getElementById('syncLoadingState').style.display = 'none';
+                document.getElementById('syncSuccessState').style.display = 'block';
+
+                document.getElementById('syncTotalClients').textContent = data.clients;
+                document.getElementById('syncTotalNew').textContent = data.new;
+                document.getElementById('syncTotalUpdated').textContent = data.updated;
+            } else {
+                document.getElementById('syncLoadingState').style.display = 'none';
+                document.getElementById('syncErrorState').style.display = 'block';
+                document.getElementById('syncErrorMessage').textContent = data.error || 'Неизвестная ошибка';
+            }
+        }
+    };
+
+    evtSource.onerror = (err) => {
+        console.error('EventSource error:', err);
+        document.getElementById('syncLoadingState').style.display = 'none';
+        document.getElementById('syncErrorState').style.display = 'block';
+        document.getElementById('syncErrorMessage').textContent = 'Ошибка соединения с сервером';
+        evtSource.close();
+        currentEvtSource = null;
+    };
+}
+
+function openSyncModal(type = 'progress') {
+    // Reset states
+    document.getElementById('syncLoadingState').style.display = 'block';
+    document.getElementById('syncSuccessState').style.display = 'none';
+    document.getElementById('syncErrorState').style.display = 'none';
+
+    if (type === 'spinner') {
+        // Show spinner for single account sync
+        document.getElementById('syncProgressContainer').style.display = 'none';
+        document.getElementById('syncSpinnerContainer').style.display = 'block';
+    } else {
+        // Show progress bar for multiple accounts sync
+        document.getElementById('syncProgressContainer').style.display = 'block';
+        document.getElementById('syncSpinnerContainer').style.display = 'none';
+
+        // Reset progress
+        document.getElementById('syncProgressCircle').style.strokeDashoffset = '439.82';
+        document.getElementById('syncProgressPercent').textContent = '0%';
+        document.getElementById('syncProgressCount').textContent = '0 из 0';
+        document.getElementById('syncProgressCount').style.display = 'block';
+    }
+
+    document.getElementById('syncProgressModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSyncModal() {
+    if (currentEvtSource) {
+        currentEvtSource.close();
+        currentEvtSource = null;
+    }
+    document.getElementById('syncProgressModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function minimizeSyncModal() {
+    closeSyncModal();
+    // Show notification that sync is running in background
+    showNotification('Синхронизация продолжается в фоновом режиме', 'info');
+}
+
+function retrySyncModal() {
+    if (currentSyncType === 'all') {
+        closeSyncModal();
+        startSyncAll();
+    } else if (currentSyncType === 'single' && currentAccountId) {
+        closeSyncModal();
+        const accountRow = document.querySelector(`tr[data-account-id="${currentAccountId}"]`);
+        const accountName = accountRow ? accountRow.querySelectorAll('td')[1].querySelector('div').textContent.trim() : 'Аккаунт';
+        startSyncSingle(currentAccountId, accountName);
+    }
 }
 </script>
 

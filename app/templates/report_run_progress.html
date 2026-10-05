@@ -1,0 +1,167 @@
+{% extends "base_new.html" %}
+
+{% block title %}Запуск отчета - ОТЧЕТЫ{% endblock %}
+
+{% block content %}
+{% include '_loading_states.html' %}
+
+<!-- Header -->
+<div class="content-header">
+    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+        <a href="{{ url_for('reports') }}" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+            К списку отчетов
+        </a>
+    </div>
+    <h1>ЗАПУСК ОТЧЕТА</h1>
+    <p>Формирование отчета "{{ report.name }}"</p>
+</div>
+
+<!-- Content Body -->
+<div class="content-body">
+    <div class="loading-container">
+        <!-- Loading State -->
+        <div id="loadingState" class="loading-state">
+            {% include '_progress_indicator.html' with mode='spinner', size='medium' %}
+
+            <p style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-top: 24px; text-align: center;">
+                Формирование отчета...
+            </p>
+            <p id="statusText" style="font-size: 14px; color: var(--text-secondary); margin-top: 8px; text-align: center;">
+                Подготовка данных
+            </p>
+        </div>
+
+        <!-- Success State (hidden initially) -->
+        <div id="successState" style="display: none;">
+            <div class="state-card success">
+                <div class="state-icon">
+                    <svg width="40" height="40" fill="none" stroke="#10B981" viewBox="0 0 24 24" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                    </svg>
+                </div>
+
+                <h2 class="state-title">Отчет успешно сформирован!</h2>
+                <p class="state-message">Данные обработаны и загружены в Google Таблицы</p>
+
+                <div class="metrics-grid" id="metricsContainer">
+                    <!-- Metrics will be added dynamically -->
+                </div>
+
+                <div class="action-buttons">
+                    {% if report.google_sheet_url %}
+                    <a href="{{ report.google_sheet_url }}" target="_blank" class="btn btn-primary">
+                        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                        </svg>
+                        Открыть таблицу
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('reports') }}" class="btn btn-secondary" style="background: white; color: var(--text-secondary);">
+                        К списку отчетов
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error State (hidden initially) -->
+        <div id="errorState" style="display: none;">
+            <div class="state-card error">
+                <div class="state-icon">
+                    <svg width="40" height="40" fill="none" stroke="#EF4444" viewBox="0 0 24 24" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </div>
+
+                <h2 class="state-title">Ошибка формирования отчета</h2>
+                <p id="errorMessage" class="state-message"></p>
+
+                <div class="action-buttons">
+                    <button onclick="location.reload()" class="btn btn-primary">
+                        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Попробовать снова
+                    </button>
+                    <a href="{{ url_for('reports') }}" class="btn btn-secondary" style="background: white; color: var(--text-secondary);">
+                        К списку отчетов
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Start report generation when page loads
+window.addEventListener('DOMContentLoaded', () => {
+    const evtSource = new EventSource('{{ url_for("execute_run_report", report_id=report.id) }}' + window.location.search);
+
+    evtSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'status') {
+            document.getElementById('statusText').textContent = data.message;
+        }
+        else if (data.type === 'complete') {
+            evtSource.close();
+
+            if (data.success) {
+                // Show success state
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('successState').style.display = 'block';
+
+                // Add metrics if available
+                if (data.stats) {
+                    const container = document.getElementById('metricsContainer');
+                    container.innerHTML = '';
+
+                    if (data.stats.rows) {
+                        container.innerHTML += `
+                            <div class="metric-card">
+                                <p class="metric-label">Строк обработано</p>
+                                <p class="metric-value">${data.stats.rows}</p>
+                            </div>
+                        `;
+                    }
+
+                    if (data.stats.campaigns) {
+                        container.innerHTML += `
+                            <div class="metric-card">
+                                <p class="metric-label">Кампаний</p>
+                                <p class="metric-value">${data.stats.campaigns}</p>
+                            </div>
+                        `;
+                    }
+
+                    if (data.stats.period) {
+                        container.innerHTML += `
+                            <div class="metric-card">
+                                <p class="metric-label">Период</p>
+                                <p class="metric-value" style="font-size: 16px;">${data.stats.period}</p>
+                            </div>
+                        `;
+                    }
+                }
+            } else {
+                // Show error state
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('errorState').style.display = 'block';
+                document.getElementById('errorMessage').textContent = data.error || 'Неизвестная ошибка';
+            }
+        }
+    };
+
+    evtSource.onerror = (err) => {
+        console.error('EventSource error:', err);
+        evtSource.close();
+
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('errorState').style.display = 'block';
+        document.getElementById('errorMessage').textContent = 'Ошибка соединения с сервером';
+    };
+});
+</script>
+{% endblock %}

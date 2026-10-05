@@ -1,0 +1,171 @@
+{% extends "base_new.html" %}
+
+{% block title %}Синхронизация - ОТЧЕТЫ{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="content-header">
+    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+        <a href="{{ url_for('accounts') }}" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+            К списку аккаунтов
+        </a>
+    </div>
+    <h1>СИНХРОНИЗАЦИЯ</h1>
+    <p>Загрузка данных из SAPE API для аккаунта "{{ account.name }}"</p>
+</div>
+
+<!-- Content Body -->
+<div class="content-body">
+    <div style="max-width: 600px; margin: 0 auto;">
+        <!-- Circular Progress Indicator -->
+        <div id="loadingState" style="display: flex; flex-direction: column; align-items: center; padding: 60px 20px;">
+            <div class="circular-progress-spin">
+                <svg width="120" height="120" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="54" fill="none" stroke="#F3F4F6" stroke-width="8"/>
+                    <circle cx="60" cy="60" r="54" fill="none" stroke="url(#gradient)" stroke-width="8"
+                            stroke-linecap="round" stroke-dasharray="85 255" transform="rotate(-90 60 60)">
+                        <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60"
+                                        dur="1s" repeatCount="indefinite"/>
+                    </circle>
+                    <defs>
+                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#FF8A5B;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#FFA577;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+
+            <p id="statusText" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-top: 24px; text-align: center;">
+                Синхронизация...
+            </p>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-top: 8px; text-align: center;">
+                Пожалуйста, подождите
+            </p>
+        </div>
+
+        <!-- Success State (hidden initially) -->
+        <div id="successState" style="display: none;">
+            <div style="background: linear-gradient(135deg, #D1FAE5, #ECFDF5); border-radius: 16px; padding: 40px; border: 1px solid #A7F3D0; text-align: center;">
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; background: white; border-radius: 50%; margin-bottom: 24px;">
+                    <svg width="40" height="40" fill="none" stroke="#10B981" viewBox="0 0 24 24" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                    </svg>
+                </div>
+
+                <h2 style="font-size: 24px; font-weight: 700; color: #065F46; margin: 0 0 12px 0;">Синхронизация завершена!</h2>
+                <p style="font-size: 14px; color: #047857; margin-bottom: 32px;">Данные успешно загружены из SAPE</p>
+
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px;">
+                    <div style="background: white; padding: 20px; border-radius: 12px;">
+                        <p style="font-size: 12px; color: #6B7280; margin-bottom: 6px;">Клиентов</p>
+                        <p id="clientsCount" style="font-size: 28px; font-weight: 700; color: var(--primary-orange); margin: 0;">0</p>
+                    </div>
+                    <div style="background: white; padding: 20px; border-radius: 12px;">
+                        <p style="font-size: 12px; color: #6B7280; margin-bottom: 6px;">Новых кампаний</p>
+                        <p id="newCount" style="font-size: 28px; font-weight: 700; color: var(--primary-orange); margin: 0;">0</p>
+                    </div>
+                    <div style="background: white; padding: 20px; border-radius: 12px;">
+                        <p style="font-size: 12px; color: #6B7280; margin-bottom: 6px;">Обновлено</p>
+                        <p id="updatedCount" style="font-size: 28px; font-weight: 700; color: var(--primary-orange); margin: 0;">0</p>
+                    </div>
+                </div>
+
+                <a href="{{ url_for('accounts') }}" class="btn btn-primary">
+                    <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                    Вернуться к аккаунтам
+                </a>
+            </div>
+        </div>
+
+        <!-- Error State (hidden initially) -->
+        <div id="errorState" style="display: none;">
+            <div style="background: linear-gradient(135deg, #FEE2E2, #FEF2F2); border-radius: 16px; padding: 40px; border: 1px solid #FECACA; text-align: center;">
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; background: white; border-radius: 50%; margin-bottom: 24px;">
+                    <svg width="40" height="40" fill="none" stroke="#EF4444" viewBox="0 0 24 24" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </div>
+
+                <h2 style="font-size: 24px; font-weight: 700; color: #991B1B; margin: 0 0 12px 0;">Ошибка синхронизации</h2>
+                <p id="errorMessage" style="font-size: 14px; color: #B91C1C; margin-bottom: 32px;"></p>
+
+                <div style="display: flex; gap: 12px; justify-content: center;">
+                    <button onclick="location.reload()" class="btn btn-primary">
+                        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Попробовать снова
+                    </button>
+                    <a href="{{ url_for('accounts') }}" class="btn btn-secondary" style="background: white; color: var(--text-secondary);">
+                        Вернуться к аккаунтам
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.circular-progress-spin {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+</style>
+
+<script>
+// Start sync when page loads
+window.addEventListener('DOMContentLoaded', () => {
+    const evtSource = new EventSource('{{ url_for("execute_sync_single", account_id=account.id) }}');
+
+    evtSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'start') {
+            console.log('Starting sync for account:', data.account);
+            document.getElementById('statusText').textContent = 'Загрузка данных из SAPE...';
+        }
+        else if (data.type === 'complete') {
+            evtSource.close();
+
+            if (data.success) {
+                // Show success state
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('successState').style.display = 'block';
+
+                document.getElementById('clientsCount').textContent = data.clients || 0;
+                document.getElementById('newCount').textContent = data.new || 0;
+                document.getElementById('updatedCount').textContent = data.updated || 0;
+            } else {
+                // Show error state
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('errorState').style.display = 'block';
+                document.getElementById('errorMessage').textContent = data.error || 'Неизвестная ошибка';
+            }
+        }
+    };
+
+    evtSource.onerror = (err) => {
+        console.error('EventSource error:', err);
+        evtSource.close();
+
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('errorState').style.display = 'block';
+        document.getElementById('errorMessage').textContent = 'Ошибка соединения с сервером';
+    };
+});
+</script>
+{% endblock %}

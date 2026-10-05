@@ -60,23 +60,25 @@ body {
 .sidebar-logo {
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-size: 20px;
-    font-weight: 700;
+    gap: 10px;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
     color: var(--text-primary);
     text-decoration: none;
 }
 
 .sidebar-logo-icon {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     background: linear-gradient(135deg, var(--primary-orange), var(--secondary-orange));
-    border-radius: 8px;
+    border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 600;
     flex-shrink: 0;
 }
 
@@ -125,24 +127,34 @@ body {
 }
 
 .sidebar-toggle {
-    position: absolute;
-    right: -12px;
+    position: fixed;
+    left: 240px;
     top: 24px;
-    width: 24px;
-    height: 24px;
-    background: var(--bg-white);
-    border: 1px solid var(--border-color);
+    width: 36px;
+    height: 36px;
+    background: var(--primary-orange);
+    border: none;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
-    z-index: 50;
+    transition: left 0.3s ease;
+    z-index: 100;
+    box-shadow: 0 4px 8px rgba(255, 138, 91, 0.3);
 }
 
 .sidebar-toggle:hover {
-    background: var(--bg-light);
+    background: var(--secondary-orange);
+    box-shadow: 0 4px 12px rgba(255, 138, 91, 0.4);
+}
+
+.sidebar-toggle svg {
+    stroke: white;
+}
+
+body:has(.sidebar.collapsed) .sidebar-toggle {
+    left: 40px;
 }
 
 /* Main Content */
@@ -158,13 +170,14 @@ body {
 
 .content-header {
     background: linear-gradient(135deg, var(--peach-light) 0%, var(--peach-bg) 100%);
-    padding: 32px 40px;
+    padding: 24px 20px;
     border-bottom: 1px solid var(--border-color);
 }
 
 .content-header h1 {
-    font-size: 28px;
-    font-weight: 700;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
     color: var(--text-primary);
     margin: 0 0 8px 0;
 }
@@ -176,7 +189,7 @@ body {
 }
 
 .content-body {
-    padding: 32px 40px;
+    padding: 32px 20px;
 }
 
 /* Metric Cards */
@@ -201,6 +214,13 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    line-height: 16px;
+}
+
+.metric-label svg {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
 }
 
 .metric-value {
@@ -213,6 +233,10 @@ body {
 .metric-change {
     font-size: 13px;
     font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.metric-change.positive {
     color: var(--green-accent);
 }
 

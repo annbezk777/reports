@@ -1,337 +1,1235 @@
-{% extends "base.html" %}
+{% extends "base_new.html" %}
 
-{% block title %}Отчеты - SAPE Reports Panel{% endblock %}
+{% block title %}Отчеты - ОТЧЕТЫ{% endblock %}
 
 {% block content %}
-<div class="mb-8">
-    <div class="flex justify-between items-center mb-4">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-800">
-                {% if show_archived %}
-                    📦 Архив отчетов
-                {% else %}
-                    📊 Отчеты
-                {% endif %}
-            </h1>
-            <p class="text-gray-600 mt-2">Настройка автоматической выгрузки в Google Sheets</p>
-        </div>
-        <a href="{{ url_for('add_report') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
-            + Создать отчет
-        </a>
-    </div>
-
-    <!-- Archive toggle -->
-    <div class="flex gap-2 mb-4">
-        {% if show_archived %}
-            <a href="{{ url_for('reports') }}" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition">
-                📊 Активные отчеты
-            </a>
-            <span class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">
-                📦 Архив
-            </span>
-        {% else %}
-            <span class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">
-                📊 Активные отчеты
-            </span>
-            <a href="{{ url_for('reports', show_archived='true') }}" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition">
-                📦 Архив
-            </a>
-        {% endif %}
-    </div>
-
-    <!-- Manager Filter -->
-    <div class="mb-4">
-        <form method="GET" class="flex items-center gap-3">
-            <label class="text-gray-700 font-semibold">Фильтр по менеджеру:</label>
-            <select name="manager"
-                    onchange="this.form.submit()"
-                    class="shadow border rounded py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline">
-                <option value="">Все менеджеры</option>
-                <option value="Даня" {% if manager_filter == 'Даня' %}selected{% endif %}>Даня</option>
-                <option value="Саша" {% if manager_filter == 'Саша' %}selected{% endif %}>Саша</option>
-                <option value="Аня" {% if manager_filter == 'Аня' %}selected{% endif %}>Аня</option>
-                <option value="Лена" {% if manager_filter == 'Лена' %}selected{% endif %}>Лена</option>
-                <option value="unassigned" {% if manager_filter == 'unassigned' %}selected{% endif %}>Без менеджера</option>
-            </select>
-            {% if request.args.get('show_archived') %}
-                <input type="hidden" name="show_archived" value="true">
-            {% endif %}
-            {% if manager_filter %}
-                <a href="{{ url_for('reports', show_archived=request.args.get('show_archived')) }}"
-                   class="text-blue-600 hover:text-blue-800 text-sm">
-                    ✖ Сбросить фильтр
-                </a>
-            {% endif %}
-        </form>
-    </div>
+<!-- Header -->
+<div class="content-header">
+    <h1>ОТЧЕТЫ</h1>
+    <p>Настройка автоматической выгрузки в Google Sheets</p>
 </div>
 
-<!-- Reports List -->
-<div class="grid gap-6">
-    {% if reports %}
-        {% for report in reports %}
-        <div class="bg-white rounded-lg shadow-lg p-6">
-            <div class="flex justify-between items-start">
-                <div class="flex-1">
-                    <h3 class="text-xl font-bold text-gray-800 mb-2">
-                        {{ report.name if report.name else report.campaign.name }}
-                        {% if report.brand %}
-                            <span class="text-sm font-normal bg-blue-100 text-blue-700 px-2 py-1 rounded ml-2">
-                                🏷️ {{ report.brand }}
-                            </span>
-                        {% endif %}
-                        {% if report.manager %}
-                            <span class="text-sm font-normal bg-purple-100 text-purple-700 px-2 py-1 rounded ml-2">
-                                👤 {{ report.manager }}
-                            </span>
-                        {% endif %}
-                    </h3>
-                    <p class="text-sm text-gray-600 mb-4">
-                        Аккаунт: 📁 {{ report.campaign.account.name }}   |   📧
-                        {% if report.campaign.account.sape_user_id %}
-                            <a href="https://cp.sapient.ru/users/sudo?uid={{ report.campaign.account.sape_user_id }}&sid=15"
-                               target="_blank"
-                               class="text-blue-600 hover:text-blue-800 underline"
-                               title="Открыть личный кабинет SAPE">
-                                {{ report.campaign.account.login }}
-                            </a>
-                        {% else %}
-                            {{ report.campaign.account.login }}
-                        {% endif %}
-                    </p>
+<!-- Content Body -->
+<div class="content-body">
+    <!-- Toolbar: Tabs + Search + Filter + Actions -->
+    <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: center; flex-wrap: wrap;">
+        <!-- Tabs -->
+        <div style="display: flex; gap: 8px;">
+            {% if show_archived %}
+                <a href="{{ url_for('reports') }}" class="tab-button">Активные</a>
+                <span class="tab-button tab-active">Архив</span>
+            {% else %}
+                <span class="tab-button tab-active">Активные</span>
+                <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button">Архив</a>
+            {% endif %}
+        </div>
 
-                    <div class="grid md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <p class="text-gray-600">📋 Google Sheets:</p>
-                            <a href="{{ report.google_sheet_url }}" target="_blank" class="text-blue-600 hover:text-blue-800 break-all">
-                                {{ report.google_sheet_url[:50] }}...
-                            </a>
+        <!-- Search -->
+        <div style="flex: 1; min-width: 250px; position: relative;">
+            <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input type="text" id="searchInput" placeholder="Поиск по названию, бренду, менеджеру..."
+                   style="width: 100%; padding: 10px 16px 10px 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary);"
+                   oninput="searchReports()">
+        </div>
+
+        <!-- Month Filter -->
+        <select id="monthFilter" onchange="filterReports()"
+                style="padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary); background: white; cursor: pointer;">
+            <option value="">Все месяцы</option>
+            {% for month_year in months_list %}
+                <option value="{{ month_year }}">{{ (month_year ~ '-01')|format_month }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Manager Filter -->
+        <select id="managerFilter" onchange="filterReports()"
+                style="padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary); background: white; cursor: pointer;">
+            <option value="">Все менеджеры</option>
+            <option value="Даня">Даня</option>
+            <option value="Саша">Саша</option>
+            <option value="Аня">Аня</option>
+            <option value="Лена">Лена</option>
+            <option value="unassigned">Без менеджера</option>
+        </select>
+
+        <!-- Add Report Button -->
+        <button onclick="openReportFormModal()" class="btn btn-secondary">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Создать отчет
+        </button>
+    </div>
+
+    <!-- Reports Grid -->
+    <div id="reportsGrid" style="display: grid; gap: 16px;">
+        {% if reports %}
+            {% for report in reports %}
+            <div class="report-card"
+                 data-name="{{ (report.name if report.name else report.campaign.name)|lower }}"
+                 data-brand="{{ report.brand|lower if report.brand else '' }}"
+                 data-manager="{{ report.manager|lower if report.manager else 'unassigned' }}"
+                 data-created-month="{{ report.created_at.strftime('%Y-%m') }}">
+
+                <div style="display: flex; gap: 16px; align-items: start;">
+                    <!-- Left: Info -->
+                    <div style="flex: 1;">
+                        <!-- Title & Manager -->
+                        <div style="margin-bottom: 10px;">
+                            <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px;">
+                                <h3 style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                                    {{ report.name if report.name else report.campaign.name }}
+                                </h3>
+                                {% if report.manager %}
+                                <span style="font-size: 12px; color: var(--text-secondary);">
+                                    Менеджер: {{ report.manager }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            <!-- Account -->
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <span style="font-size: 13px; color: var(--text-secondary);">
+                                    {{ report.campaign.account.name }}
+                                </span>
+                                <span style="font-size: 11px; color: #9CA3AF;">
+                                    {{ report.campaign.account.login }}
+                                </span>
+                                {% if report.campaign.account.sape_user_id %}
+                                <a href="https://cp.sapient.ru/users/sudo?uid={{ report.campaign.account.sape_user_id }}&sid=15"
+                                   target="_blank"
+                                   class="account-link">
+                                    Кабинет SAPE
+                                </a>
+                                {% endif %}
+                            </div>
                         </div>
 
+                        <!-- Campaigns -->
+                        {% set campaigns = report.get_campaigns() %}
                         <div>
-                            <p class="text-gray-600 mb-1">🎯 Кампании:</p>
-                            <div class="space-y-1">
-                                {% set campaigns = report.get_campaigns() %}
-                                {% for campaign in campaigns %}
-                                    {% set settings = report.campaign_settings.get(campaign.id|string, {}) if report.campaign_settings else {} %}
-                                    <div class="text-xs flex items-center justify-between">
-                                        <div class="flex-1">
-                                            <span class="font-mono bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-200 transition"
-                                                  onclick="copyToClipboard('{{ campaign.campaign_id }}', this)"
-                                                  title="Нажмите чтобы скопировать ID">{{ campaign.campaign_id }}</span>
-                                            <span class="ml-1 text-gray-700">{{ campaign.name[:20] }}{% if campaign.name|length > 20 %}...{% endif %}</span>
-                                        </div>
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">
+                                Кампаний: {{ campaigns|length }}
+                            </div>
+
+                            <!-- Table Header -->
+                            <div class="campaigns-table-header">
+                                <div style="width: 60px;">ID</div>
+                                <div style="flex: 1;">НАЗВАНИЕ КАМПАНИИ</div>
+                                <div style="width: 100px; text-align: right;">ЧАСТОТА (Д / Т)</div>
+                            </div>
+
+                            <!-- First 3 campaigns -->
+                            <div class="campaigns-table">
+                                {% for campaign in campaigns[:3] %}
+                                {% set settings = report.campaign_settings.get(campaign.id|string, {}) if report.campaign_settings else {} %}
+                                <div class="campaign-row">
+                                    <div style="width: 60px;">
+                                        <code class="campaign-id" onclick="copyToClipboard('{{ campaign.campaign_id }}', this)">
+                                            {{ campaign.campaign_id }}
+                                        </code>
+                                    </div>
+                                    <div style="flex: 1; color: var(--text-primary);">
+                                        {{ campaign.name[:45] }}{% if campaign.name|length > 45 %}...{% endif %}
+                                    </div>
+                                    <div style="width: 100px; text-align: right; color: var(--text-secondary);">
                                         {% if settings %}
-                                            <div class="text-gray-500 flex gap-2 ml-2 whitespace-nowrap">
-                                                <span>Днев: {{ settings.get('daily_frequency', '-') }}</span>
-                                                <span>Тотал: {{ settings.get('total_frequency', '-') }}</span>
-                                            </div>
+                                        {{ settings.get('daily_frequency', '-') }} / {{ settings.get('total_frequency', '-') }}
+                                        {% else %}
+                                        - / -
                                         {% endif %}
                                     </div>
+                                </div>
                                 {% endfor %}
+
+                                <!-- Hidden campaigns -->
+                                {% if campaigns|length > 3 %}
+                                <div id="campaigns-{{ report.id }}" class="campaigns-hidden" style="display: none;">
+                                    {% for campaign in campaigns[3:] %}
+                                    {% set settings = report.campaign_settings.get(campaign.id|string, {}) if report.campaign_settings else {} %}
+                                    <div class="campaign-row">
+                                        <div style="width: 60px;">
+                                            <code class="campaign-id" onclick="copyToClipboard('{{ campaign.campaign_id }}', this)">
+                                                {{ campaign.campaign_id }}
+                                            </code>
+                                        </div>
+                                        <div style="flex: 1; color: var(--text-primary);">
+                                            {{ campaign.name[:45] }}{% if campaign.name|length > 45 %}...{% endif %}
+                                        </div>
+                                        <div style="width: 100px; text-align: right; color: var(--text-secondary);">
+                                            {% if settings %}
+                                            {{ settings.get('daily_frequency', '-') }} / {{ settings.get('total_frequency', '-') }}
+                                            {% else %}
+                                            - / -
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Toggle button at the bottom -->
+                            {% if campaigns|length > 3 %}
+                            <button class="accordion-toggle" onclick="toggleCampaigns(event, {{ report.id }})">
+                                <svg class="accordion-icon" width="10" height="10" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M8 11.5l-5-5h10l-5 5z"/>
+                                </svg>
+                                Показать еще ({{ campaigns|length - 3 }})
+                            </button>
+                            {% endif %}
+                        </div>
+
+                        <!-- Last Update -->
+                        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-color);">
+                            <span style="font-size: 11px; color: var(--text-secondary);">
+                                {% if report.last_update %}
+                                    Обновлено: {{ report.last_update.strftime('%d.%m.%Y в %H:%M') }}
+                                {% else %}
+                                    Еще не обновлялся
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Right: Actions -->
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <!-- Open Report Button -->
+                        <a href="{{ report.google_sheet_url }}" target="_blank" class="btn btn-secondary" style="padding: 8px 14px; font-size: 13px;">
+                            Открыть отчет
+                            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-left: 4px;">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                            </svg>
+                        </a>
+
+                        <!-- Primary Action: Choose Dates -->
+                        <button onclick="openDatePickerModal({{ report.id }}, '{{ report.name if report.name else report.campaign.name }}')"
+                                class="btn btn-primary" style="padding: 8px 16px; font-size: 13px;">
+                            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                            Выбрать даты
+                        </button>
+
+                        <!-- Kebab Menu -->
+                        <div class="kebab-menu">
+                            <button class="kebab-button" onclick="toggleReportKebab(event, {{ report.id }})">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                    <circle cx="8" cy="3" r="1.5"/>
+                                    <circle cx="8" cy="8" r="1.5"/>
+                                    <circle cx="8" cy="13" r="1.5"/>
+                                </svg>
+                            </button>
+                            <div class="kebab-dropdown" id="report-kebab-{{ report.id }}">
+                                <button onclick="openReportFormModal({{ report.id }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                    </svg>
+                                    Редактировать
+                                </button>
+                                <a href="{{ url_for('copy_report', report_id=report.id) }}" class="kebab-item" onclick="return confirm('Создать копию отчета?')">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                    </svg>
+                                    Скопировать
+                                </a>
+                                <div class="kebab-divider"></div>
+                                {% if show_archived %}
+                                <form action="{{ url_for('unarchive_report', report_id=report.id) }}" method="POST" style="margin: 0;">
+                                    <button type="submit" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
+                                        </svg>
+                                        Восстановить
+                                    </button>
+                                </form>
+                                {% else %}
+                                <form action="{{ url_for('archive_report', report_id=report.id) }}" method="POST" style="margin: 0;">
+                                    <button type="submit" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                                        </svg>
+                                        В архив
+                                    </button>
+                                </form>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
-
-                    <!-- Last update at bottom -->
-                    <div class="mt-3 pt-2 border-t border-gray-100">
-                        <p class="text-xs text-gray-500">
-                            🕐 Последнее обновление:
-                            {% if report.last_update %}
-                                {{ report.last_update.strftime('%d.%m.%Y %H:%M') }}
-                            {% else %}
-                                <span class="text-gray-400">Еще не обновлялся</span>
-                            {% endif %}
-                        </p>
-                    </div>
                 </div>
-
-                <div class="ml-6 flex flex-col gap-2">
-                    <button onclick="toggleDetails({{ report.id }})"
-                       class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition block text-center w-full">
-                        📅 Выбрать даты
-                    </button>
-                    <a href="{{ url_for('edit_report', report_id=report.id) }}"
-                       class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition block text-center">
-                        ✏️ Редактировать
-                    </a>
-                    <a href="{{ url_for('copy_report', report_id=report.id) }}"
-                       class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition block text-center"
-                       onclick="return confirm('Создать копию отчета {{ report.name or report.campaign.name }}?')">
-                        📋 Скопировать
-                    </a>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="padding: 60px 24px; text-align: center; background: white; border-radius: 12px; border: 1px solid var(--border-color);">
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">
                     {% if show_archived %}
-                        <form action="{{ url_for('unarchive_report', report_id=report.id) }}" method="POST" style="margin: 0;">
-                            <button type="submit"
-                               class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition block text-center w-full">
-                                📤 Восстановить
-                            </button>
-                        </form>
+                        У вас нет архивных отчетов
                     {% else %}
-                        <form action="{{ url_for('archive_report', report_id=report.id) }}" method="POST" style="margin: 0;">
-                            <button type="submit"
-                               class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition block text-center w-full">
-                                📦 В архив
-                            </button>
-                        </form>
+                        У вас пока нет настроенных отчетов
                     {% endif %}
-                </div>
+                </p>
+                {% if not show_archived %}
+                <a href="{{ url_for('add_report') }}" class="btn btn-primary">
+                    <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Создать первый отчет
+                </a>
+                {% endif %}
             </div>
-
-            <!-- Date picker form (hidden by default) -->
-            <div id="datePicker{{ report.id }}" class="hidden mt-4 p-4 bg-gray-50 rounded border border-gray-200">
-                <form action="{{ url_for('run_report', report_id=report.id) }}" method="GET" class="grid md:grid-cols-3 gap-4 items-end" onsubmit="showProgress(event, {{ report.id }})">
-                    <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2">Дата с:</label>
-                        <input type="date" name="date_from" required
-                               class="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none">
-                    </div>
-                    <div>
-                        <label class="block text-gray-700 text-sm font-bold mb-2">Дата по:</label>
-                        <input type="date" name="date_to" required
-                               class="shadow border rounded w-full py-2 px-3 text-gray-700 focus:outline-none">
-                    </div>
-                    <div>
-                        <button type="submit"
-                                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full transition">
-                            Обновить за период
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-        {% endfor %}
-    {% else %}
-        <div class="bg-white rounded-lg shadow-lg p-8 text-center">
-            <p class="text-gray-500 mb-4">У вас пока нет настроенных отчетов</p>
-            <a href="{{ url_for('add_report') }}" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">
-                + Создать первый отчет
-            </a>
-        </div>
-    {% endif %}
+        {% endif %}
+    </div>
 </div>
 
-<!-- Progress Modal -->
-<div id="progressModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
-        <div class="text-center">
-            <!-- Spinner -->
-            <div class="mb-4 flex justify-center">
-                <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
-            </div>
+<!-- Date Picker Modal -->
+<div id="datePickerModal" class="modal" style="display: none;">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 480px;">
+        <div class="modal-header" style="padding: 24px 28px; border-bottom: 1px solid var(--border-color);">
+            <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                Выбор периода отчета
+            </h3>
+            <p id="modalReportName" style="font-size: 14px; color: var(--text-secondary); margin: 6px 0 0 0;"></p>
+        </div>
 
-            <!-- Status Messages -->
-            <h3 class="text-xl font-bold text-gray-800 mb-2" id="progressTitle">Обновление отчета...</h3>
-            <p class="text-gray-600 mb-4" id="progressMessage">Пожалуйста, подождите</p>
+        <div class="modal-body" style="padding: 28px;">
+            <form id="datePickerForm">
+                <input type="hidden" id="modalReportId" name="report_id">
 
-            <!-- Progress Steps -->
-            <div class="space-y-2 text-left">
-                <div class="flex items-center text-sm">
-                    <span id="step1" class="text-gray-400">⏳ Загрузка данных из SAPE API</span>
+                <!-- Date From -->
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Дата начала
+                    </label>
+                    <input type="date" id="dateFrom" name="date_from" required
+                           style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary);">
                 </div>
-                <div class="flex items-center text-sm">
-                    <span id="step2" class="text-gray-400">⏳ Запись данных в Google Sheets</span>
+
+                <!-- Date To -->
+                <div style="margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Дата окончания
+                    </label>
+                    <input type="date" id="dateTo" name="date_to" required
+                           style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary);">
                 </div>
-                <div class="flex items-center text-sm">
-                    <span id="step3" class="text-gray-400">⏳ Расчет итоговых показателей</span>
+
+                <!-- Buttons -->
+                <div style="display: flex; gap: 12px;">
+                    <button type="button" onclick="closeDatePickerModal()" class="btn btn-secondary" style="flex: 1; background: white; color: var(--text-secondary);">
+                        Отмена
+                    </button>
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Обновить за период
+                    </button>
                 </div>
-            </div>
+            </form>
         </div>
     </div>
 </div>
 
-{% endblock %}
+<style>
+.report-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    transition: box-shadow 0.2s;
+}
 
-{% block extra_js %}
+.report-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.tab-button {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--text-secondary);
+    background: white;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+    cursor: pointer;
+    display: inline-block;
+}
+
+.tab-button:hover {
+    background: var(--bg-light);
+}
+
+.tab-button.tab-active {
+    background: var(--primary-orange);
+    color: white;
+    border-color: var(--primary-orange);
+}
+
+/* Account link */
+.account-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    margin-left: 12px;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.account-link:hover {
+    background: var(--peach-light);
+    border-color: var(--primary-orange);
+    color: var(--primary-orange);
+}
+
+/* Campaigns table */
+.campaigns-table-header {
+    display: flex;
+    gap: 12px;
+    padding: 4px 0;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 4px;
+}
+
+.campaigns-table {
+    display: flex;
+    flex-direction: column;
+}
+
+.campaign-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    line-height: 24px;
+    font-size: 12px;
+    padding: 2px 0;
+}
+
+.campaign-id {
+    background: var(--peach-light);
+    color: var(--primary-orange);
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+    display: inline-block;
+}
+
+.campaign-id:hover {
+    background: var(--primary-orange);
+    color: white;
+}
+
+/* Accordion */
+.accordion-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    color: var(--primary-orange);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 6px 0;
+    margin-top: 8px;
+    transition: opacity 0.2s;
+}
+
+.accordion-toggle:hover {
+    opacity: 0.7;
+}
+
+.accordion-icon {
+    transition: transform 0.2s;
+}
+
+.accordion-toggle.open .accordion-icon {
+    transform: rotate(180deg);
+}
+
+.campaigns-hidden {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Kebab Menu */
+.kebab-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.kebab-button {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.kebab-button:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+}
+
+.kebab-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    min-width: 180px;
+    z-index: 1000;
+}
+
+.kebab-dropdown.show {
+    display: block;
+}
+
+.kebab-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.kebab-item:hover {
+    background: var(--bg-light);
+}
+
+.kebab-item svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
+}
+
+.kebab-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    max-width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Day buttons */
+.day-button {
+    padding: 8px 16px;
+    border: 1px solid var(--border-color);
+    background: white;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.day-button:hover {
+    border-color: var(--primary-orange);
+    background: var(--peach-light);
+}
+
+.day-button.active {
+    background: var(--primary-orange);
+    border-color: var(--primary-orange);
+    color: white;
+}
+
+/* Orange checkboxes in modal */
+#formCampaignsTable input[type="checkbox"] {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #D1D5DB;
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+}
+
+#formCampaignsTable input[type="checkbox"]:hover {
+    border-color: var(--primary-orange);
+}
+
+#formCampaignsTable input[type="checkbox"]:checked {
+    background: var(--primary-orange);
+    border-color: var(--primary-orange);
+}
+
+#formCampaignsTable input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+</style>
+
 <script>
-function toggleDetails(reportId) {
-    const picker = document.getElementById('datePicker' + reportId);
-    if (picker.classList.contains('hidden')) {
-        picker.classList.remove('hidden');
-    } else {
-        picker.classList.add('hidden');
-    }
+function toggleReportKebab(event, reportId) {
+    event.stopPropagation();
+    const dropdown = document.getElementById(`report-kebab-${reportId}`);
+    const allDropdowns = document.querySelectorAll('.kebab-dropdown');
+
+    allDropdowns.forEach(d => {
+        if (d !== dropdown) d.classList.remove('show');
+    });
+
+    dropdown.classList.toggle('show');
 }
 
-function showDatePicker(reportId) {
-    // Quick run - last 7 days by default
-    window.location.href = `/reports/${reportId}/run`;
-}
-
-function showProgress(event, reportId) {
-    // Show progress modal
-    const modal = document.getElementById('progressModal');
-    modal.classList.remove('hidden');
-
-    // Animate progress steps
-    setTimeout(() => {
-        document.getElementById('step1').innerHTML = '✅ Загрузка данных из SAPE API';
-        document.getElementById('step1').classList.remove('text-gray-400');
-        document.getElementById('step1').classList.add('text-green-600');
-    }, 500);
-
-    setTimeout(() => {
-        document.getElementById('step2').innerHTML = '✅ Запись данных в Google Sheets';
-        document.getElementById('step2').classList.remove('text-gray-400');
-        document.getElementById('step2').classList.add('text-green-600');
-    }, 1500);
-
-    setTimeout(() => {
-        document.getElementById('step3').innerHTML = '✅ Расчет итоговых показателей';
-        document.getElementById('step3').classList.remove('text-gray-400');
-        document.getElementById('step3').classList.add('text-green-600');
-        document.getElementById('progressTitle').innerHTML = 'Почти готово...';
-    }, 2500);
-
-    // Form will submit normally and page will reload
-    return true;
-}
+// Close kebab menus when clicking outside
+document.addEventListener('click', () => {
+    document.querySelectorAll('.kebab-dropdown').forEach(d => d.classList.remove('show'));
+});
 
 function copyToClipboard(text, element) {
-    // Copy to clipboard using modern API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => {
-            // Show feedback
-            const originalBg = element.className;
-            element.classList.remove('bg-blue-100', 'hover:bg-blue-200');
-            element.classList.add('bg-green-500', 'text-white');
-            element.textContent = '✓ Скопировано';
+    navigator.clipboard.writeText(text).then(() => {
+        const originalBg = element.style.background;
+        const originalColor = element.style.color;
+        element.style.background = '#10B981';
+        element.style.color = 'white';
+        setTimeout(() => {
+            element.style.background = originalBg;
+            element.style.color = originalColor;
+        }, 500);
+    });
+}
 
-            // Restore original state after 1.5 seconds
-            setTimeout(() => {
-                element.className = originalBg;
-                element.textContent = text;
-            }, 1500);
-        }).catch(err => {
-            console.error('Failed to copy:', err);
-            alert('Не удалось скопировать ID');
-        });
+function toggleCampaigns(event, reportId) {
+    event.stopPropagation();
+    const hiddenBlock = document.getElementById(`campaigns-${reportId}`);
+    const button = event.currentTarget;
+
+    if (hiddenBlock.style.display === 'none' || !hiddenBlock.style.display) {
+        // Show all campaigns
+        hiddenBlock.style.display = 'flex';
+        button.classList.add('open');
+        button.innerHTML = `<svg class="accordion-icon" width="10" height="10" fill="currentColor" viewBox="0 0 16 16" style="transform: rotate(180deg);"><path d="M8 11.5l-5-5h10l-5 5z"/></svg> Скрыть кампании`;
     } else {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.select();
-        try {
-            document.execCommand('copy');
-            // Show feedback
-            const originalBg = element.className;
-            element.classList.remove('bg-blue-100', 'hover:bg-blue-200');
-            element.classList.add('bg-green-500', 'text-white');
-            element.textContent = '✓ Скопировано';
-
-            setTimeout(() => {
-                element.className = originalBg;
-                element.textContent = text;
-            }, 1500);
-        } catch (err) {
-            console.error('Failed to copy:', err);
-            alert('Не удалось скопировать ID');
-        }
-        document.body.removeChild(textArea);
+        // Hide campaigns
+        hiddenBlock.style.display = 'none';
+        button.classList.remove('open');
+        const hiddenCount = hiddenBlock.querySelectorAll('.campaign-row').length;
+        button.innerHTML = `<svg class="accordion-icon" width="10" height="10" fill="currentColor" viewBox="0 0 16 16"><path d="M8 11.5l-5-5h10l-5 5z"/></svg> Показать еще (${hiddenCount})`;
     }
 }
+
+// Search & Filter
+function searchReports() {
+    filterReports();
+}
+
+function filterReports() {
+    const searchValue = document.getElementById('searchInput').value.toLowerCase();
+    const monthValue = document.getElementById('monthFilter').value;
+    const managerValue = document.getElementById('managerFilter').value.toLowerCase();
+    const cards = document.querySelectorAll('.report-card');
+
+    cards.forEach(card => {
+        const name = card.dataset.name;
+        const brand = card.dataset.brand;
+        const manager = card.dataset.manager;
+        const createdMonth = card.dataset.createdMonth;
+
+        const matchesSearch = !searchValue || name.includes(searchValue) || brand.includes(searchValue);
+        const matchesMonth = !monthValue || createdMonth === monthValue;
+        const matchesManager = !managerValue || manager === managerValue;
+
+        card.style.display = (matchesSearch && matchesMonth && matchesManager) ? '' : 'none';
+    });
+}
+
+function openDatePickerModal(reportId, reportName) {
+    // Set report info
+    document.getElementById('modalReportId').value = reportId;
+    document.getElementById('modalReportName').textContent = reportName;
+
+    // Set default dates (last 7 days)
+    const today = new Date();
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    document.getElementById('dateTo').value = today.toISOString().split('T')[0];
+    document.getElementById('dateFrom').value = weekAgo.toISOString().split('T')[0];
+
+    // Show modal
+    document.getElementById('datePickerModal').style.display = 'flex';
+}
+
+function closeDatePickerModal() {
+    document.getElementById('datePickerModal').style.display = 'none';
+}
+
+// Handle date picker form submission
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('datePickerForm');
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const reportId = document.getElementById('modalReportId').value;
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+
+            // Close modal and show loading state
+            closeDatePickerModal();
+
+            // Navigate to old route (sync processing) with date parameters
+            window.location.href = `/reports/${reportId}/run-old?date_from=${dateFrom}&date_to=${dateTo}`;
+        });
+    }
+
+    // Close modal when clicking outside
+    const modal = document.getElementById('datePickerModal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeDatePickerModal();
+            }
+        });
+    }
+});
 </script>
+
+<!-- Report Form Modal -->
+<div id="reportFormModal" class="modal" style="display: none;">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 1200px; max-height: 90vh; overflow-y: auto;">
+        <div class="modal-header" style="padding: 24px 28px; border-bottom: 1px solid var(--border-color); position: sticky; top: 0; background: white; z-index: 10;">
+            <h3 id="reportFormTitle" style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                Создать отчет
+            </h3>
+            <button onclick="closeReportFormModal()" style="position: absolute; right: 24px; top: 24px; background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 24px; line-height: 1;">
+                ×
+            </button>
+        </div>
+
+        <div class="modal-body" style="padding: 28px;">
+            <form id="reportForm" method="POST" action="{{ url_for('add_report') }}">
+                <input type="hidden" id="reportFormId" name="report_id" value="">
+
+                <!-- Account Selection -->
+                <div style="margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Выберите аккаунт SAPE
+                    </label>
+                    <select id="formAccountId" name="account_id" required
+                            onchange="loadFormCampaigns(this.value)"
+                            style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                        <option value="">Выберите аккаунт</option>
+                        {% for account in accounts %}
+                        <option value="{{ account.id }}">{{ account.name }} | {{ account.login }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Report Name -->
+                <div style="margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Название отчета (необязательно)
+                    </label>
+                    <input type="text" id="formReportName" name="report_name" placeholder="Например: Отчет по видео кампаниям"
+                           style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                        Если не указано, будет использовано название первой кампании
+                    </p>
+                </div>
+
+                <!-- Manager -->
+                <div style="margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Менеджер (необязательно)
+                    </label>
+                    <select id="formManager" name="manager"
+                            style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                        <option value="">Не выбран</option>
+                        <option value="Даня">Даня</option>
+                        <option value="Саша">Саша</option>
+                        <option value="Аня">Аня</option>
+                        <option value="Лена">Лена</option>
+                    </select>
+                </div>
+
+                <!-- Campaign Selection -->
+                <div id="formCampaignsSection" style="display: none; margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Выберите кампании
+                    </label>
+                    <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+                        <button type="button" onclick="selectAllFormCampaigns()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                            Выбрать все
+                        </button>
+                        <button type="button" onclick="deselectAllFormCampaigns()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                            Снять все
+                        </button>
+                    </div>
+
+                    <!-- Campaigns Table -->
+                    <div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
+                        <table style="width: 100%; border-collapse: collapse;" id="formCampaignsTable">
+                            <thead style="position: sticky; top: 0; background: var(--bg-light); border-bottom: 2px solid var(--border-color);">
+                                <tr>
+                                    <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 40px;"></th>
+                                    <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary);">КАМПАНИЯ</th>
+                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 90px;">ФОРМАТ</th>
+                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ДНЕВНАЯ</th>
+                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
+                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ТОТАЛ</th>
+                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
+                                </tr>
+                            </thead>
+                            <tbody id="formCampaignsList">
+                                <tr>
+                                    <td colspan="7" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+                                        Выберите аккаунт для загрузки кампаний
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p id="formCampaignCounter" style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
+                        Не выбрано ни одной кампании
+                    </p>
+                </div>
+
+                <!-- Campaign Mode -->
+                <div style="margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Режим заполнения данных *
+                    </label>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="campaign_mode" value="separate" checked style="margin-right: 8px;">
+                            <span style="font-size: 13px; color: var(--text-primary);">
+                                <strong>По дням</strong> - каждая кампания в своей секции таблицы, разбивка по дням
+                            </span>
+                        </label>
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="campaign_mode" value="total" style="margin-right: 8px;">
+                            <span style="font-size: 13px; color: var(--text-primary);">
+                                <strong>Сводный отчёт</strong> - итоговые показатели за период (без разбивки по дням)
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Google Sheets URL -->
+                <div style="margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Ссылка на Google Sheets *
+                    </label>
+                    <input type="url" id="formGoogleSheetUrl" name="google_sheet_url" required
+                           placeholder="https://docs.google.com/spreadsheets/d/..."
+                           onchange="loadFormWorksheets()"
+                           style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                        Скопируйте ссылку из адресной строки Google Sheets
+                    </p>
+                </div>
+
+                <!-- Worksheet Selection -->
+                <div id="formWorksheetSection" style="display: none; margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Выберите лист *
+                    </label>
+                    <select id="formWorksheetName" name="worksheet_name"
+                            style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                        <option value="">Загрузка листов...</option>
+                    </select>
+                </div>
+
+                <!-- Schedule -->
+                <div style="margin-bottom: 24px; padding: 20px; background: var(--bg-light); border-radius: 8px;">
+                    <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 16px 0;">
+                        Расписание обновления
+                    </h4>
+                    <div style="display: flex; gap: 24px; align-items: flex-start;">
+                        <!-- Days -->
+                        <div style="flex: 1;">
+                            <label style="display: block; font-size: 13px; color: var(--text-primary); margin-bottom: 8px;">
+                                Дни недели
+                            </label>
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                                <button type="button" class="day-button" data-day="1" onclick="toggleDay(this)">Пн</button>
+                                <button type="button" class="day-button" data-day="2" onclick="toggleDay(this)">Вт</button>
+                                <button type="button" class="day-button" data-day="3" onclick="toggleDay(this)">Ср</button>
+                                <button type="button" class="day-button" data-day="4" onclick="toggleDay(this)">Чт</button>
+                                <button type="button" class="day-button" data-day="5" onclick="toggleDay(this)">Пт</button>
+                                <button type="button" class="day-button" data-day="6" onclick="toggleDay(this)">Сб</button>
+                                <button type="button" class="day-button" data-day="7" onclick="toggleDay(this)">Вс</button>
+                            </div>
+                            <input type="hidden" id="formScheduleDays" name="schedule_days" value="">
+                        </div>
+                        <!-- Time -->
+                        <div style="flex: 0 0 auto;">
+                            <label style="display: block; font-size: 13px; color: var(--text-primary); margin-bottom: 8px;">
+                                Время
+                            </label>
+                            <input type="time" id="formScheduleTime" name="schedule_time" value="09:00"
+                                   style="width: 130px; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Buttons -->
+                <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    <button type="button" onclick="closeReportFormModal()" class="btn btn-secondary">
+                        Отмена
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <span id="formSubmitText">Создать отчет</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Report Form Modal Functions
+function openReportFormModal(reportId = null) {
+    const modal = document.getElementById('reportFormModal');
+    const title = document.getElementById('reportFormTitle');
+    const submitText = document.getElementById('formSubmitText');
+    const form = document.getElementById('reportForm');
+
+    if (reportId) {
+        // Edit mode
+        title.textContent = 'Редактировать отчет';
+        submitText.textContent = 'Сохранить изменения';
+        form.action = `/reports/${reportId}/edit`;
+        document.getElementById('reportFormId').value = reportId;
+
+        // Clear campaigns table BEFORE loading new data
+        const tbody = document.getElementById('formCampaignsList');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-secondary);">Загрузка...</td></tr>';
+        }
+
+        // Load report data
+        fetch(`/api/reports/${reportId}`)
+            .then(res => res.json())
+            .then(data => {
+                // Update title with report name
+                title.textContent = `Редактировать отчет: ${data.name || 'Без названия'}`;
+
+                // Fill form fields
+                document.getElementById('formReportName').value = data.name || '';
+                document.getElementById('formManager').value = data.manager || '';
+                document.getElementById('formGoogleSheetUrl').value = data.google_sheet_url || '';
+                document.getElementById('formScheduleTime').value = data.schedule_time || '09:00';
+
+                // Set campaign mode
+                const modeRadio = document.querySelector(`input[name="campaign_mode"][value="${data.campaign_mode}"]`);
+                if (modeRadio) modeRadio.checked = true;
+
+                // Load account and campaigns with settings
+                if (data.account_id) {
+                    document.getElementById('formAccountId').value = data.account_id;
+                    loadFormCampaigns(data.account_id, data.campaign_ids || [], data.campaign_settings || {});
+                }
+
+                // Load worksheet
+                if (data.google_sheet_url) {
+                    loadFormWorksheets(data.worksheet_name);
+                }
+
+                // Set schedule days
+                if (data.schedule_days) {
+                    const days = data.schedule_days.split(',');
+                    document.querySelectorAll('.day-button').forEach(btn => {
+                        if (days.includes(btn.dataset.day)) {
+                            btn.classList.add('active');
+                        }
+                    });
+                    updateScheduleDaysInput();
+                }
+            })
+            .catch(err => {
+                console.error('Error loading report:', err);
+                alert('Ошибка загрузки данных отчета');
+            });
+    } else {
+        // Create mode
+        title.textContent = 'Создать отчет';
+        submitText.textContent = 'Создать отчет';
+        form.action = '{{ url_for("add_report") }}';
+        document.getElementById('reportFormId').value = '';
+        form.reset();
+
+        // Reset day buttons
+        document.querySelectorAll('.day-button').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.getElementById('formScheduleDays').value = '';
+
+        // Clear campaigns section
+        document.getElementById('formCampaignsSection').style.display = 'none';
+        document.getElementById('formWorksheetSection').style.display = 'none';
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeReportFormModal() {
+    document.getElementById('reportFormModal').style.display = 'none';
+}
+
+// Load campaigns for selected account
+function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings = {}) {
+    if (!accountId) {
+        document.getElementById('formCampaignsSection').style.display = 'none';
+        return;
+    }
+
+
+    document.getElementById('formCampaignsSection').style.display = 'block';
+    const tbody = document.getElementById('formCampaignsList');
+    tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Загрузка кампаний...</td></tr>';
+
+    fetch(`/api/campaigns/${accountId}`)
+        .then(res => res.json())
+        .then(campaigns => {
+            if (campaigns.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Нет активных кампаний</td></tr>';
+                return;
+            }
+
+            let html = '';
+            campaigns.forEach(campaign => {
+                // Simple check: campaign.id in selectedCampaignIds (like Jinja2 version)
+                const isChecked = selectedCampaignIds.includes(campaign.id);
+
+                // Get settings by string key (campaign_settings uses string keys)
+                const campaignIdStr = String(campaign.id);
+                const settings = campaignSettings[campaignIdStr] || {};
+
+                const dailyFreq = settings.daily_frequency || 3.0;
+                const dailyVar = settings.daily_variance || 0.1;
+                const totalFreq = settings.total_frequency || 3.0;
+                const totalVar = settings.total_variance || 0.1;
+                const format = campaign.format_type || 'B';
+
+                html += `
+                    <tr style="border-bottom: 1px solid var(--border-color);" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='white'">
+                        <td style="padding: 8px; text-align: center;">
+                            <input type="checkbox" name="campaign_ids" value="${campaign.id}"
+                                   ${isChecked ? 'checked' : ''}
+                                   onchange="handleFormCampaignChange()">
+                        </td>
+                        <td style="padding: 8px;">
+                            <div style="font-size: 13px; color: var(--text-primary); margin-bottom: 2px;">
+                                <code style="background: var(--peach-light); color: var(--primary-orange); padding: 2px 5px; border-radius: 3px; font-size: 10px; margin-right: 6px;">${campaign.campaign_id}</code>
+                                ${campaign.name.substring(0, 40)}${campaign.name.length > 40 ? '...' : ''}
+                            </div>
+                        </td>
+                        <td style="padding: 8px; text-align: center;">
+                            <select name="format_${campaign.id}" style="padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; font-weight: 600;">
+                                <option value="B" ${format === 'B' ? 'selected' : ''}>B</option>
+                                <option value="V" ${format === 'V' ? 'selected' : ''}>V</option>
+                                <option value="CTV" ${format === 'CTV' ? 'selected' : ''}>CTV</option>
+                                <option value="TGB" ${format === 'TGB' ? 'selected' : ''}>TGB</option>
+                            </select>
+                        </td>
+                        <td style="padding: 8px; text-align: center;">
+                            <input type="number" name="daily_freq_${campaign.id}" value="${dailyFreq}" step="0.1" min="1" max="10"
+                                   style="width: 60px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; text-align: center;">
+                        </td>
+                        <td style="padding: 8px; text-align: center;">
+                            <input type="number" name="daily_var_${campaign.id}" value="${dailyVar}" step="0.01" min="0" max="2"
+                                   style="width: 50px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; text-align: center;">
+                        </td>
+                        <td style="padding: 8px; text-align: center;">
+                            <input type="number" name="total_freq_${campaign.id}" value="${totalFreq}" step="0.1" min="1" max="10"
+                                   style="width: 60px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; text-align: center;">
+                        </td>
+                        <td style="padding: 8px; text-align: center;">
+                            <input type="number" name="total_var_${campaign.id}" value="${totalVar}" step="0.01" min="0" max="2"
+                                   style="width: 50px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; text-align: center;">
+                        </td>
+                    </tr>
+                `;
+            });
+
+            // Force clear and update
+            tbody.innerHTML = '';
+            setTimeout(() => {
+                tbody.innerHTML = html;
+
+                // Sort campaigns: selected first (like in old version)
+                sortFormCampaignsSelectedFirst();
+
+                // Update counter after DOM is updated
+                setTimeout(() => {
+                    updateFormCampaignCounter();
+                }, 50);
+            }, 10);
+        })
+        .catch(err => {
+            console.error('Error loading campaigns:', err);
+            tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: #EF4444; font-size: 13px;">Ошибка загрузки кампаний</td></tr>';
+        });
+}
+
+function handleFormCampaignChange() {
+    updateFormCampaignCounter();
+    sortFormCampaignsSelectedFirst();
+}
+
+function sortFormCampaignsSelectedFirst() {
+    const tbody = document.getElementById('formCampaignsList');
+    if (!tbody) return;
+
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+
+    // Sort: checked first, then unchecked
+    rows.sort((a, b) => {
+        const aCheckbox = a.querySelector('input[type="checkbox"]');
+        const bCheckbox = b.querySelector('input[type="checkbox"]');
+
+        if (!aCheckbox || !bCheckbox) return 0;
+
+        const aChecked = aCheckbox.checked;
+        const bChecked = bCheckbox.checked;
+
+        if (aChecked && !bChecked) return -1;
+        if (!aChecked && bChecked) return 1;
+        return 0;
+    });
+
+    // Clear and re-append in sorted order
+    tbody.innerHTML = '';
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+function selectAllFormCampaigns() {
+    document.querySelectorAll('#formCampaignsTable input[type="checkbox"]').forEach(cb => {
+        cb.checked = true;
+    });
+    updateFormCampaignCounter();
+    sortFormCampaignsSelectedFirst();
+}
+
+function deselectAllFormCampaigns() {
+    document.querySelectorAll('#formCampaignsTable input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+    updateFormCampaignCounter();
+    sortFormCampaignsSelectedFirst();
+}
+
+function updateFormCampaignCounter() {
+    const checked = document.querySelectorAll('#formCampaignsTable input[type="checkbox"]:checked').length;
+    const counter = document.getElementById('formCampaignCounter');
+    if (checked === 0) {
+        counter.textContent = 'Не выбрано ни одной кампании';
+    } else {
+        counter.textContent = `Выбрано кампаний: ${checked}`;
+    }
+}
+
+function loadFormWorksheets(selectedWorksheet = null) {
+    const url = document.getElementById('formGoogleSheetUrl').value;
+    if (!url) return;
+
+    const section = document.getElementById('formWorksheetSection');
+    const select = document.getElementById('formWorksheetName');
+
+    section.style.display = 'block';
+    select.innerHTML = '<option value="">Загрузка листов...</option>';
+
+    fetch('/api/worksheets', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({google_sheet_url: url})
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.worksheets && data.worksheets.length > 0) {
+                select.innerHTML = data.worksheets.map(ws =>
+                    `<option value="${ws}" ${ws === selectedWorksheet ? 'selected' : ''}>${ws}</option>`
+                ).join('');
+            } else {
+                select.innerHTML = '<option value="">Листы не найдены</option>';
+            }
+        })
+        .catch(err => {
+            console.error('Error loading worksheets:', err);
+            select.innerHTML = '<option value="">Ошибка загрузки листов</option>';
+        });
+}
+
+// Toggle day button
+function toggleDay(button) {
+    button.classList.toggle('active');
+    updateScheduleDaysInput();
+}
+
+// Update hidden schedule days input from active buttons
+function updateScheduleDaysInput() {
+    const activeDays = Array.from(document.querySelectorAll('.day-button.active'))
+        .map(btn => btn.dataset.day)
+        .sort((a, b) => parseInt(a) - parseInt(b))
+        .join(',');
+    document.getElementById('formScheduleDays').value = activeDays;
+}
+
+// Close modal when clicking outside
+document.getElementById('reportFormModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'reportFormModal') {
+        closeReportFormModal();
+    }
+});
+</script>
+
 {% endblock %}

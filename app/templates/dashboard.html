@@ -1,0 +1,287 @@
+{% extends "base_new.html" %}
+
+{% block title %}Главная - ОТЧЕТЫ{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="content-header">
+    <h1>ГЛАВНАЯ</h1>
+    <p>Обзор активности и ключевых метрик</p>
+</div>
+
+<!-- Content Body -->
+<div class="content-body">
+    <!-- Metrics Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-bottom: 32px;">
+        <!-- Total Reports -->
+        <div class="metric-card">
+            <div class="metric-label">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Всего отчетов
+            </div>
+            <div class="metric-value">{{ stats.total_reports }}</div>
+            <div class="metric-change" style="color: var(--text-secondary);">
+                Активных: {{ stats.active_reports }}
+            </div>
+        </div>
+
+        <!-- Active Accounts -->
+        <div class="metric-card">
+            <div class="metric-label">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+                Активных аккаунтов
+            </div>
+            <div class="metric-value">{{ stats.active_accounts }}</div>
+            <div class="metric-change" style="color: var(--text-secondary);">
+                Из {{ stats.total_accounts }} всего
+            </div>
+        </div>
+
+        <!-- Total Campaigns -->
+        <div class="metric-card">
+            <div class="metric-label">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
+                </svg>
+                Всего кампаний
+            </div>
+            <div class="metric-value">{{ stats.total_campaigns }}</div>
+            <div class="metric-change" style="color: var(--text-secondary);">
+                Синхронизировано
+            </div>
+        </div>
+
+        <!-- Google Sheets -->
+        <div class="metric-card">
+            <div class="metric-label">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Интеграции с Google таблицами
+            </div>
+            <div class="metric-value">{{ stats.google_sheets }}</div>
+            <div class="metric-change" style="color: var(--text-secondary);">
+                Активные таблицы
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 32px;">
+        <!-- Active Reports by Month -->
+        <div class="metric-card">
+            <div style="margin-bottom: 20px;">
+                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">
+                    Активные отчеты по месяцам
+                </h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                    Динамика создания отчетов за последние 6 месяцев
+                </p>
+            </div>
+            <div style="height: 250px; position: relative;">
+                <canvas id="reportsChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Reports by Manager -->
+        <div class="metric-card">
+            <div style="margin-bottom: 20px;">
+                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">
+                    По менеджерам
+                </h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                    Активные отчеты
+                </p>
+            </div>
+            <div style="max-height: 250px; overflow-y: auto;">
+                {% set max_count = stats.reports_by_manager.values()|list|max if stats.reports_by_manager else 1 %}
+                {% for manager, count in stats.reports_by_manager.items() %}
+                <div style="padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 14px; font-weight: 500; color: var(--text-primary);">
+                            {{ manager if manager else 'Не назначен' }}
+                        </span>
+                        <span style="font-size: 14px; font-weight: 600; color: var(--text-primary);">
+                            {{ count }}
+                        </span>
+                    </div>
+                    <div style="width: 100%; height: 4px; background: var(--bg-light); border-radius: 2px; overflow: hidden;">
+                        <div style="width: {{ (count / max_count * 100)|int }}%; height: 100%; background: var(--primary-orange); border-radius: 2px;"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity (Collapsible) -->
+    <div class="metric-card">
+        <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 20px; cursor: pointer;"
+             onclick="toggleActivity()">
+            <div style="flex: 1;">
+                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">
+                    Последняя активность
+                </h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                    Недавние обновления отчетов
+                </p>
+            </div>
+            <svg id="activity-chevron" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                 style="transition: transform 0.3s;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </div>
+
+        <div id="activity-content">
+            {% if recent_activity %}
+                <div style="max-height: 400px; overflow-y: auto;">
+                    {% for activity in recent_activity %}
+                    <div style="padding: 16px 0; border-bottom: 1px solid var(--border-color); display: flex; gap: 16px;">
+                        <div style="width: 40px; height: 40px; border-radius: 8px; background: var(--peach-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <svg width="20" height="20" fill="none" stroke="var(--primary-orange)" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">
+                                {{ activity.report_name }}
+                            </div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                Обновлен {{ activity.last_update.strftime('%d.%m.%Y в %H:%M') }}
+                                {% if activity.status == 'success' %}
+                                    <span class="badge badge-success" style="margin-left: 8px;">Успешно</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p style="text-align: center; color: var(--text-secondary); padding: 40px 0;">
+                    Нет недавних обновлений
+                </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div style="margin-top: 32px; display: flex; gap: 16px; flex-wrap: wrap;">
+        <a href="{{ url_for('sync_all_accounts') }}" class="btn btn-primary">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Синхронизировать аккаунты
+        </a>
+        <a href="{{ url_for('add_account') }}" class="btn btn-secondary">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Добавить аккаунт
+        </a>
+        <a href="{{ url_for('reports') }}" class="btn btn-secondary">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Все отчеты
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Toggle Activity Section
+function toggleActivity() {
+    const content = document.getElementById('activity-content');
+    const chevron = document.getElementById('activity-chevron');
+
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        chevron.style.transform = 'rotate(0deg)';
+    } else {
+        content.style.display = 'none';
+        chevron.style.transform = 'rotate(-90deg)';
+    }
+}
+
+// Reports Chart
+const ctx = document.getElementById('reportsChart').getContext('2d');
+const reportsChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: {{ chart_data.labels | tojson }},
+        datasets: [{
+            label: 'Новых отчетов',
+            data: {{ chart_data.data | tojson }},
+            borderColor: '#FF8A5B',
+            backgroundColor: 'rgba(255, 138, 91, 0.1)',
+            tension: 0.4,
+            fill: true,
+            borderWidth: 2,
+            pointBackgroundColor: '#FF8A5B',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 4,
+            pointHoverRadius: 6
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                backgroundColor: '#1A1A1A',
+                padding: 12,
+                titleColor: '#fff',
+                bodyColor: '#fff',
+                borderColor: '#FF8A5B',
+                borderWidth: 1,
+                displayColors: false,
+                callbacks: {
+                    title: function(context) {
+                        return context[0].label;
+                    },
+                    label: function(context) {
+                        return 'Отчетов: ' + context.parsed.y;
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    stepSize: 1,
+                    color: '#9CA3AF',
+                    font: {
+                        size: 12
+                    }
+                },
+                grid: {
+                    color: '#E5E7EB',
+                    drawBorder: false
+                }
+            },
+            x: {
+                ticks: {
+                    color: '#9CA3AF',
+                    font: {
+                        size: 12
+                    }
+                },
+                grid: {
+                    display: false
+                }
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

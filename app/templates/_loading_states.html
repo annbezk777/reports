@@ -1,0 +1,171 @@
+{# Universal Loading States Component #}
+{# Includes: Loading, Success, Error states with consistent design #}
+
+<style>
+.loading-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 20px;
+}
+
+.state-card {
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    border-radius: 16px;
+    padding: 40px;
+    border: 1px solid var(--border-color);
+    text-align: center;
+    width: 100%;
+}
+
+.state-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    background: white;
+    border-radius: 50%;
+    margin-bottom: 24px;
+}
+
+.state-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0 0 12px 0;
+}
+
+.state-message {
+    font-size: 14px;
+    margin-bottom: 32px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.metric-card {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+}
+
+.metric-label {
+    font-size: 12px;
+    color: #6B7280;
+    margin-bottom: 6px;
+}
+
+.metric-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--primary-orange);
+    margin: 0;
+}
+
+/* Success state */
+.state-card.success {
+    --gradient-start: #D1FAE5;
+    --gradient-end: #ECFDF5;
+    --border-color: #A7F3D0;
+}
+
+.state-card.success .state-title {
+    color: #065F46;
+}
+
+.state-card.success .state-message {
+    color: #047857;
+}
+
+/* Error state */
+.state-card.error {
+    --gradient-start: #FEE2E2;
+    --gradient-end: #FEF2F2;
+    --border-color: #FECACA;
+}
+
+.state-card.error .state-title {
+    color: #991B1B;
+}
+
+.state-card.error .state-message {
+    color: #B91C1C;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.result-list {
+    margin-bottom: 32px;
+}
+
+.result-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border: 1px solid var(--border-color);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.result-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.result-icon.success {
+    background: #D1FAE5;
+}
+
+.result-icon.error {
+    background: #FEE2E2;
+}
+
+.result-content {
+    flex: 1;
+}
+
+.result-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.result-message {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+</style>

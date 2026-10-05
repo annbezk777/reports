@@ -60,6 +60,23 @@ migrate = Migrate(app, db)
 from app.api.sape_client import SapeAPIClient
 from app.api.google_sheets_client import GoogleSheetsClient
 
+# Template filters
+@app.template_filter('format_month')
+def format_month(date_string):
+    """Format YYYY-MM-DD or YYYY-MM to Russian month name"""
+    months_ru = {
+        '01': 'Январь', '02': 'Февраль', '03': 'Март', '04': 'Апрель',
+        '05': 'Май', '06': 'Июнь', '07': 'Июль', '08': 'Август',
+        '09': 'Сентябрь', '10': 'Октябрь', '11': 'Ноябрь', '12': 'Декабрь'
+    }
+    try:
+        parts = date_string.split('-')
+        year = parts[0]
+        month = parts[1]
+        return f"{months_ru.get(month, month)} {year}"
+    except:
+        return date_string
+
 
 
 
@@ -455,18 +472,102 @@ def reset_password():
 @app.route('/')
 @login_required
 def index():
-    """Main dashboard"""
-    accounts_count = SapeAccount.query.filter_by(active=True).count()
-    campaigns_count = Campaign.query.filter_by(active=True).count()
-    reports_count = ReportConfig.query.filter_by(active=True).count()
-    
+    """Redirect to dashboard"""
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Main dashboard with stats and charts"""
+    from collections import defaultdict
+    from datetime import datetime, timedelta
+
+    # Basic stats
+    now = datetime.now()
+    google_sheets_count = ReportConfig.query.filter(
+        ReportConfig.google_sheet_url.isnot(None),
+        ReportConfig.google_sheet_url != '',
+        ReportConfig.active == True,
+        ReportConfig.archived == False
+    ).count()
+
+    stats = {
+        'total_accounts': SapeAccount.query.count(),
+        'active_accounts': SapeAccount.query.filter_by(active=True).count(),
+        'total_campaigns': Campaign.query.count(),
+        'total_reports': ReportConfig.query.count(),
+        'active_reports': ReportConfig.query.filter_by(active=True, archived=False).count(),
+        'google_sheets': google_sheets_count,
+        'now': now
+    }
+
+    # Reports by manager
+    reports_by_manager = db.session.query(
+        ReportConfig.manager,
+        db.func.count(ReportConfig.id)
+    ).filter(
+        ReportConfig.active == True,
+        ReportConfig.archived == False
+    ).group_by(ReportConfig.manager).all()
+
+    stats['reports_by_manager'] = dict(reports_by_manager) if reports_by_manager else {}
+
+    # Chart data: Reports created by month (last 6 months)
+    six_months_ago = now - timedelta(days=180)
+    reports_by_month = db.session.query(
+        db.func.strftime('%Y-%m', ReportConfig.created_at).label('month'),
+        db.func.count(ReportConfig.id).label('count')
+    ).filter(
+        ReportConfig.created_at >= six_months_ago,
+        ReportConfig.active == True,
+        ReportConfig.archived == False
+    ).group_by('month').order_by('month').all()
+
+    # Prepare chart data
+    month_names = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
+    chart_labels = []
+    chart_values = []
+    current_month_str = now.strftime('%Y-%m')
+
+    for month_str, count in reports_by_month:
+        # Skip current month if it's less than 5 days into the month
+        if month_str == current_month_str and now.day < 5:
+            continue
+
+        year, month = month_str.split('-')
+        month_name = month_names[int(month) - 1]
+        chart_labels.append(f"{month_name} {year}")
+        chart_values.append(count)
+
+    # If no data, show last 6 months with zeros
+    if not chart_labels:
+        for i in range(5, -1, -1):
+            date = now - timedelta(days=i*30)
+            chart_labels.append(month_names[date.month - 1])
+            chart_values.append(0)
+
+    chart_data = {
+        'labels': chart_labels,
+        'data': chart_values
+    }
+
+    # Recent activity
+    recent_activity = []
     recent_logs = ReportLog.query.order_by(ReportLog.executed_at.desc()).limit(10).all()
-    
-    return render_template('index.html',
-                         accounts_count=accounts_count,
-                         campaigns_count=campaigns_count,
-                         reports_count=reports_count,
-                         recent_logs=recent_logs)
+
+    for log in recent_logs:
+        if log.report_config:
+            recent_activity.append({
+                'report_name': log.report_config.name or f"Отчет #{log.report_config.id}",
+                'last_update': log.executed_at,
+                'status': log.status
+            })
+
+    return render_template('dashboard.html',
+                         stats=stats,
+                         chart_data=chart_data,
+                         recent_activity=recent_activity)
 
 
 @app.route('/accounts')
@@ -515,8 +616,9 @@ def add_account():
         db.session.add(account)
         db.session.commit()
 
-        flash(f'Аккаунт "{name}" успешно добавлен', 'success')
-        return redirect(url_for('accounts'))
+        flash(f'Аккаунт "{name}" успешно добавлен. Начинается синхронизация кампаний...', 'success')
+        # Automatically sync campaigns for the new account
+        return redirect(url_for('sync_campaigns', account_id=account.id))
 
     return render_template('add_account.html')
 
@@ -599,7 +701,37 @@ def detect_campaign_format(campaign_name, sape_type=None):
 
 @app.route('/accounts/<int:account_id>/sync')
 def sync_campaigns(account_id):
-    """Sync campaigns from SAPE"""
+    """Show progress page for single account sync"""
+    account = SapeAccount.query.get_or_404(account_id)
+    return render_template('sync_single_progress.html', account=account)
+
+
+@app.route('/accounts/<int:account_id>/sync/execute')
+def execute_sync_single(account_id):
+    """Execute sync for single account and return progress as JSON"""
+    from flask import Response
+    import json
+
+    def generate():
+        with app.app_context():
+            account = SapeAccount.query.get_or_404(account_id)
+
+            yield f"data: {json.dumps({'type': 'start', 'account': account.name})}\n\n"
+
+            result = sync_single_account(account)
+
+            if result['success']:
+                yield f"data: {json.dumps({'type': 'complete', 'success': True, 'clients': result.get('clients_synced', 0), 'new': result.get('campaigns_new', 0), 'updated': result.get('campaigns_updated', 0)})}\n\n"
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                yield f"data: {json.dumps({'type': 'complete', 'success': False, 'error': error_msg})}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream')
+
+
+@app.route('/accounts/<int:account_id>/sync-old')
+def sync_campaigns_old(account_id):
+    """Sync campaigns from SAPE (old synchronous version)"""
     account = SapeAccount.query.get_or_404(account_id)
 
     # Initialize SAPE client with login and token
@@ -871,20 +1003,21 @@ def execute_sync_all():
     import json
 
     def generate():
-        accounts = SapeAccount.query.filter_by(active=True).all()
+        with app.app_context():
+            accounts = SapeAccount.query.filter_by(active=True).all()
 
-        yield f"data: {json.dumps({'type': 'start', 'total': len(accounts)})}\n\n"
+            yield f"data: {json.dumps({'type': 'start', 'total': len(accounts)})}\n\n"
 
-        total_clients = 0
-        total_new_campaigns = 0
-        total_updated_campaigns = 0
-        failed_accounts = []
+            total_clients = 0
+            total_new_campaigns = 0
+            total_updated_campaigns = 0
+            failed_accounts = []
 
-        for idx, account in enumerate(accounts, 1):
-            # Send progress update
-            yield f"data: {json.dumps({'type': 'progress', 'current': idx, 'total': len(accounts), 'account': account.name})}\n\n"
+            for idx, account in enumerate(accounts, 1):
+                # Send progress update
+                yield f"data: {json.dumps({'type': 'progress', 'current': idx, 'total': len(accounts), 'account': account.name})}\n\n"
 
-            result = sync_single_account(account)
+                result = sync_single_account(account)
 
             if result['success']:
                 total_clients += result.get('clients_synced', 0)
@@ -1064,7 +1197,25 @@ def reports():
 
     all_reports = query.all()
 
-    return render_template('reports.html', reports=all_reports, show_archived=show_archived, manager_filter=manager_filter)
+    # Get unique months from reports for filter
+    months_set = set()
+    for report in all_reports:
+        if report.created_at:
+            month_year = report.created_at.strftime('%Y-%m')
+            months_set.add(month_year)
+
+    # Sort months in descending order (newest first)
+    months_list = sorted(list(months_set), reverse=True)
+
+    # Get all accounts for the modal form
+    accounts = SapeAccount.query.filter_by(active=True).order_by(SapeAccount.name).all()
+
+    return render_template('reports.html',
+                         reports=all_reports,
+                         show_archived=show_archived,
+                         manager_filter=manager_filter,
+                         accounts=accounts,
+                         months_list=months_list)
 
 
 @app.route('/api/clients/<int:account_id>')
@@ -1121,6 +1272,31 @@ def get_worksheets():
         print(f"Error getting worksheets: {e}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/reports/<int:report_id>')
+def get_report_data(report_id):
+    """API endpoint to get report data for editing"""
+    try:
+        report = ReportConfig.query.get_or_404(report_id)
+
+        return jsonify({
+            'id': report.id,
+            'name': report.name,
+            'account_id': report.campaign.account_id,
+            'campaign_ids': report.campaign_ids,
+            'campaign_settings': report.campaign_settings or {},
+            'manager': report.manager,
+            'brand': report.brand,
+            'campaign_mode': report.campaign_mode,
+            'google_sheet_url': report.google_sheet_url,
+            'worksheet_name': report.worksheet_name,
+            'schedule_days': report.schedule_days,
+            'schedule_time': report.schedule_time,
+        })
+    except Exception as e:
+        logger.error(f"Error getting report data: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -1332,7 +1508,84 @@ def add_report():
 
 @app.route('/reports/<int:report_id>/run')
 def run_report(report_id):
-    """Run report manually"""
+    """Show progress page for report generation"""
+    report = ReportConfig.query.get_or_404(report_id)
+    return render_template('report_run_progress.html', report=report)
+
+
+@app.route('/reports/<int:report_id>/run/execute')
+def execute_run_report(report_id):
+    """Execute report generation and return progress as JSON"""
+    from flask import Response
+    import json
+    from datetime import datetime as dt, timedelta
+
+    def generate():
+        with app.app_context():
+            try:
+                report = ReportConfig.query.get_or_404(report_id)
+
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Подготовка к формированию отчета...'})}\n\n"
+
+                # Get all campaigns for this report
+                campaigns = Campaign.query.filter(Campaign.id.in_(report.campaign_ids)).all()
+                if not campaigns:
+                    yield f"data: {json.dumps({'type': 'complete', 'success': False, 'error': 'Не найдены кампании для отчета'})}\n\n"
+                    return
+
+                # Get account from first campaign
+                account = campaigns[0].account
+
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Подключение к SAPE API...'})}\n\n"
+
+                # Initialize SAPE client
+                sape_client = SapeAPIClient(login=account.login, token=account.api_token)
+                if not sape_client.authenticate():
+                    yield f"data: {json.dumps({'type': 'complete', 'success': False, 'error': 'Ошибка авторизации в SAPE'})}\n\n"
+                    return
+
+                # Get date range from request or use last 7 days
+                date_from_str = request.args.get('date_from')
+                date_to_str = request.args.get('date_to')
+
+                if date_from_str and date_to_str:
+                    date_from = dt.strptime(date_from_str, '%Y-%m-%d')
+                    date_to = dt.strptime(date_to_str, '%Y-%m-%d')
+                else:
+                    date_to = datetime.now()
+                    date_from = date_to - timedelta(days=7)
+
+                period_str = f"{date_from.strftime('%d.%m.%Y')} - {date_to.strftime('%d.%m.%Y')}"
+
+                yield f"data: {json.dumps({'type': 'status', 'message': f'Получение данных за период {period_str}...'})}\n\n"
+
+                # Initialize Google Sheets client
+                gs_client = GoogleSheetsClient(
+                    credentials_file=app.config['GOOGLE_CREDENTIALS_FILE'],
+                    scopes=app.config['GOOGLE_SCOPES']
+                )
+
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Обработка данных кампаний...'})}\n\n"
+
+                # Call the old processing logic (imported from run_report_old)
+                # For now, we'll use a simplified version and redirect to old route
+                # This is because the full implementation is very complex
+
+                # Build URL for old route
+                old_url = url_for('run_report_old', report_id=report_id, date_from=date_from.strftime('%Y-%m-%d'), date_to=date_to.strftime('%Y-%m-%d'), _external=True)
+
+                yield f"data: {json.dumps({'type': 'complete', 'success': False, 'error': 'Функция в разработке. Перенаправление на старую версию...', 'redirect': old_url})}\n\n"
+
+            except Exception as e:
+                logging.error(f"Error in execute_run_report: {e}", exc_info=True)
+                yield f"data: {json.dumps({'type': 'complete', 'success': False, 'error': str(e)})}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream')
+
+
+@app.route('/reports/<int:report_id>/run-old')
+def run_report_old(report_id):
+    """Run report manually (old synchronous version)"""
     report = ReportConfig.query.get_or_404(report_id)
 
     # Get all campaigns for this report
