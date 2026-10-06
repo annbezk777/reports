@@ -1,0 +1,27 @@
+{% extends "base_new.html" %}
+
+{% block title %}{{ monitoring.name }} - Мониторинг{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="content-header">
+    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+        <a href="{{ url_for('monitoring') }}" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+            К списку мониторингов
+        </a>
+    </div>
+    <h1>{{ monitoring.name }}</h1>
+    <p>Детальная аналитика и отклонения от медиаплана</p>
+</div>
+
+<!-- Content Body -->
+<div class="content-body">
+    <div style="text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+        <h3>Страница в разработке</h3>
+        <p>Здесь будет отображаться детальная статистика, графики и расхождения с планом</p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,931 @@
+{% extends "base_new.html" %}
+
+{% block title %}Мониторинг - ОТЧЕТЫ{% endblock %}
+
+{% block extra_head %}
+<style>
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    max-width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-body {
+    position: relative;
+}
+
+/* Form styles */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="date"],
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 10px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: white;
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary-orange);
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* Campaign table styles */
+.campaigns-table-header {
+    display: flex;
+    padding: 8px 12px;
+    background: var(--bg-light);
+    border-radius: 6px 6px 0 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.campaigns-table {
+    border: 1px solid var(--border-color);
+    border-radius: 0 0 8px 8px;
+}
+
+.campaign-row {
+    display: flex;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.campaign-row:last-child {
+    border-bottom: none;
+}
+
+.campaign-row:hover {
+    background: var(--bg-light);
+}
+
+.campaign-id {
+    display: inline-block;
+    padding: 2px 6px;
+    background: var(--bg-light);
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: 'Monaco', 'Courier New', monospace;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.campaign-id:hover {
+    background: var(--primary-orange);
+    color: white;
+}
+
+.accordion-toggle {
+    width: 100%;
+    padding: 8px;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+
+.accordion-toggle:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+}
+
+.accordion-icon {
+    transition: transform 0.3s;
+}
+
+.accordion-toggle.open .accordion-icon {
+    transform: rotate(180deg);
+}
+
+/* Kebab menu */
+.kebab-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.kebab-button {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.kebab-button:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+}
+
+.kebab-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    min-width: 180px;
+    z-index: 1000;
+}
+
+.kebab-dropdown.show {
+    display: block;
+}
+
+.kebab-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    font-size: 14px;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: background 0.15s;
+}
+
+.kebab-item:hover {
+    background: var(--bg-light);
+}
+
+.kebab-item svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.kebab-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
+}
+
+/* Account link */
+.account-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.account-link:hover {
+    background: var(--peach-light);
+    border-color: var(--primary-orange);
+    color: var(--primary-orange);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="content-header">
+    <h1>МОНИТОРИНГ КАМПАНИЙ</h1>
+    <p>Отслеживание KPI и целей по медиаплану и постклику</p>
+</div>
+
+<!-- Content Body -->
+<div class="content-body">
+    <!-- Toolbar -->
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
+        <!-- Left: Filters -->
+        <div style="display: flex; gap: 12px; flex: 1; flex-wrap: wrap;">
+            <!-- Search -->
+            <input type="text"
+                   id="searchInput"
+                   placeholder="Поиск по названию..."
+                   onkeyup="filterMonitoring()"
+                   style="flex: 1; min-width: 200px; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+
+            <!-- Manager Filter -->
+            <select id="managerFilter" onchange="filterMonitoring()"
+                    style="padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary); background: white; cursor: pointer;">
+                <option value="">Все менеджеры</option>
+                {% set all_managers = monitorings | map(attribute='manager') | select | unique | list %}
+                {% for manager in all_managers %}
+                    <option value="{{ manager|lower }}" {% if manager_filter and manager_filter|lower == manager|lower %}selected{% endif %}>
+                        {{ manager }}
+                    </option>
+                {% endfor %}
+                <option value="unassigned" {% if manager_filter == 'unassigned' %}selected{% endif %}>Не назначен</option>
+            </select>
+
+            <!-- Status Filter -->
+            <select id="statusFilter" onchange="filterMonitoring()"
+                    style="padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary); background: white; cursor: pointer;">
+                <option value="active">Активные</option>
+                <option value="all">Все</option>
+                <option value="archived">Архивные</option>
+            </select>
+        </div>
+
+        <!-- Right: Actions -->
+        {% if monitorings %}
+        <button onclick="openMonitoringModal()" class="btn btn-primary">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Добавить мониторинг
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- Monitoring Grid -->
+    <div id="monitoringGrid" style="display: grid; gap: 16px;">
+        {% if monitorings %}
+            {% for monitoring in monitorings %}
+            <div class="report-card monitoring-card"
+                 data-name="{{ monitoring.name|lower }}"
+                 data-manager="{{ monitoring.manager|lower if monitoring.manager else 'unassigned' }}"
+                 data-status="{{ 'archived' if monitoring.archived else 'active' }}">
+
+                <div style="display: flex; gap: 20px; align-items: start;">
+                    <!-- Left: Info -->
+                    <div style="flex: 1;">
+                        <!-- Title & Manager -->
+                        <div style="margin-bottom: 12px;">
+                            <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px;">
+                                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                                    {{ monitoring.name }}
+                                </h3>
+                                {% if monitoring.manager %}
+                                <span style="font-size: 12px; color: var(--text-secondary);">
+                                    Менеджер: {{ monitoring.manager }}
+                                </span>
+                                {% endif %}
+                            </div>
+
+                            <!-- Account -->
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
+                                <span style="font-size: 13px; color: var(--text-secondary);">
+                                    {{ monitoring.account.name }}
+                                </span>
+                                <span style="font-size: 11px; color: #9CA3AF;">
+                                    {{ monitoring.account.login }}
+                                </span>
+                                {% if monitoring.account.sape_user_id %}
+                                <a href="https://cp.sapient.ru/users/sudo?uid={{ monitoring.account.sape_user_id }}&sid=15"
+                                   target="_blank"
+                                   class="account-link">
+                                    Кабинет SAPE
+                                </a>
+                                {% endif %}
+                            </div>
+
+                            <!-- Period -->
+                            <div style="font-size: 13px; color: var(--text-secondary);">
+                                📅 {{ monitoring.date_from.strftime('%d.%m.%Y') }} — {{ monitoring.date_to.strftime('%d.%m.%Y') }}
+                                <span style="margin-left: 8px; color: var(--text-tertiary);">
+                                    ({{ monitoring.get_total_days() }} дней)
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- KPI Grid -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 12px;">
+                            <!-- Impressions -->
+                            {% if monitoring.plan_impressions %}
+                            <div style="padding: 10px 12px; background: var(--bg-light); border-radius: 6px;">
+                                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">
+                                    Показы (план)
+                                </div>
+                                <div style="font-size: 15px; font-weight: 600; color: var(--text-primary);">
+                                    {{ "{:,}".format(monitoring.plan_impressions).replace(',', ' ') }}
+                                </div>
+                                <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px;">
+                                    ~{{ "{:,}".format(monitoring.get_daily_limit_impressions()).replace(',', ' ') }}/день
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Clicks -->
+                            {% if monitoring.plan_clicks %}
+                            <div style="padding: 10px 12px; background: var(--bg-light); border-radius: 6px;">
+                                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">
+                                    Клики (план)
+                                </div>
+                                <div style="font-size: 15px; font-weight: 600; color: var(--text-primary);">
+                                    {{ "{:,}".format(monitoring.plan_clicks).replace(',', ' ') }}
+                                </div>
+                                <div style="font-size: 10px; color: var(--text-tertiary); margin-top: 4px;">
+                                    ~{{ "{:,}".format(monitoring.get_daily_limit_clicks()).replace(',', ' ') }}/день
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Visits -->
+                            {% if monitoring.plan_visits %}
+                            <div style="padding: 10px 12px; background: var(--bg-light); border-radius: 6px;">
+                                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">
+                                    Визиты (план)
+                                </div>
+                                <div style="font-size: 15px; font-weight: 600; color: var(--text-primary);">
+                                    {{ "{:,}".format(monitoring.plan_visits).replace(',', ' ') }}
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Conversions -->
+                            {% if monitoring.plan_conversions %}
+                            <div style="padding: 10px 12px; background: var(--bg-light); border-radius: 6px;">
+                                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">
+                                    Конверсии (план)
+                                </div>
+                                <div style="font-size: 15px; font-weight: 600; color: var(--text-primary);">
+                                    {{ "{:,}".format(monitoring.plan_conversions).replace(',', ' ') }}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Campaigns -->
+                        {% set campaigns = monitoring.get_campaigns() %}
+                        <div style="margin-top: 12px;">
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">
+                                Кампаний: {{ campaigns|length }}
+                            </div>
+
+                            <!-- Table Header -->
+                            <div class="campaigns-table-header">
+                                <div style="width: 80px;">ID</div>
+                                <div style="flex: 1;">НАЗВАНИЕ КАМПАНИИ</div>
+                            </div>
+
+                            <!-- First 3 campaigns -->
+                            <div class="campaigns-table">
+                                {% for campaign in campaigns[:3] %}
+                                <div class="campaign-row">
+                                    <div style="width: 80px;">
+                                        <code class="campaign-id" onclick="copyToClipboard('{{ campaign.campaign_id }}', this)">
+                                            {{ campaign.campaign_id }}
+                                        </code>
+                                    </div>
+                                    <div style="flex: 1; color: var(--text-primary);">
+                                        {{ campaign.name[:50] if campaign.name else ('Безымянная кампания (ID: ' + campaign.campaign_id + ')') }}{% if campaign.name and campaign.name|length > 50 %}...{% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+
+                                <!-- Hidden campaigns -->
+                                {% if campaigns|length > 3 %}
+                                <div id="campaigns-{{ monitoring.id }}" class="campaigns-hidden" style="display: none;">
+                                    {% for campaign in campaigns[3:] %}
+                                    <div class="campaign-row">
+                                        <div style="width: 80px;">
+                                            <code class="campaign-id" onclick="copyToClipboard('{{ campaign.campaign_id }}', this)">
+                                                {{ campaign.campaign_id }}
+                                            </code>
+                                        </div>
+                                        <div style="flex: 1; color: var(--text-primary);">
+                                            {{ campaign.name[:50] if campaign.name else ('Безымянная кампания (ID: ' + campaign.campaign_id + ')') }}{% if campaign.name and campaign.name|length > 50 %}...{% endif %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Toggle button at the bottom -->
+                            {% if campaigns|length > 3 %}
+                            <button class="accordion-toggle" onclick="toggleCampaigns(event, {{ monitoring.id }})">
+                                <svg class="accordion-icon" width="10" height="10" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M8 11.5l-5-5h10l-5 5z"/>
+                                </svg>
+                                Показать еще ({{ campaigns|length - 3 }})
+                            </button>
+                            {% endif %}
+                        </div>
+
+                        <!-- Last Update -->
+                        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-color);">
+                            <span style="font-size: 11px; color: var(--text-secondary);">
+                                {% if monitoring.last_sync %}
+                                    Обновлено: {{ monitoring.last_sync.strftime('%d.%m.%Y в %H:%M') }}
+                                {% else %}
+                                    Еще не обновлялся
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Right: Actions -->
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <!-- View Details Button -->
+                        <a href="{{ url_for('monitoring_detail', monitoring_id=monitoring.id) }}"
+                           class="btn btn-primary" style="padding: 8px 16px; font-size: 13px;">
+                            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                            </svg>
+                            Подробнее
+                        </a>
+
+                        <!-- Kebab Menu -->
+                        <div class="kebab-menu">
+                            <button class="kebab-button" onclick="toggleMonitoringKebab(event, {{ monitoring.id }})">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                    <circle cx="8" cy="3" r="1.5"/>
+                                    <circle cx="8" cy="8" r="1.5"/>
+                                    <circle cx="8" cy="13" r="1.5"/>
+                                </svg>
+                            </button>
+                            <div class="kebab-dropdown" id="monitoring-kebab-{{ monitoring.id }}">
+                                <button onclick="openMonitoringModal({{ monitoring.id }})" class="kebab-item">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                    </svg>
+                                    Редактировать
+                                </button>
+                                <div class="kebab-divider"></div>
+                                {% if monitoring.archived %}
+                                <form action="{{ url_for('unarchive_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;">
+                                    <button type="submit" class="kebab-item">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
+                                        </svg>
+                                        Восстановить
+                                    </button>
+                                </form>
+                                {% else %}
+                                <form action="{{ url_for('archive_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;">
+                                    <button type="submit" class="kebab-item">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                                        </svg>
+                                        В архив
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="padding: 60px 24px; text-align: center; background: white; border-radius: 12px; border: 1px solid var(--border-color);">
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                    У вас пока нет настроенных мониторингов
+                </p>
+                <button onclick="openMonitoringModal()" class="btn btn-primary">
+                    <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Создать первый мониторинг
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Monitoring Form Modal -->
+<div id="monitoringFormModal" class="modal" style="display: none;">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 680px; max-height: 90vh; overflow-y: auto;">
+        <div class="modal-header" style="padding: 24px 28px; border-bottom: 1px solid var(--border-color);">
+            <h3 id="monitoringFormTitle" style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                Создать мониторинг
+            </h3>
+            <button onclick="closeMonitoringModal()" style="background: none; border: none; cursor: pointer; padding: 4px;">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="modal-body" style="padding: 28px;">
+            <form id="monitoringForm" method="POST" action="{{ url_for('add_monitoring') }}">
+                <input type="hidden" id="monitoringId" name="monitoring_id">
+
+                <!-- Название -->
+                <div class="form-group">
+                    <label for="formName">Название мониторинга</label>
+                    <input type="text" id="formName" name="name" required
+                           placeholder="Например: Кампания Q4 2026">
+                </div>
+
+                <!-- Аккаунт SAPE -->
+                <div class="form-group">
+                    <label for="formAccount">Аккаунт SAPE</label>
+                    <select id="formAccount" name="account_id" required onchange="loadCampaignsForMonitoring()">
+                        <option value="">Выберите аккаунт</option>
+                        {% for account in accounts %}
+                            <option value="{{ account.id }}">{{ account.name }} ({{ account.login }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Кампании -->
+                <div class="form-group">
+                    <label>Кампании</label>
+
+                    <!-- Campaign Search -->
+                    <input type="text"
+                           id="campaignSearch"
+                           placeholder="Поиск по ID или названию..."
+                           onkeyup="filterCampaigns()"
+                           style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; margin-bottom: 8px; display: none;">
+
+                    <div id="campaignsLoading" style="display: none; padding: 20px; text-align: center; color: var(--text-secondary);">
+                        Загрузка кампаний...
+                    </div>
+                    <div id="campaignsContainer" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px;">
+                        <p style="color: var(--text-secondary); text-align: center;">Выберите аккаунт</p>
+                    </div>
+                    <div style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
+                        Выбрано: <span id="selectedCampaignsCount">0</span>
+                    </div>
+                </div>
+
+                <!-- Период -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label for="formDateFrom">Дата начала</label>
+                        <input type="date" id="formDateFrom" name="date_from" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="formDateTo">Дата окончания</label>
+                        <input type="date" id="formDateTo" name="date_to" required>
+                    </div>
+                </div>
+
+                <!-- Медиаплан -->
+                <div style="margin-top: 24px; padding: 20px; background: var(--bg-light); border-radius: 8px;">
+                    <h4 style="font-size: 14px; font-weight: 600; margin: 0 0 16px 0; color: var(--text-primary);">
+                        📊 Медиаплан (SAPE)
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="formPlanImpressions">Плановые показы</label>
+                            <input type="number" id="formPlanImpressions" name="plan_impressions"
+                                   placeholder="Например: 1000000">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="formPlanClicks">Плановые клики</label>
+                            <input type="number" id="formPlanClicks" name="plan_clicks"
+                                   placeholder="Например: 5000">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Постклик KPI -->
+                <div style="margin-top: 16px; padding: 20px; background: var(--peach-light); border-radius: 8px;">
+                    <h4 style="font-size: 14px; font-weight: 600; margin: 0 0 16px 0; color: var(--text-primary);">
+                        🎯 Постклик KPI (Метрика)
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="formPlanVisits">Визиты</label>
+                            <input type="number" id="formPlanVisits" name="plan_visits"
+                                   placeholder="Например: 4500">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="formPlanConversions">Конверсии</label>
+                            <input type="number" id="formPlanConversions" name="plan_conversions"
+                                   placeholder="Например: 150">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="formPlanBounceRate">Отказы (%)</label>
+                            <input type="number" step="0.1" id="formPlanBounceRate" name="plan_bounce_rate"
+                                   placeholder="Например: 45.5">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="formPlanPageDepth">Глубина просмотра</label>
+                            <input type="number" step="0.1" id="formPlanPageDepth" name="plan_page_depth"
+                                   placeholder="Например: 2.5">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="formPlanRobotness">Роботность (%)</label>
+                            <input type="number" step="0.1" id="formPlanRobotness" name="plan_robotness"
+                                   placeholder="Например: 15.0">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Менеджер -->
+                <div class="form-group" style="margin-top: 24px;">
+                    <label for="formManager">Менеджер</label>
+                    <input type="text" id="formManager" name="manager"
+                           placeholder="Например: Иван Иванов">
+                </div>
+
+                <!-- Buttons -->
+                <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                    <button type="button" onclick="closeMonitoringModal()" class="btn btn-secondary">
+                        Отмена
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <span id="formSubmitText">Создать мониторинг</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Filter function
+function filterMonitoring() {
+    const searchValue = document.getElementById('searchInput').value.toLowerCase();
+    const managerValue = document.getElementById('managerFilter').value.toLowerCase();
+    const statusValue = document.getElementById('statusFilter').value;
+    const cards = document.querySelectorAll('.monitoring-card');
+
+    cards.forEach(card => {
+        const name = card.dataset.name;
+        const manager = card.dataset.manager;
+        const status = card.dataset.status;
+
+        const matchesSearch = !searchValue || name.includes(searchValue);
+        const matchesManager = !managerValue || manager === managerValue;
+        const matchesStatus = statusValue === 'all' || status === statusValue;
+
+        card.style.display = (matchesSearch && matchesManager && matchesStatus) ? '' : 'none';
+    });
+}
+
+// Kebab menu toggle
+function toggleMonitoringKebab(event, monitoringId) {
+    event.stopPropagation();
+    const dropdown = document.getElementById(`monitoring-kebab-${monitoringId}`);
+    const allDropdowns = document.querySelectorAll('.kebab-dropdown');
+
+    allDropdowns.forEach(d => {
+        if (d !== dropdown) d.classList.remove('show');
+    });
+
+    dropdown.classList.toggle('show');
+}
+
+// Close kebab menus when clicking outside
+document.addEventListener('click', () => {
+    document.querySelectorAll('.kebab-dropdown').forEach(d => d.classList.remove('show'));
+});
+
+// Open monitoring modal
+function openMonitoringModal(monitoringId = null) {
+    const modal = document.getElementById('monitoringFormModal');
+    const title = document.getElementById('monitoringFormTitle');
+    const submitText = document.getElementById('formSubmitText');
+    const form = document.getElementById('monitoringForm');
+
+    if (monitoringId) {
+        // Edit mode
+        title.textContent = 'Редактировать мониторинг';
+        submitText.textContent = 'Сохранить изменения';
+        form.action = `/monitoring/${monitoringId}/update`;
+
+        // Load monitoring data
+        fetch(`/api/monitoring/${monitoringId}`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('monitoringId').value = data.id;
+                document.getElementById('formName').value = data.name;
+                document.getElementById('formAccount').value = data.account_id;
+                document.getElementById('formDateFrom').value = data.date_from;
+                document.getElementById('formDateTo').value = data.date_to;
+                document.getElementById('formPlanImpressions').value = data.plan_impressions || '';
+                document.getElementById('formPlanClicks').value = data.plan_clicks || '';
+                document.getElementById('formPlanVisits').value = data.plan_visits || '';
+                document.getElementById('formPlanConversions').value = data.plan_conversions || '';
+                document.getElementById('formPlanBounceRate').value = data.plan_bounce_rate || '';
+                document.getElementById('formPlanPageDepth').value = data.plan_page_depth || '';
+                document.getElementById('formPlanRobotness').value = data.plan_robotness || '';
+                document.getElementById('formManager').value = data.manager || '';
+
+                // Load campaigns and select them
+                loadCampaignsForMonitoring(data.campaign_ids);
+            })
+            .catch(err => {
+                console.error('Error loading monitoring:', err);
+                alert('Ошибка загрузки данных мониторинга');
+            });
+    } else {
+        // Create mode
+        title.textContent = 'Создать мониторинг';
+        submitText.textContent = 'Создать мониторинг';
+        form.action = '{{ url_for("add_monitoring") }}';
+        form.reset();
+        document.getElementById('monitoringId').value = '';
+        document.getElementById('campaignsContainer').innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Выберите аккаунт</p>';
+
+        // Set default dates (current month: from 1st to yesterday)
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+        // Format dates in local timezone (avoid UTC shift issues)
+        const formatLocalDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        document.getElementById('formDateFrom').value = formatLocalDate(firstDayOfMonth);
+        document.getElementById('formDateTo').value = formatLocalDate(yesterday);
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeMonitoringModal() {
+    document.getElementById('monitoringFormModal').style.display = 'none';
+}
+
+// Load campaigns for selected account
+function loadCampaignsForMonitoring(selectedCampaignIds = []) {
+    const accountId = document.getElementById('formAccount').value;
+    const container = document.getElementById('campaignsContainer');
+    const loading = document.getElementById('campaignsLoading');
+    const searchInput = document.getElementById('campaignSearch');
+
+    if (!accountId) {
+        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Выберите аккаунт</p>';
+        searchInput.style.display = 'none';
+        return;
+    }
+
+    loading.style.display = 'block';
+    container.innerHTML = '';
+    searchInput.style.display = 'none';
+
+    fetch(`/api/campaigns/${accountId}`)
+        .then(res => res.json())
+        .then(campaigns => {
+            loading.style.display = 'none';
+
+            if (campaigns.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Нет доступных кампаний</p>';
+                return;
+            }
+
+            // Sort by ID DESC (newest first)
+            campaigns.sort((a, b) => b.id - a.id);
+
+            // Show search input if there are campaigns
+            searchInput.style.display = 'block';
+
+            container.innerHTML = campaigns.map(campaign => {
+                const isChecked = selectedCampaignIds.includes(campaign.id);
+                const displayName = campaign.name || `Безымянная кампания (ID: ${campaign.campaign_id})`;
+                return `
+                    <div class="campaign-item" data-id="${campaign.id}" data-campaign-id="${campaign.campaign_id}" data-name="${displayName.toLowerCase()}" style="padding: 8px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox"
+                               name="campaign_ids"
+                               value="${campaign.id}"
+                               ${isChecked ? 'checked' : ''}
+                               onchange="updateCampaignsCount()"
+                               style="cursor: pointer;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 13px; color: var(--text-primary);">${displayName}</div>
+                            <div style="font-size: 11px; color: var(--text-secondary);">ID: ${campaign.campaign_id}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            updateCampaignsCount();
+        })
+        .catch(err => {
+            loading.style.display = 'none';
+            console.error('Error loading campaigns:', err);
+            container.innerHTML = '<p style="color: var(--error-color); text-align: center;">Ошибка загрузки кампаний</p>';
+        });
+}
+
+function filterCampaigns() {
+    const searchValue = document.getElementById('campaignSearch').value.toLowerCase();
+    const items = document.querySelectorAll('.campaign-item');
+
+    items.forEach(item => {
+        const name = item.dataset.name;
+        const campaignId = item.dataset.campaignId;
+        const matches = name.includes(searchValue) || campaignId.includes(searchValue);
+        item.style.display = matches ? 'flex' : 'none';
+    });
+}
+
+function updateCampaignsCount() {
+    const count = document.querySelectorAll('#campaignsContainer input[type="checkbox"]:checked').length;
+    document.getElementById('selectedCampaignsCount').textContent = count;
+}
+
+// Close modal when clicking outside
+document.getElementById('monitoringFormModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'monitoringFormModal') {
+        closeMonitoringModal();
+    }
+});
+
+// Toggle campaigns list
+function toggleCampaigns(event, monitoringId) {
+    event.preventDefault();
+    const hiddenCampaigns = document.getElementById(`campaigns-${monitoringId}`);
+    const button = event.currentTarget;
+
+    if (hiddenCampaigns.style.display === 'none') {
+        hiddenCampaigns.style.display = 'block';
+        button.classList.add('open');
+        button.innerHTML = `
+            <svg class="accordion-icon" width="10" height="10" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 11.5l-5-5h10l-5 5z"/>
+            </svg>
+            Скрыть
+        `;
+    } else {
+        hiddenCampaigns.style.display = 'none';
+        button.classList.remove('open');
+        const count = hiddenCampaigns.querySelectorAll('.campaign-row').length;
+        button.innerHTML = `
+            <svg class="accordion-icon" width="10" height="10" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 11.5l-5-5h10l-5 5z"/>
+            </svg>
+            Показать еще (${count})
+        `;
+    }
+}
+
+// Copy campaign ID to clipboard
+function copyToClipboard(text, element) {
+    navigator.clipboard.writeText(text).then(() => {
+        const originalBg = element.style.background;
+        element.style.background = 'var(--primary-orange)';
+        element.style.color = 'white';
+        setTimeout(() => {
+            element.style.background = originalBg;
+            element.style.color = '';
+        }, 500);
+    });
+}
+</script>
+{% endblock %}

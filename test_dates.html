@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Тест дат - Московское время</title>
+    <style>
+        body { font-family: Arial; padding: 40px; max-width: 800px; margin: 0 auto; }
+        .test-block { background: #f5f5f5; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .result { margin: 10px 0; padding: 10px; background: white; border-left: 4px solid #10B981; }
+        .error { border-left-color: #EF4444; }
+        code { background: #e5e7eb; padding: 2px 6px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🕐 Тест дат - Московское время</h1>
+    
+    <div class="test-block">
+        <h3>Текущие даты</h3>
+        <div class="result" id="current"></div>
+    </div>
+
+    <div class="test-block">
+        <h3>Тест: Текущий месяц (с 1 октября по вчера)</h3>
+        <div class="result" id="currentMonth"></div>
+    </div>
+
+    <div class="test-block">
+        <h3>Тест: toISOString() vs локальное форматирование</h3>
+        <div class="result" id="comparison"></div>
+    </div>
+
+    <script>
+        // Helper function
+        const formatLocalDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        // Test 1: Current dates
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        document.getElementById('current').innerHTML = `
+            <strong>Сегодня:</strong> ${today.toLocaleString('ru-RU')} <br>
+            <strong>Вчера:</strong> ${yesterday.toLocaleString('ru-RU')}
+        `;
+
+        // Test 2: Current month preset
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        
+        document.getElementById('currentMonth').innerHTML = `
+            <strong>Дата начала:</strong> ${formatLocalDate(firstDayOfMonth)} <br>
+            <strong>Дата окончания:</strong> ${formatLocalDate(yesterday)} <br>
+            <strong>Ожидается:</strong> 2026-10-01 по 2026-10-05 <br>
+            <strong class="${formatLocalDate(firstDayOfMonth) === '2026-10-01' ? 'success' : 'error'}">
+                ${formatLocalDate(firstDayOfMonth) === '2026-10-01' ? '✅ Правильно!' : '❌ Ошибка!'}
+            </strong>
+        `;
+
+        // Test 3: Comparison
+        const testDate = new Date(2026, 9, 1); // 1 октября 2026
+        const isoMethod = testDate.toISOString().split('T')[0];
+        const localMethod = formatLocalDate(testDate);
+
+        document.getElementById('comparison').innerHTML = `
+            <strong>Тестовая дата:</strong> 1 октября 2026, 00:00 (Москва) <br>
+            <strong>toISOString():</strong> <code>${isoMethod}</code> ${isoMethod !== '2026-10-01' ? '❌' : '✅'} <br>
+            <strong>formatLocalDate():</strong> <code>${localMethod}</code> ${localMethod === '2026-10-01' ? '✅' : '❌'}
+        `;
+    </script>
+</body>
+</html>

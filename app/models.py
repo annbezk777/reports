@@ -150,3 +150,78 @@ class ReportLog(db.Model):
 
     def __repr__(self):
         return f'<ReportLog {self.id}: {self.status}>'
+
+
+class MonitoringCampaign(db.Model):
+    """Campaign monitoring with KPIs and targets"""
+    __tablename__ = 'monitoring_campaigns'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)  # Название мониторинга
+
+    # Campaign references
+    account_id = db.Column(db.Integer, db.ForeignKey('sape_accounts.id'), nullable=False)
+    campaign_ids = db.Column(db.JSON, nullable=False)  # List of SAPE campaign IDs
+
+    # Period
+    date_from = db.Column(db.Date, nullable=False)
+    date_to = db.Column(db.Date, nullable=False)
+
+    # Media plan targets (SAPE statistics)
+    plan_impressions = db.Column(db.Integer, nullable=True)  # Плановые показы
+    plan_clicks = db.Column(db.Integer, nullable=True)  # Плановые клики
+
+    # Post-click targets (Yandex Metrika)
+    plan_visits = db.Column(db.Integer, nullable=True)  # Плановые визиты
+    plan_conversions = db.Column(db.Integer, nullable=True)  # Плановые конверсии
+    plan_bounce_rate = db.Column(db.Float, nullable=True)  # Плановый % отказов (например, 45.5)
+    plan_page_depth = db.Column(db.Float, nullable=True)  # Плановая глубина просмотра
+    plan_robotness = db.Column(db.Float, nullable=True)  # Плановая роботность (%)
+
+    # Yandex Metrika settings
+    metrika_counter_id = db.Column(db.String(50), nullable=True)  # Номер счетчика Метрики
+    metrika_goal_id = db.Column(db.String(50), nullable=True)  # ID цели для конверсий
+    utm_source = db.Column(db.String(100), nullable=True)  # UTM метка для фильтрации
+    utm_campaign = db.Column(db.String(100), nullable=True)  # UTM метка для фильтрации
+
+    # Manager & metadata
+    manager = db.Column(db.String(100), nullable=True)
+
+    # Status
+    active = db.Column(db.Boolean, default=True)
+    archived = db.Column(db.Boolean, default=False)
+    last_sync = db.Column(db.DateTime, nullable=True)  # Последнее обновление данных
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    account = db.relationship('SapeAccount', backref='monitoring_campaigns', lazy=True)
+
+    def __repr__(self):
+        return f'<MonitoringCampaign {self.name}>'
+
+    def get_campaigns(self):
+        """Get list of Campaign objects for this monitoring"""
+        if not self.campaign_ids:
+            return []
+        return Campaign.query.filter(Campaign.id.in_(self.campaign_ids)).all()
+
+    def get_total_days(self):
+        """Calculate total days in monitoring period"""
+        if not self.date_from or not self.date_to:
+            return 0
+        delta = self.date_to - self.date_from
+        return delta.days + 1  # Include both start and end dates
+
+    def get_daily_limit_impressions(self):
+        """Calculate daily impressions limit (evenly distributed)"""
+        days = self.get_total_days()
+        if days > 0 and self.plan_impressions:
+            return int(self.plan_impressions / days)
+        return 0
+
+    def get_daily_limit_clicks(self):
+        """Calculate daily clicks limit (evenly distributed)"""
+        days = self.get_total_days()
+        if days > 0 and self.plan_clicks:
+            return int(self.plan_clicks / days)
+        return 0

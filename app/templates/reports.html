@@ -296,8 +296,29 @@
             <form id="datePickerForm">
                 <input type="hidden" id="modalReportId" name="report_id">
 
-                <!-- Date From -->
+                <!-- Quick Date Presets -->
                 <div style="margin-bottom: 20px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Быстрый выбор
+                    </label>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" onclick="setDatePreset('yesterday')" class="date-preset-btn">
+                            Вчера
+                        </button>
+                        <button type="button" onclick="setDatePreset('last7days')" class="date-preset-btn">
+                            Последние 7 дней
+                        </button>
+                        <button type="button" onclick="setDatePreset('currentMonth')" class="date-preset-btn active">
+                            Текущий месяц
+                        </button>
+                        <button type="button" onclick="setDatePreset('lastMonth')" class="date-preset-btn">
+                            Предыдущий месяц
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Date From -->
+                <div style="margin-bottom: 16px;">
                     <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
                         Дата начала
                     </label>
@@ -315,18 +336,50 @@
                 </div>
 
                 <!-- Buttons -->
-                <div style="display: flex; gap: 12px;">
-                    <button type="button" onclick="closeDatePickerModal()" class="btn btn-secondary" style="flex: 1; background: white; color: var(--text-secondary);">
+                <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                    <button type="button" onclick="closeDatePickerModal()" class="date-cancel-btn">
                         Отмена
                     </button>
-                    <button type="submit" class="btn btn-primary" style="flex: 1;">
-                        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                        </svg>
-                        Обновить за период
+                    <button type="submit" class="date-submit-btn">
+                        Обновить
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Indicator Modal -->
+<div id="loadingModal" class="modal" style="display: none;">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 450px; padding: 40px; text-align: center;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
+            <div class="progress-indicator spinner progress-medium">
+                <svg class="progress-spinner" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="54" fill="none" stroke="#F3F4F6" stroke-width="8"/>
+                    <circle cx="60" cy="60" r="54" fill="none" stroke="url(#spinnerGradient)" stroke-width="8"
+                            stroke-linecap="round" stroke-dasharray="85 255" transform="rotate(-90 60 60)">
+                        <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60"
+                                        dur="1s" repeatCount="indefinite"/>
+                    </circle>
+                    <defs>
+                        <linearGradient id="spinnerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#FF8A5B;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#FFA577;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div>
+                <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;">
+                    Обновление отчета
+                </h3>
+                <p id="loadingReportName" style="font-size: 15px; font-weight: 500; color: var(--text-primary); margin: 0 0 12px 0; padding: 8px 16px; background: var(--peach-light); border-radius: 6px; display: inline-block;">
+                    —
+                </p>
+                <p id="loadingMessage" style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                    Загрузка данных с сервера SAPE...
+                </p>
+            </div>
         </div>
     </div>
 </div>
@@ -548,6 +601,31 @@
     justify-content: center;
 }
 
+/* Loading spinner */
+.progress-indicator.spinner {
+    display: inline-block;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.progress-indicator.spinner.progress-medium {
+    width: 120px;
+    height: 120px;
+}
+
+.progress-spinner {
+    width: 100%;
+    height: 100%;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
 .modal-content {
     background: white;
     border-radius: 16px;
@@ -579,6 +657,66 @@
     background: var(--primary-orange);
     border-color: var(--primary-orange);
     color: white;
+}
+
+/* Date preset buttons */
+.date-preset-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border-color);
+    background: white;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.date-preset-btn:hover {
+    border-color: var(--primary-orange);
+    background: var(--peach-light);
+    color: var(--primary-orange);
+}
+
+.date-preset-btn.active {
+    background: var(--peach-light);
+    border-color: var(--primary-orange);
+    color: var(--primary-orange);
+}
+
+/* Date picker modal buttons */
+.date-cancel-btn {
+    padding: 10px 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.date-cancel-btn:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+}
+
+.date-submit-btn {
+    padding: 10px 24px;
+    border: none;
+    background: var(--primary-orange);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+    height: 40px;
+}
+
+.date-submit-btn:hover {
+    background: #E67951;
 }
 
 /* Orange checkboxes in modal */
@@ -695,13 +833,11 @@ function openDatePickerModal(reportId, reportName) {
     document.getElementById('modalReportId').value = reportId;
     document.getElementById('modalReportName').textContent = reportName;
 
-    // Set default dates (last 7 days)
-    const today = new Date();
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
+    // Store report name for loading indicator
+    window.currentReportName = reportName;
 
-    document.getElementById('dateTo').value = today.toISOString().split('T')[0];
-    document.getElementById('dateFrom').value = weekAgo.toISOString().split('T')[0];
+    // Set default dates (current month preset)
+    setDatePreset('currentMonth');
 
     // Show modal
     document.getElementById('datePickerModal').style.display = 'flex';
@@ -709,6 +845,80 @@ function openDatePickerModal(reportId, reportName) {
 
 function closeDatePickerModal() {
     document.getElementById('datePickerModal').style.display = 'none';
+}
+
+function setDatePreset(preset) {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    let dateFrom, dateTo;
+
+    switch(preset) {
+        case 'yesterday':
+            dateFrom = yesterday;
+            dateTo = yesterday;
+            break;
+
+        case 'last7days':
+            dateTo = yesterday;
+            dateFrom = new Date(yesterday);
+            dateFrom.setDate(dateFrom.getDate() - 6);
+            break;
+
+        case 'currentMonth':
+            dateTo = yesterday;
+            dateFrom = new Date(today.getFullYear(), today.getMonth(), 1);
+            console.log('DEBUG currentMonth:', {
+                today: today.toISOString(),
+                yesterday: yesterday.toISOString(),
+                dateFrom: dateFrom.toISOString(),
+                dateTo: dateTo.toISOString(),
+                year: today.getFullYear(),
+                month: today.getMonth()
+            });
+            break;
+
+        case 'lastMonth':
+            dateTo = new Date(today.getFullYear(), today.getMonth(), 0); // Last day of prev month
+            dateFrom = new Date(today.getFullYear(), today.getMonth() - 1, 1); // First day of prev month
+            break;
+    }
+
+    // Format dates for input fields (YYYY-MM-DD format)
+    // Use local timezone instead of UTC to avoid date shifts
+    const formatLocalDate = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const dateFromStr = formatLocalDate(dateFrom);
+    const dateToStr = formatLocalDate(dateTo);
+
+    console.log('Setting dates:', { preset, dateFromStr, dateToStr });
+
+    document.getElementById('dateFrom').value = dateFromStr;
+    document.getElementById('dateTo').value = dateToStr;
+
+    // Update active state on preset buttons
+    document.querySelectorAll('.date-preset-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    // Add active class to the button that matches this preset
+    // Works both for click events and programmatic calls
+    if (event?.target) {
+        event.target.classList.add('active');
+    } else {
+        // Find button by onclick attribute when called programmatically
+        document.querySelectorAll('.date-preset-btn').forEach(btn => {
+            if (btn.getAttribute('onclick')?.includes(`'${preset}'`)) {
+                btn.classList.add('active');
+            }
+        });
+    }
 }
 
 // Handle date picker form submission
@@ -722,8 +932,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const dateFrom = document.getElementById('dateFrom').value;
             const dateTo = document.getElementById('dateTo').value;
 
-            // Close modal and show loading state
+            // Save scroll position to localStorage
+            sessionStorage.setItem('reportScrollPosition', window.scrollY);
+            sessionStorage.setItem('reportUpdating', reportId);
+
+            // Close date picker modal and show loading indicator
             closeDatePickerModal();
+
+            // Set report name in loading indicator
+            const reportName = window.currentReportName || 'Загрузка...';
+            document.getElementById('loadingReportName').textContent = reportName;
+            document.getElementById('loadingModal').style.display = 'flex';
 
             // Navigate to old route (sync processing) with date parameters
             window.location.href = `/reports/${reportId}/run-old?date_from=${dateFrom}&date_to=${dateTo}`;
@@ -738,6 +957,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 closeDatePickerModal();
             }
         });
+    }
+
+    // Restore scroll position after page reload
+    const savedScrollPosition = sessionStorage.getItem('reportScrollPosition');
+    const wasUpdating = sessionStorage.getItem('reportUpdating');
+
+    if (savedScrollPosition && wasUpdating) {
+        // Wait for content to load, then scroll
+        setTimeout(() => {
+            window.scrollTo(0, parseInt(savedScrollPosition));
+            // Clear the saved position
+            sessionStorage.removeItem('reportScrollPosition');
+            sessionStorage.removeItem('reportUpdating');
+        }, 100);
     }
 });
 </script>

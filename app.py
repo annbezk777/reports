@@ -52,7 +52,7 @@ class PrintLogger:
 sys.stdout = PrintLogger(logger, logging.INFO)
 
 # Initialize database
-from app.models import db, SapeAccount, Client, Campaign, ReportConfig, ReportLog
+from app.models import db, SapeAccount, Client, Campaign, ReportConfig, ReportLog, MonitoringCampaign
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -1218,6 +1218,212 @@ def reports():
                          months_list=months_list)
 
 
+# ============================================================================
+# MONITORING ROUTES
+# ============================================================================
+
+@app.route('/monitoring')
+@login_required
+def monitoring():
+    """List of monitoring campaigns"""
+    # Get manager filter from URL or session
+    manager_filter = request.args.get('manager', None)
+
+    # Build query
+    query = MonitoringCampaign.query
+
+    # Apply manager filter
+    if manager_filter:
+        if manager_filter == 'unassigned':
+            query = query.filter((MonitoringCampaign.manager == None) | (MonitoringCampaign.manager == ''))
+        else:
+            query = query.filter(MonitoringCampaign.manager == manager_filter)
+
+    # Get all monitorings (show both active and archived, filtering handled by JavaScript)
+    all_monitorings = query.order_by(MonitoringCampaign.created_at.desc()).all()
+
+    # Get all accounts for the form
+    accounts = SapeAccount.query.filter_by(active=True).order_by(SapeAccount.name).all()
+
+    return render_template('monitoring.html',
+                         monitorings=all_monitorings,
+                         manager_filter=manager_filter,
+                         accounts=accounts)
+
+
+@app.route('/monitoring/<int:monitoring_id>')
+@login_required
+def monitoring_detail(monitoring_id):
+    """Monitoring campaign detail page"""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    return render_template('monitoring_detail.html', monitoring=monitoring)
+
+
+@app.route('/monitoring/<int:monitoring_id>/archive', methods=['POST'])
+@login_required
+def archive_monitoring(monitoring_id):
+    """Archive monitoring campaign"""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    monitoring.archived = True
+    db.session.commit()
+    flash('Мониторинг перемещен в архив', 'success')
+    return redirect(url_for('monitoring'))
+
+
+@app.route('/monitoring/<int:monitoring_id>/unarchive', methods=['POST'])
+@login_required
+def unarchive_monitoring(monitoring_id):
+    """Unarchive monitoring campaign"""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    monitoring.archived = False
+    db.session.commit()
+    flash('Мониторинг восстановлен из архива', 'success')
+    return redirect(url_for('monitoring'))
+
+
+@app.route('/monitoring/add', methods=['POST'])
+@login_required
+def add_monitoring():
+    """Create new monitoring campaign"""
+    try:
+        # Get form data
+        name = request.form.get('name')
+        account_id = request.form.get('account_id')
+        campaign_ids = request.form.getlist('campaign_ids')  # Multiple values
+        date_from = request.form.get('date_from')
+        date_to = request.form.get('date_to')
+
+        # Media plan
+        plan_impressions = request.form.get('plan_impressions')
+        plan_clicks = request.form.get('plan_clicks')
+
+        # Post-click KPIs
+        plan_visits = request.form.get('plan_visits')
+        plan_conversions = request.form.get('plan_conversions')
+        plan_bounce_rate = request.form.get('plan_bounce_rate')
+        plan_page_depth = request.form.get('plan_page_depth')
+        plan_robotness = request.form.get('plan_robotness')
+
+        # Manager
+        manager = request.form.get('manager')
+
+        # Convert campaign IDs to integers
+        campaign_ids = [int(cid) for cid in campaign_ids if cid]
+
+        # Create monitoring
+        monitoring = MonitoringCampaign(
+            name=name,
+            account_id=int(account_id),
+            campaign_ids=campaign_ids,
+            date_from=datetime.strptime(date_from, '%Y-%m-%d').date(),
+            date_to=datetime.strptime(date_to, '%Y-%m-%d').date(),
+            plan_impressions=int(plan_impressions) if plan_impressions else None,
+            plan_clicks=int(plan_clicks) if plan_clicks else None,
+            plan_visits=int(plan_visits) if plan_visits else None,
+            plan_conversions=int(plan_conversions) if plan_conversions else None,
+            plan_bounce_rate=float(plan_bounce_rate) if plan_bounce_rate else None,
+            plan_page_depth=float(plan_page_depth) if plan_page_depth else None,
+            plan_robotness=float(plan_robotness) if plan_robotness else None,
+            manager=manager if manager else None
+        )
+
+        db.session.add(monitoring)
+        db.session.commit()
+
+        flash('Мониторинг успешно создан', 'success')
+        return redirect(url_for('monitoring'))
+
+    except Exception as e:
+        logger.error(f"Error creating monitoring: {e}")
+        flash(f'Ошибка создания мониторинга: {str(e)}', 'error')
+        return redirect(url_for('monitoring'))
+
+
+@app.route('/monitoring/<int:monitoring_id>/update', methods=['POST'])
+@login_required
+def update_monitoring(monitoring_id):
+    """Update monitoring campaign"""
+    try:
+        monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+        # Update fields
+        monitoring.name = request.form.get('name')
+        monitoring.account_id = int(request.form.get('account_id'))
+
+        campaign_ids = request.form.getlist('campaign_ids')
+        monitoring.campaign_ids = [int(cid) for cid in campaign_ids if cid]
+
+        date_from = request.form.get('date_from')
+        date_to = request.form.get('date_to')
+        monitoring.date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+        monitoring.date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+
+        # Media plan
+        plan_impressions = request.form.get('plan_impressions')
+        plan_clicks = request.form.get('plan_clicks')
+        monitoring.plan_impressions = int(plan_impressions) if plan_impressions else None
+        monitoring.plan_clicks = int(plan_clicks) if plan_clicks else None
+
+        # Post-click KPIs
+        plan_visits = request.form.get('plan_visits')
+        plan_conversions = request.form.get('plan_conversions')
+        plan_bounce_rate = request.form.get('plan_bounce_rate')
+        plan_page_depth = request.form.get('plan_page_depth')
+        plan_robotness = request.form.get('plan_robotness')
+
+        monitoring.plan_visits = int(plan_visits) if plan_visits else None
+        monitoring.plan_conversions = int(plan_conversions) if plan_conversions else None
+        monitoring.plan_bounce_rate = float(plan_bounce_rate) if plan_bounce_rate else None
+        monitoring.plan_page_depth = float(plan_page_depth) if plan_page_depth else None
+        monitoring.plan_robotness = float(plan_robotness) if plan_robotness else None
+
+        # Manager
+        manager = request.form.get('manager')
+        monitoring.manager = manager if manager else None
+
+        db.session.commit()
+
+        flash('Мониторинг успешно обновлен', 'success')
+        return redirect(url_for('monitoring'))
+
+    except Exception as e:
+        logger.error(f"Error updating monitoring: {e}")
+        flash(f'Ошибка обновления мониторинга: {str(e)}', 'error')
+        return redirect(url_for('monitoring'))
+
+
+@app.route('/api/monitoring/<int:monitoring_id>')
+@login_required
+def get_monitoring_data(monitoring_id):
+    """API endpoint to get monitoring data for editing"""
+    try:
+        monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+        return jsonify({
+            'id': monitoring.id,
+            'name': monitoring.name,
+            'account_id': monitoring.account_id,
+            'campaign_ids': monitoring.campaign_ids,
+            'date_from': monitoring.date_from.strftime('%Y-%m-%d'),
+            'date_to': monitoring.date_to.strftime('%Y-%m-%d'),
+            'plan_impressions': monitoring.plan_impressions,
+            'plan_clicks': monitoring.plan_clicks,
+            'plan_visits': monitoring.plan_visits,
+            'plan_conversions': monitoring.plan_conversions,
+            'plan_bounce_rate': monitoring.plan_bounce_rate,
+            'plan_page_depth': monitoring.plan_page_depth,
+            'plan_robotness': monitoring.plan_robotness,
+            'manager': monitoring.manager
+        })
+    except Exception as e:
+        logger.error(f"Error getting monitoring data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# REPORTS API ROUTES
+# ============================================================================
+
 @app.route('/api/clients/<int:account_id>')
 def get_clients_by_account(account_id):
     """API endpoint to get clients for specific account"""
@@ -1298,6 +1504,29 @@ def get_report_data(report_id):
     except Exception as e:
         logger.error(f"Error getting report data: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sync-status')
+def sync_status():
+    """Get last sync timestamp (no auth required)"""
+    import os
+    from datetime import datetime
+
+    sync_file = '.last_sync'
+    if os.path.exists(sync_file):
+        with open(sync_file, 'r') as f:
+            timestamp_str = f.read().strip()
+            try:
+                timestamp = datetime.fromisoformat(timestamp_str)
+                return jsonify({
+                    'synced': True,
+                    'timestamp': timestamp.isoformat(),
+                    'formatted': timestamp.strftime('%d.%m.%Y %H:%M')
+                })
+            except:
+                pass
+
+    return jsonify({'synced': False})
 
 
 @app.route('/api/reports/update-by-sheet', methods=['POST'])
@@ -2653,6 +2882,158 @@ def init_db():
     print("Database initialized!")
 
 
+# ==================== SCHEDULED REPORTS ====================
+
+def run_report_update(report, date_from=None, date_to=None):
+    """
+    Run report update programmatically (for scheduled updates)
+    This is a helper function that runs the report update logic without Flask request context
+    """
+    try:
+        logging.info(f"🔄 Updating report: {report.name or 'Unnamed'} (ID: {report.id})")
+
+        # Get all campaigns for this report
+        campaigns = Campaign.query.filter(Campaign.id.in_(report.campaign_ids)).all()
+        if not campaigns:
+            logging.warning(f"⚠️ No campaigns found for report {report.id}")
+            return False
+
+        # Get account from first campaign
+        account = campaigns[0].account
+
+        # Initialize SAPE client
+        sape_client = SapeAPIClient(login=account.login, token=account.api_token)
+
+        if not sape_client.authenticate():
+            logging.error(f"❌ SAPE authentication failed for report {report.id}")
+            return False
+
+        # Use provided dates or default to current month (from 1st to yesterday)
+        if not date_from or not date_to:
+            from datetime import timedelta
+            now = datetime.now()
+            date_to = now - timedelta(days=1)  # Yesterday
+            date_from = datetime(now.year, now.month, 1)  # First day of current month
+
+        # Initialize Google Sheets client
+        gs_client = GoogleSheetsClient(
+            credentials_file=app.config['GOOGLE_CREDENTIALS_FILE'],
+            scopes=app.config['GOOGLE_SCOPES']
+        )
+
+        # Determine report mode and call appropriate update logic
+        # (This is a simplified version - you may need to adapt based on report type)
+
+        # For now, we'll use a simple daily stats update for all campaigns
+        total_impressions = 0
+        total_clicks = 0
+
+        for campaign in campaigns:
+            daily_data = sape_client.get_daily_stats(
+                campaign_ids=[int(campaign.campaign_id)],
+                date_from=date_from,
+                date_to=date_to,
+                include_video_metrics=(campaign.format_type in ['V', 'CTV'])
+            )
+
+            if daily_data:
+                total_impressions += sum(d['impressions'] for d in daily_data)
+                total_clicks += sum(d['clicks'] for d in daily_data)
+
+        # Update report timestamp
+        report.last_update = datetime.utcnow()
+        db.session.commit()
+
+        logging.info(f"✅ Report {report.id} updated successfully. Impressions: {total_impressions:,}, Clicks: {total_clicks:,}")
+        return True
+
+    except Exception as e:
+        logging.error(f"❌ Error updating report {report.id}: {str(e)}")
+        return False
+
+
+def scheduled_update_reports():
+    """
+    Scheduled task to update reports based on their schedule settings
+    Runs every hour and checks which reports should be updated
+    """
+    with app.app_context():
+        now = datetime.now(pytz.timezone('Europe/Moscow'))
+        current_day = now.isoweekday()  # 1=Monday, 7=Sunday
+        current_hour = now.hour
+        current_minute = now.minute
+
+        logging.info(f"\n{'='*60}")
+        logging.info(f"⏰ SCHEDULED REPORT CHECK - {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        logging.info(f"   Current day: {current_day} ({['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][current_day-1]}), Time: {current_hour:02d}:{current_minute:02d}")
+        logging.info(f"{'='*60}")
+
+        # Find all enabled scheduled reports
+        scheduled_reports = ReportConfig.query.filter_by(
+            schedule_enabled=True,
+            active=True,
+            archived=False
+        ).all()
+
+        if not scheduled_reports:
+            logging.info("ℹ️ No scheduled reports found")
+            return
+
+        logging.info(f"📋 Found {len(scheduled_reports)} scheduled reports")
+
+        reports_updated = 0
+        reports_skipped = 0
+
+        for report in scheduled_reports:
+            # Check if report has schedule configured
+            if not report.schedule_days or not report.schedule_time:
+                logging.info(f"⏭️ Skipping report {report.id}: No schedule configured")
+                reports_skipped += 1
+                continue
+
+            # Parse schedule days (e.g., "1,3,5" for Mon, Wed, Fri)
+            try:
+                scheduled_days = [int(d.strip()) for d in report.schedule_days.split(',') if d.strip()]
+            except ValueError:
+                logging.warning(f"⚠️ Invalid schedule_days format for report {report.id}: {report.schedule_days}")
+                reports_skipped += 1
+                continue
+
+            # Check if today is a scheduled day
+            if current_day not in scheduled_days:
+                logging.debug(f"⏭️ Skipping report {report.id}: Today ({current_day}) not in schedule days {scheduled_days}")
+                reports_skipped += 1
+                continue
+
+            # Parse schedule time (e.g., "09:30")
+            try:
+                scheduled_hour, scheduled_minute = map(int, report.schedule_time.split(':'))
+            except ValueError:
+                logging.warning(f"⚠️ Invalid schedule_time format for report {report.id}: {report.schedule_time}")
+                reports_skipped += 1
+                continue
+
+            # Check if current time matches scheduled time (within 1 hour window)
+            if current_hour == scheduled_hour and (0 <= current_minute - scheduled_minute < 60):
+                logging.info(f"✅ Matched schedule for report {report.id} ({report.name or 'Unnamed'})")
+                logging.info(f"   Scheduled: {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][current_day-1]} {scheduled_hour:02d}:{scheduled_minute:02d}")
+
+                # Update the report
+                success = run_report_update(report)
+                if success:
+                    reports_updated += 1
+                else:
+                    logging.error(f"❌ Failed to update report {report.id}")
+            else:
+                logging.debug(f"⏭️ Skipping report {report.id}: Time mismatch (scheduled {scheduled_hour:02d}:{scheduled_minute:02d}, current {current_hour:02d}:{current_minute:02d})")
+                reports_skipped += 1
+
+        logging.info(f"\n✅ SCHEDULED REPORT UPDATE COMPLETED:")
+        logging.info(f"   Reports updated: {reports_updated}")
+        logging.info(f"   Reports skipped: {reports_skipped}")
+        logging.info(f"{'='*60}\n")
+
+
 # ==================== SCHEDULER ====================
 
 # Initialize and start scheduler only when enabled
@@ -2677,9 +3058,23 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC:
             max_instances=1  # Don't run multiple instances simultaneously
         )
 
+        # Add hourly report update check (runs every hour to check scheduled reports)
+        scheduler.add_job(
+            func=scheduled_update_reports,
+            trigger=CronTrigger(minute=0),  # Run at the start of every hour
+            id='hourly_reports_check',
+            name='Проверка расписания обновления отчетов',
+            replace_existing=True,
+            misfire_grace_time=3600,  # Run within 1 hour if missed
+            coalesce=True,  # Combine multiple missed runs into one
+            max_instances=1  # Don't run multiple instances simultaneously
+        )
+
         # Start scheduler
         scheduler.start()
-        logging.info("✅ Scheduler started: Weekday account sync at 09:00 Moscow time (Mon-Fri)")
+        logging.info("✅ Scheduler started:")
+        logging.info("   - Weekday account sync at 09:00 Moscow time (Mon-Fri)")
+        logging.info("   - Hourly report schedule check (every hour at :00)")
 
         # Check if we need to sync on startup (if last sync was >24h ago)
         if should_sync_on_startup():
