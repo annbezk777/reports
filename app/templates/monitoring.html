@@ -405,6 +405,47 @@
                                 </div>
                             </div>
                             {% endif %}
+
+                            <!-- Post-click KPIs (with different background) -->
+                            {% if monitoring.plan_bounce_rate or monitoring.plan_page_depth or monitoring.plan_robotness %}
+                            <div style="grid-column: 1 / -1; height: 1px; background: var(--border-color); margin: 8px 0;"></div>
+                            {% endif %}
+
+                            <!-- Bounce Rate -->
+                            {% if monitoring.plan_bounce_rate %}
+                            <div style="padding: 10px 12px; background: #FEF3C7; border-radius: 6px; border: 1px solid #FCD34D;">
+                                <div style="font-size: 11px; color: #92400E; margin-bottom: 4px;">
+                                    Показатель отказов
+                                </div>
+                                <div style="font-size: 15px; font-weight: 600; color: #78350F;">
+                                    {{ "%.1f"|format(monitoring.plan_bounce_rate) }}%
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Page Depth -->
+                            {% if monitoring.plan_page_depth %}
+                            <div style="padding: 10px 12px; background: #FEF3C7; border-radius: 6px; border: 1px solid #FCD34D;">
+                                <div style="font-size: 11px; color: #92400E; margin-bottom: 4px;">
+                                    Глубина просмотра
+                                </div>
+                                <div style="font-size: 15px; font-weight: 600; color: #78350F;">
+                                    {{ "%.1f"|format(monitoring.plan_page_depth) }}
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Robotness -->
+                            {% if monitoring.plan_robotness %}
+                            <div style="padding: 10px 12px; background: #FEF3C7; border-radius: 6px; border: 1px solid #FCD34D;">
+                                <div style="font-size: 11px; color: #92400E; margin-bottom: 4px;">
+                                    Роботность
+                                </div>
+                                <div style="font-size: 15px; font-weight: 600; color: #78350F;">
+                                    {{ "%.1f"|format(monitoring.plan_robotness) }}%
+                                </div>
+                            </div>
+                            {% endif %}
                         </div>
 
                         <!-- Campaigns -->

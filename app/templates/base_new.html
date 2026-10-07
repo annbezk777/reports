@@ -133,33 +133,6 @@
 
     <!-- Main Content -->
     <div class="main-content">
-        <!-- Sync Status Indicator (only in development/local) -->
-        {% if config.get('ENV') != 'production' %}
-        <div id="sync-status" style="
-            position: fixed;
-            top: 20px;
-            left: 280px;
-            z-index: 999;
-            background: #F3F4F6;
-            color: #6B7280;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        ">
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-            <span id="sync-time">Проверка...</span>
-        </div>
-        {% endif %}
-
         <!-- Flash Messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -215,15 +188,15 @@
                 .then(res => res.json())
                 .then(data => {
                     if (data.synced) {
-                        syncTimeEl.textContent = `Синхронизация: ${data.formatted}`;
+                        syncTimeEl.textContent = `Sync: ${data.formatted}`;
                     } else {
-                        syncTimeEl.textContent = 'Не синхронизировано';
+                        syncTimeEl.textContent = 'Not synced';
                     }
                     // Fade in after data loaded
                     syncStatus.style.opacity = '1';
                 })
                 .catch(err => {
-                    syncTimeEl.textContent = 'Локальная версия';
+                    syncTimeEl.textContent = 'Local';
                     // Fade in even on error
                     syncStatus.style.opacity = '1';
                 });
@@ -262,6 +235,38 @@
             }, 5000);
         });
     </script>
+
+    <!-- Sync Status Footer (only in development/local) -->
+    {% if config.get('DEBUG') %}
+    <div id="sync-status" style="
+        position: fixed;
+        bottom: 0;
+        left: 60px;
+        right: 0;
+        height: 24px;
+        background: rgba(243, 244, 246, 0.95);
+        border-top: 1px solid #E5E7EB;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 50;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    ">
+        <div style="
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10px;
+            color: #9CA3AF;
+        ">
+            <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <span id="sync-time">...</span>
+        </div>
+    </div>
+    {% endif %}
 
     {% block extra_scripts %}{% endblock %}
 </body>
