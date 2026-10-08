@@ -1281,6 +1281,18 @@ def unarchive_monitoring(monitoring_id):
     return redirect(url_for('monitoring'))
 
 
+@app.route('/monitoring/<int:monitoring_id>/delete', methods=['POST'])
+@login_required
+def delete_monitoring(monitoring_id):
+    """Delete monitoring campaign"""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    monitoring_name = monitoring.name
+    db.session.delete(monitoring)
+    db.session.commit()
+    flash(f'Мониторинг "{monitoring_name}" удален', 'success')
+    return redirect(url_for('monitoring'))
+
+
 @app.route('/monitoring/add', methods=['POST'])
 @login_required
 def add_monitoring():

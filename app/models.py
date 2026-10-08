@@ -175,8 +175,14 @@ class MonitoringCampaign(db.Model):
     plan_visits = db.Column(db.Integer, nullable=True)  # Плановые визиты
     plan_conversions = db.Column(db.Integer, nullable=True)  # Плановые конверсии
     plan_bounce_rate = db.Column(db.Float, nullable=True)  # Плановый % отказов (например, 45.5)
-    plan_page_depth = db.Column(db.Float, nullable=True)  # Плановая глубина просмотра
+    plan_time_on_site = db.Column(db.Float, nullable=True)  # Плановое время на сайте (сек.)
+    plan_page_depth = db.Column(db.Float, nullable=True)  # Плановая глубина просмотра (стр.)
     plan_robotness = db.Column(db.Float, nullable=True)  # Плановая роботность (%)
+    plan_pi = db.Column(db.Float, nullable=True)  # Плановый PI (%)
+    plan_ivt_impressions = db.Column(db.Float, nullable=True)  # IVT показы (%)
+    plan_givt_impressions = db.Column(db.Float, nullable=True)  # GIVT показы (%)
+    plan_sivt = db.Column(db.Float, nullable=True)  # SIVT (%)
+    plan_givt_clicks = db.Column(db.Float, nullable=True)  # Клики GIVT (%)
 
     # Yandex Metrika settings
     metrika_counter_id = db.Column(db.String(50), nullable=True)  # Номер счетчика Метрики
