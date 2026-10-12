@@ -3358,7 +3358,7 @@ def copy_report(report_id):
     db.session.commit()
 
     flash(f'Создана копия отчета "{original_name}". Укажите новую ссылку на Google Sheets.', 'success')
-    return redirect(url_for('edit_report', report_id=new_report.id))
+    return redirect(url_for('reports'))
 
 
 # ==================== TEST API ENDPOINTS ====================
