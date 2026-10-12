@@ -20,33 +20,41 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 <!-- Content Body -->
 <div class="content-body">
     <!-- Toolbar -->
-    <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
-        <!-- Left: Filters -->
-        <div style="display: flex; gap: 12px; flex: 1; flex-wrap: wrap;">
-            <!-- Search -->
+    <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start;">
+        <!-- Search -->
+        <div style="flex: 1; position: relative;">
+            <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
             <input type="text"
                    id="searchInput"
                    placeholder="Поиск по названию..."
-                   onkeyup="filterMonitoring()"
-                   style="flex: 1; min-width: 200px; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
-
-            <!-- Manager Filter -->
-            <select id="managerFilter" onchange="filterMonitoring()"
-                    style="padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary); background: white; cursor: pointer;">
-                <option value="">Все менеджеры</option>
-                {% set all_managers = monitorings | map(attribute='manager') | select | unique | list %}
-                {% for manager in all_managers %}
-                    <option value="{{ manager|lower }}" {% if manager_filter and manager_filter|lower == manager|lower %}selected{% endif %}>
-                        {{ manager }}
-                    </option>
-                {% endfor %}
-                <option value="unassigned" {% if manager_filter == 'unassigned' %}selected{% endif %}>Не назначен</option>
-            </select>
+                   style="width: 100%; padding: 10px 16px 10px 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary);"
+                   onkeyup="filterMonitoring()">
         </div>
 
-        <!-- Right: Actions -->
+        <!-- Manager Filter -->
+        <select id="managerFilter" onchange="filterMonitoring()"
+                style="padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary); background: white; cursor: pointer;">
+            <option value="">Все менеджеры</option>
+            {% set all_managers = monitorings | map(attribute='manager') | select | unique | list %}
+            {% for manager in all_managers %}
+                <option value="{{ manager|lower }}" {% if manager_filter and manager_filter|lower == manager|lower %}selected{% endif %}>
+                    {{ manager }}
+                </option>
+            {% endfor %}
+            <option value="unassigned" {% if manager_filter == 'unassigned' %}selected{% endif %}>Не назначен</option>
+        </select>
+
+        <!-- Action Buttons -->
         {% if monitorings %}
-        <button onclick="openMonitoringModal()" class="btn btn-primary">
+        <button onclick="refreshAllMonitorings()" class="btn btn-primary">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Обновить все
+        </button>
+        <button onclick="openMonitoringModal()" class="btn btn-secondary">
             <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
@@ -608,7 +616,66 @@ function refreshMonitoring(monitoringId) {
         button.style.cursor = 'pointer';
     });
 }
+
+// Refresh all monitoring data
+function refreshAllMonitorings() {
+    const button = event.target.closest('button');
+    const originalHTML = button.innerHTML;
+
+    // Confirm action
+    if (!confirm('Обновить данные всех активных мониторингов? Это может занять несколько минут.')) {
+        return;
+    }
+
+    // Show loading state
+    button.innerHTML = `
+        <svg style="width: 16px; height: 16px; margin-right: 6px; animation: spin 1s linear infinite;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Обновляю...
+    `;
+    button.disabled = true;
+    button.style.opacity = '0.6';
+    button.style.cursor = 'not-allowed';
+
+    // Make API request to refresh all monitorings
+    fetch('/monitoring/refresh_all', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message and reload
+            alert(`Успешно обновлено: ${data.updated} мониторингов${data.failed > 0 ? ', ошибок: ' + data.failed : ''}`);
+            location.reload();
+        } else {
+            alert('Ошибка обновления: ' + (data.error || 'Неизвестная ошибка'));
+            button.innerHTML = originalHTML;
+            button.disabled = false;
+            button.style.opacity = '1';
+            button.style.cursor = 'pointer';
+        }
+    })
+    .catch(error => {
+        console.error('Error refreshing all monitorings:', error);
+        alert('Ошибка обновления данных. Попробуйте позже.');
+        button.innerHTML = originalHTML;
+        button.disabled = false;
+        button.style.opacity = '1';
+        button.style.cursor = 'pointer';
+    });
+}
 </script>
+
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
 
 <!-- Monitoring Modal -->
 <div id="monitoringModal" class="modal" style="display: none;" onclick="event.target === this && closeMonitoringModal()">
