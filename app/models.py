@@ -179,10 +179,25 @@ class MonitoringCampaign(db.Model):
     plan_page_depth = db.Column(db.Float, nullable=True)  # Плановая глубина просмотра (стр.)
     plan_robotness = db.Column(db.Float, nullable=True)  # Плановая роботность (%)
     plan_pi = db.Column(db.Float, nullable=True)  # Плановый PI (%)
+    plan_vtr = db.Column(db.Float, nullable=True)  # Плановый VTR (%)
     plan_ivt_impressions = db.Column(db.Float, nullable=True)  # IVT показы (%)
     plan_givt_impressions = db.Column(db.Float, nullable=True)  # GIVT показы (%)
     plan_sivt = db.Column(db.Float, nullable=True)  # SIVT (%)
     plan_givt_clicks = db.Column(db.Float, nullable=True)  # Клики GIVT (%)
+
+    # Actual data (фактические данные за вчера)
+    fact_impressions = db.Column(db.Integer, nullable=True)  # Фактические показы
+    fact_clicks = db.Column(db.Integer, nullable=True)  # Фактические клики
+    fact_visits = db.Column(db.Integer, nullable=True)  # Фактические визиты
+    fact_bounce_rate = db.Column(db.Float, nullable=True)  # Фактический % отказов
+    fact_time_on_site = db.Column(db.Float, nullable=True)  # Фактическое время на сайте (сек.)
+    fact_page_depth = db.Column(db.Float, nullable=True)  # Фактическая глубина просмотра
+    fact_robotness = db.Column(db.Float, nullable=True)  # Фактическая роботность (%)
+    fact_ivt_impressions = db.Column(db.Float, nullable=True)  # Фактический IVT показы (%)
+    fact_givt_impressions = db.Column(db.Float, nullable=True)  # Фактический GIVT показы (%)
+    fact_sivt_impressions = db.Column(db.Float, nullable=True)  # Фактический SIVT показы (%)
+    fact_givt_clicks = db.Column(db.Float, nullable=True)  # Фактический GIVT клики (%)
+    fact_vtr = db.Column(db.Float, nullable=True)  # Фактический VTR (%)
 
     # Yandex Metrika settings
     metrika_counter_id = db.Column(db.String(50), nullable=True)  # Номер счетчика Метрики
@@ -192,6 +207,7 @@ class MonitoringCampaign(db.Model):
 
     # Manager & metadata
     manager = db.Column(db.String(100), nullable=True)
+    google_sheet_url = db.Column(db.String(500), nullable=True)  # Ссылка на Google таблицу
 
     # Status
     active = db.Column(db.Boolean, default=True)
@@ -217,6 +233,191 @@ class MonitoringCampaign(db.Model):
             return 0
         delta = self.date_to - self.date_from
         return delta.days + 1  # Include both start and end dates
+
+    def get_total_days_for_calculation(self):
+        """Calculate total days for performance calculation (always +1 day)"""
+        return self.get_total_days() + 1
+
+    def get_days_left(self):
+        """Calculate days left until monitoring end date"""
+        if not self.date_to:
+            return 0
+        from datetime import datetime
+        today = datetime.now().date()
+        delta = self.date_to - today
+        return max(0, delta.days)  # Don't return negative values
+
+    def get_days_passed_until_yesterday(self):
+        """Calculate days passed from start until yesterday (for stats)"""
+        if not self.date_from:
+            return 0
+        from datetime import datetime, timedelta
+        yesterday = datetime.now().date() - timedelta(days=1)
+
+        # If campaign hasn't started yet
+        if yesterday < self.date_from:
+            return 0
+
+        # If campaign has ended
+        if self.date_to and yesterday > self.date_to:
+            return self.get_total_days()
+
+        # Normal case: count from start to yesterday
+        delta = yesterday - self.date_from
+        return delta.days + 1  # Include both start and yesterday
+
+    def get_uniform_performance_percent(self, fact_value, plan_value):
+        """
+        Calculate performance percentage with uniform daily distribution
+
+        Formula: (Fact / Expected_plan_for_passed_days) * 100%
+        Where: Expected_plan = (Total_plan / (Total_days + 1)) * Days_passed_until_yesterday
+
+        Args:
+            fact_value: Actual value (for yesterday)
+            plan_value: Total planned value for entire campaign
+
+        Returns:
+            Performance percentage or None
+        """
+        if not fact_value or not plan_value or plan_value == 0:
+            return None
+
+        total_days = self.get_total_days_for_calculation()  # Always +1 day
+        days_passed = self.get_days_passed_until_yesterday()
+
+        if total_days == 0 or days_passed == 0:
+            return None
+
+        # Expected plan for the days that have passed
+        expected_plan = (plan_value / total_days) * days_passed
+
+        if expected_plan == 0:
+            return None
+
+        # Performance percentage
+        return round((fact_value / expected_plan) * 100, 1)
+
+    def get_fact_pi(self):
+        """Calculate actual PI (Passing Index) from visits and clicks"""
+        if self.fact_clicks and self.fact_clicks > 0 and self.fact_visits:
+            return round((self.fact_visits / self.fact_clicks) * 100, 2)
+        return None
+
+    def get_fact_ctr(self):
+        """Calculate actual CTR (Click-Through Rate) from clicks and impressions"""
+        if self.fact_impressions and self.fact_impressions > 0 and self.fact_clicks:
+            return round((self.fact_clicks / self.fact_impressions) * 100, 2)
+        return None
+
+    def get_plan_ctr(self):
+        """Calculate planned CTR from plan clicks and impressions"""
+        if self.plan_impressions and self.plan_impressions > 0 and self.plan_clicks:
+            return round((self.plan_clicks / self.plan_impressions) * 100, 2)
+        return None
+
+    def is_video_format(self):
+        """Check if monitoring campaigns are video format (V or CTV)"""
+        campaigns = self.get_campaigns()
+        if not campaigns:
+            return False
+        # If any campaign is video format (V or CTV), treat as video
+        return any(c.format_type in ('V', 'CTV') for c in campaigns)
+
+    def get_format_label(self):
+        """Get VTR for video or VR for banners/TGB"""
+        return 'VTR' if self.is_video_format() else 'VR'
+
+    def get_fact_vr(self):
+        """Get actual VTR (Video Through Rate) for video formats or VR for banners"""
+        return self.fact_vtr
+
+    def get_plan_vr(self):
+        """Get planned VTR (Video Through Rate) for video formats or VR for banners"""
+        return self.plan_vtr
+
+    def get_performance_percent(self, fact_value, plan_value, inverse=False):
+        """
+        Calculate performance percentage
+
+        Args:
+            fact_value: Actual value
+            plan_value: Planned value
+            inverse: If True, better when fact < plan (for bounce rate, robotness, etc.)
+
+        Returns:
+            Performance percentage or None
+        """
+        if not fact_value or not plan_value or plan_value == 0:
+            return None
+
+        if inverse:
+            # For metrics where lower is better (bounce rate, robotness, IVT)
+            # If fact < plan, that's good (>100%)
+            # If fact > plan, that's bad (<100%)
+            return round((plan_value / fact_value) * 100, 1)
+        else:
+            # For metrics where higher is better (impressions, clicks, visits, etc.)
+            return round((fact_value / plan_value) * 100, 1)
+
+    def get_visits_diff_percent(self):
+        """Визиты: показать разницу в процентах (+26%)"""
+        if not self.fact_visits or not self.plan_visits or self.plan_visits == 0:
+            return None
+        diff_percent = ((self.fact_visits - self.plan_visits) / self.plan_visits) * 100
+        return round(diff_percent, 1)
+
+    def get_bounce_diff(self):
+        """Отказы: показать разницу со знаком < или > (<5.6 или >5.6)"""
+        if self.fact_bounce_rate is None or self.plan_bounce_rate is None:
+            return None
+        diff = self.fact_bounce_rate - self.plan_bounce_rate
+        return round(diff, 1)
+
+    def get_time_diff_seconds(self):
+        """Время: показать разницу в секундах (+15с или -15с)"""
+        if self.fact_time_on_site is None or self.plan_time_on_site is None:
+            return None
+        diff = self.fact_time_on_site - self.plan_time_on_site
+        return round(diff, 0)
+
+    def get_depth_diff(self):
+        """Глубина: показать разницу со знаком < или > (<0.4 или >0.4)"""
+        if self.fact_page_depth is None or self.plan_page_depth is None:
+            return None
+        diff = self.fact_page_depth - self.plan_page_depth
+        return round(diff, 1)
+
+    def get_robotness_diff(self):
+        """Роботность: показать разницу (-6.8 или +6.8)"""
+        if self.fact_robotness is None or self.plan_robotness is None:
+            return None
+        diff = self.fact_robotness - self.plan_robotness
+        return round(diff, 1)
+
+    def get_pi_diff_percent(self):
+        """PI: показать разницу в процентах (>25% или <25%)"""
+        fact_pi = self.get_fact_pi()
+        if fact_pi is None or self.plan_pi is None:
+            return None
+        diff = fact_pi - self.plan_pi
+        return round(diff, 1)
+
+    def get_ctr_diff(self):
+        """CTR: показать разницу (+0.06 или -0.06)"""
+        fact_ctr = self.get_fact_ctr()
+        plan_ctr = self.get_plan_ctr()
+        if fact_ctr is None or plan_ctr is None:
+            return None
+        diff = fact_ctr - plan_ctr
+        return round(diff, 2)
+
+    def get_vtr_diff(self):
+        """VTR: показать разницу (+11 или -9)"""
+        if self.fact_vtr is None or self.plan_vtr is None:
+            return None
+        diff = self.fact_vtr - self.plan_vtr
+        return round(diff, 0)
 
     def get_daily_limit_impressions(self):
         """Calculate daily impressions limit (evenly distributed)"""

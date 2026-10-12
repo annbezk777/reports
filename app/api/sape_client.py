@@ -149,6 +149,36 @@ class SapeAPIClient:
             print(f"Error getting clients: {e}")
             return None
 
+    def get_available_stat_fields(self) -> Optional[Dict]:
+        """
+        Get available fields for extended statistics
+
+        Returns:
+            dict: Available filters and fields
+        """
+        if not self.access_token:
+            if not self.authenticate():
+                return None
+
+        try:
+            response = requests.get(
+                f"{self.api_url}/statistics/filters/extended",
+                headers=self._get_headers(),
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                print(f"📋 Available stat fields: {data}")
+                return data
+            else:
+                print(f"Error getting available fields: {response.status_code}")
+                return None
+
+        except Exception as e:
+            print(f"Error getting available fields: {e}")
+            return None
+
     def get_stats(
         self,
         campaign_ids: List[int],
@@ -192,9 +222,12 @@ class SapeAPIClient:
                 ]
             }
 
-            # Add fields parameter for video campaigns to get all completion metrics
-            # SAPE API supports VAST quartiles: vastFirstQuartile, vastMidpoint, vastThirdQuartile, vastComplete
-            if include_video_metrics:
+            # Add fields parameter
+            # SAPE API supports these fields from web interface:
+            # shows, clicks, ctr, vtr, amount, visits, bounces, time, depth, robot, pi
+            if fields:
+                request_body["fields"] = fields
+            elif include_video_metrics:
                 request_body["fields"] = [
                     "shows",
                     "clicks",
@@ -206,7 +239,22 @@ class SapeAPIClient:
                     "amount"
                 ]
             else:
-                request_body["fields"] = ["shows", "clicks", "amount"]
+                # Request all available metrics including Yandex.Metrika data
+                # Field names from web interface: traffic.sape.ru/reports
+                request_body["fields"] = [
+                    "shows",                      # Показы
+                    "clicks",                     # Клики
+                    "ctr",                        # CTR
+                    "vtr",                        # VTR (%) для видео
+                    "vr",                         # VR (%) для баннеров/TGB
+                    "amount",                     # Сумма
+                    "visits",                     # Визиты (из Метрики)
+                    "avgPostclickBounceRate",     # Отказы (%) (из Метрики)
+                    "avgVisitDuration",           # Время на сайте (из Метрики)
+                    "avgPostclickPageDepth",      # Глубина (из Метрики)
+                    "avgPostclickRobot",          # % роботности (из Метрики)
+                    "passingIndex"                # PI (из Метрики)
+                ]
 
             print(f"📤 SAPE API Request:")
             print(f"   Campaign IDs: {campaign_ids}")

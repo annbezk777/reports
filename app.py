@@ -23,6 +23,8 @@ app = Flask(__name__,
            template_folder='app/templates',
            static_folder='app/static')
 app.config.from_object(Config)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 # Configure logging
 logging.basicConfig(
@@ -1143,6 +1145,10 @@ def scheduled_sync_all_accounts():
                 total_new_campaigns += result.get('campaigns_new', 0)
                 total_updated_campaigns += result.get('campaigns_updated', 0)
 
+            # Add delay between accounts to avoid rate limiting
+            import time
+            time.sleep(3)  # 3 seconds delay between each account sync
+
         logging.info(f"\n✅ SCHEDULED SYNC COMPLETED:")
         logging.info(f"   Total clients: {total_clients}")
         logging.info(f"   New campaigns: {total_new_campaigns}")
@@ -1293,9 +1299,9 @@ def delete_monitoring(monitoring_id):
     return redirect(url_for('monitoring'))
 
 
-@app.route('/monitoring/add', methods=['POST'])
+@app.route('/monitoring/create', methods=['POST'])
 @login_required
-def add_monitoring():
+def create_monitoring():
     """Create new monitoring campaign"""
     try:
         # Get form data
@@ -1313,8 +1319,18 @@ def add_monitoring():
         plan_visits = request.form.get('plan_visits')
         plan_conversions = request.form.get('plan_conversions')
         plan_bounce_rate = request.form.get('plan_bounce_rate')
+        plan_time_on_site = request.form.get('plan_time_on_site')
         plan_page_depth = request.form.get('plan_page_depth')
         plan_robotness = request.form.get('plan_robotness')
+
+        # Traffic quality & IVT
+        plan_pi = request.form.get('plan_pi')
+        plan_vtr = request.form.get('plan_vtr')
+        logger.info(f"📝 CREATE - plan_vtr from form: '{plan_vtr}' (type: {type(plan_vtr).__name__})")
+        plan_ivt = request.form.get('plan_ivt_impressions')
+        plan_givt = request.form.get('plan_givt_impressions')
+        plan_sivt = request.form.get('plan_sivt')
+        plan_givt_clicks = request.form.get('plan_givt_clicks')
 
         # Manager
         manager = request.form.get('manager')
@@ -1334,8 +1350,15 @@ def add_monitoring():
             plan_visits=int(plan_visits) if plan_visits else None,
             plan_conversions=int(plan_conversions) if plan_conversions else None,
             plan_bounce_rate=float(plan_bounce_rate) if plan_bounce_rate else None,
+            plan_time_on_site=float(plan_time_on_site) if plan_time_on_site else None,
             plan_page_depth=float(plan_page_depth) if plan_page_depth else None,
             plan_robotness=float(plan_robotness) if plan_robotness else None,
+            plan_pi=float(plan_pi) if plan_pi else None,
+            plan_vtr=int(round(float(plan_vtr))) if plan_vtr else None,
+            plan_ivt_impressions=float(plan_ivt) if plan_ivt else None,
+            plan_givt_impressions=float(plan_givt) if plan_givt else None,
+            plan_sivt=float(plan_sivt) if plan_sivt else None,
+            plan_givt_clicks=float(plan_givt_clicks) if plan_givt_clicks else None,
             manager=manager if manager else None
         )
 
@@ -1351,9 +1374,9 @@ def add_monitoring():
         return redirect(url_for('monitoring'))
 
 
-@app.route('/monitoring/<int:monitoring_id>/update', methods=['POST'])
+@app.route('/monitoring/<int:monitoring_id>/edit', methods=['POST'])
 @login_required
-def update_monitoring(monitoring_id):
+def edit_monitoring(monitoring_id):
     """Update monitoring campaign"""
     try:
         monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
@@ -1380,18 +1403,41 @@ def update_monitoring(monitoring_id):
         plan_visits = request.form.get('plan_visits')
         plan_conversions = request.form.get('plan_conversions')
         plan_bounce_rate = request.form.get('plan_bounce_rate')
+        plan_time_on_site = request.form.get('plan_time_on_site')
         plan_page_depth = request.form.get('plan_page_depth')
         plan_robotness = request.form.get('plan_robotness')
 
         monitoring.plan_visits = int(plan_visits) if plan_visits else None
         monitoring.plan_conversions = int(plan_conversions) if plan_conversions else None
         monitoring.plan_bounce_rate = float(plan_bounce_rate) if plan_bounce_rate else None
+        monitoring.plan_time_on_site = float(plan_time_on_site) if plan_time_on_site else None
         monitoring.plan_page_depth = float(plan_page_depth) if plan_page_depth else None
         monitoring.plan_robotness = float(plan_robotness) if plan_robotness else None
+
+        # Traffic quality & Fraud monitoring
+        plan_pi = request.form.get('plan_pi')
+        plan_vtr = request.form.get('plan_vtr')
+        logger.info(f"📝 EDIT - plan_vtr from form: '{plan_vtr}' (type: {type(plan_vtr).__name__})")
+        plan_ivt = request.form.get('plan_ivt_impressions')
+        plan_givt = request.form.get('plan_givt_impressions')
+        plan_sivt = request.form.get('plan_sivt')
+        plan_givt_clicks = request.form.get('plan_givt_clicks')
+
+        monitoring.plan_pi = float(plan_pi) if plan_pi else None
+        monitoring.plan_vtr = int(round(float(plan_vtr))) if plan_vtr else None
+        logger.info(f"   → Saving plan_vtr: {monitoring.plan_vtr}")
+        monitoring.plan_ivt_impressions = float(plan_ivt) if plan_ivt else None
+        monitoring.plan_givt_impressions = float(plan_givt) if plan_givt else None
+        monitoring.plan_sivt = float(plan_sivt) if plan_sivt else None
+        monitoring.plan_givt_clicks = float(plan_givt_clicks) if plan_givt_clicks else None
 
         # Manager
         manager = request.form.get('manager')
         monitoring.manager = manager if manager else None
+
+        # Google Sheet URL
+        google_sheet_url = request.form.get('google_sheet_url')
+        monitoring.google_sheet_url = google_sheet_url if google_sheet_url else None
 
         db.session.commit()
 
@@ -1402,6 +1448,54 @@ def update_monitoring(monitoring_id):
         logger.error(f"Error updating monitoring: {e}")
         flash(f'Ошибка обновления мониторинга: {str(e)}', 'error')
         return redirect(url_for('monitoring'))
+
+
+@app.route('/api/accounts/<int:account_id>/campaigns')
+@login_required
+def get_account_campaigns(account_id):
+    """API endpoint to get campaigns for an account
+
+    Query params:
+        include_ids: comma-separated list of campaign IDs to include even if inactive
+    """
+    try:
+        # Get active campaigns
+        campaigns = Campaign.query.filter_by(account_id=account_id, active=True).all()
+
+        # Get include_ids from query params
+        include_ids_param = request.args.get('include_ids', '')
+        if include_ids_param:
+            try:
+                include_ids = [int(x.strip()) for x in include_ids_param.split(',') if x.strip()]
+
+                # Get campaigns with these IDs even if inactive
+                if include_ids:
+                    additional_campaigns = Campaign.query.filter(
+                        Campaign.account_id == account_id,
+                        Campaign.id.in_(include_ids),
+                        Campaign.active == False
+                    ).all()
+
+                    # Add them to the list
+                    campaigns.extend(additional_campaigns)
+                    logger.info(f"Including {len(additional_campaigns)} inactive campaigns: {include_ids}")
+            except ValueError as e:
+                logger.warning(f"Invalid include_ids parameter: {include_ids_param}, error: {e}")
+
+        # Remove duplicates and sort by campaign_id
+        campaigns_dict = {c.id: c for c in campaigns}
+        campaigns = sorted(campaigns_dict.values(), key=lambda x: x.campaign_id, reverse=True)
+
+        return jsonify([{
+            'id': c.id,
+            'campaign_id': c.campaign_id,
+            'name': c.name,
+            'format_type': c.format_type,
+            'active': c.active
+        } for c in campaigns])
+    except Exception as e:
+        logging.error(f"Error loading campaigns for account {account_id}: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/monitoring/<int:monitoring_id>')
@@ -1423,13 +1517,223 @@ def get_monitoring_data(monitoring_id):
             'plan_visits': monitoring.plan_visits,
             'plan_conversions': monitoring.plan_conversions,
             'plan_bounce_rate': monitoring.plan_bounce_rate,
+            'plan_time_on_site': monitoring.plan_time_on_site,
             'plan_page_depth': monitoring.plan_page_depth,
             'plan_robotness': monitoring.plan_robotness,
+            'plan_pi': monitoring.plan_pi,
+            'plan_vtr': monitoring.plan_vtr,
+            'plan_ivt_impressions': monitoring.plan_ivt_impressions,
+            'plan_givt_impressions': monitoring.plan_givt_impressions,
+            'plan_sivt_impressions': monitoring.plan_sivt,  # Fix field name
+            'plan_givt_clicks': monitoring.plan_givt_clicks,
+            'metrika_counter_id': monitoring.metrika_counter_id,
+            'utm_source': monitoring.utm_source,
+            'google_sheet_url': monitoring.google_sheet_url,
             'manager': monitoring.manager
         })
     except Exception as e:
         logger.error(f"Error getting monitoring data: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/monitoring/<int:monitoring_id>/refresh', methods=['POST'])
+@login_required
+def refresh_monitoring_data(monitoring_id):
+    """Refresh actual data for monitoring from SAPE API"""
+    try:
+        monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+        # Get campaigns
+        campaigns = monitoring.get_campaigns()
+        if not campaigns:
+            return jsonify({'success': False, 'error': 'No campaigns found'}), 400
+
+        # Get account
+        account = monitoring.account
+        if not account or not account.api_token:
+            return jsonify({'success': False, 'error': 'Account not configured'}), 400
+
+        # Initialize SAPE client
+        client = SapeAPIClient(login=account.login, token=account.api_token)
+
+        if not client.authenticate():
+            return jsonify({'success': False, 'error': 'SAPE authentication failed'}), 401
+
+        # Get data from date_from to yesterday
+        from datetime import timedelta
+        yesterday = datetime.now() - timedelta(days=1)
+        date_to = min(yesterday, datetime.combine(monitoring.date_to, datetime.min.time()))
+        date_from = datetime.combine(monitoring.date_from, datetime.min.time())
+
+        # Get campaign IDs
+        campaign_ids = [int(c.campaign_id) for c in campaigns]
+
+        # First, check what fields are available in SAPE API
+        available_fields = client.get_available_stat_fields()
+        if available_fields:
+            logger.info(f"📋 Available statistic fields from SAPE API")
+
+        # Request stats with extended fields
+        # First, let's request without fields to see what's available
+        stats = client.get_stats(
+            campaign_ids=campaign_ids,
+            date_from=date_from,
+            date_to=date_to,
+            fields=None  # Request all available fields
+        )
+
+        if not stats:
+            return jsonify({'success': False, 'error': 'Failed to get stats from SAPE'}), 500
+
+        # Extract totals and log available fields
+        total = stats.get('total', {})
+        logger.info(f"📊 SAPE API Response - Available fields in 'total': {list(total.keys())}")
+        logger.info(f"📊 Full total data: {total}")
+
+        # Also check if there are per-campaign statistics with more fields
+        statistics = stats.get('statistics', [])
+        if statistics and len(statistics) > 0:
+            logger.info(f"📊 Sample statistics record fields: {list(statistics[0].keys())}")
+            logger.info(f"📊 Sample statistics record: {statistics[0]}")
+
+        # Update monitoring with actual data
+        # SAPE API field names from web interface (traffic.sape.ru/reports)
+        monitoring.fact_impressions = total.get('shows', 0)
+        monitoring.fact_clicks = total.get('clicks', 0)
+        monitoring.fact_visits = total.get('visits', 0)
+
+        # Bounce rate (%) - already in percentage format from API
+        monitoring.fact_bounce_rate = total.get('avgPostclickBounceRate', 0.0)
+
+        # Time on site (in seconds)
+        monitoring.fact_time_on_site = total.get('avgVisitDuration', 0.0)
+
+        # Page depth
+        monitoring.fact_page_depth = total.get('avgPostclickPageDepth', 0.0)
+
+        # Robotness (%)
+        monitoring.fact_robotness = total.get('avgPostclickRobot', 0.0)
+
+        # VTR/VR (%) - use 'vtr' for video formats, 'vr' for banners/TGB
+        # Check if any campaign is video format
+        is_video = monitoring.is_video_format()
+        if is_video:
+            vtr_value = total.get('vtr', 0.0)
+            monitoring.fact_vtr = int(round(vtr_value)) if vtr_value else None
+            logger.info(f"📹 Video format detected, loaded VTR: {monitoring.fact_vtr}%")
+        else:
+            vr_value = total.get('vr', 0.0)
+            monitoring.fact_vtr = int(round(vr_value)) if vr_value else None
+            logger.info(f"🎯 Banner/TGB format detected, loaded VR: {monitoring.fact_vtr}%")
+
+        monitoring.last_sync = datetime.utcnow()
+
+        db.session.commit()
+
+        logger.info(f"✅ Monitoring {monitoring_id} refreshed: {monitoring.fact_impressions:,} impressions, {monitoring.fact_clicks:,} clicks, {monitoring.fact_visits:,} visits")
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'impressions': monitoring.fact_impressions,
+                'clicks': monitoring.fact_clicks,
+                'visits': monitoring.fact_visits,
+                'bounce_rate': monitoring.fact_bounce_rate,
+                'time_on_site': monitoring.fact_time_on_site,
+                'page_depth': monitoring.fact_page_depth,
+                'robotness': monitoring.fact_robotness,
+                'vtr': monitoring.fact_vtr,
+                'last_sync': monitoring.last_sync.strftime('%d.%m.%Y в %H:%M') if monitoring.last_sync else None
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error refreshing monitoring data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/upload_adriver_excel/<int:monitoring_id>', methods=['POST'])
+@login_required
+def upload_adriver_excel(monitoring_id):
+    """Upload and parse Adriver Excel file to update monitoring IVT data"""
+    try:
+        # Get monitoring
+        monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+        # Check if file was uploaded
+        if 'excel_file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+
+        file = request.files['excel_file']
+
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+        # Check file extension
+        if not file.filename.lower().endswith(('.xlsx', '.xls')):
+            return jsonify({'success': False, 'error': 'Invalid file format. Please upload .xlsx or .xls file'}), 400
+
+        # Save file temporarily
+        import tempfile
+        temp_dir = tempfile.mkdtemp()
+        temp_file_path = os.path.join(temp_dir, file.filename)
+        file.save(temp_file_path)
+
+        logger.info(f"📤 Uploaded Adriver Excel for monitoring {monitoring_id}: {file.filename}")
+
+        try:
+            # Import parser
+            from parse_adriver_excel import AdriverExcelParser
+
+            # Parse Excel file
+            parser = AdriverExcelParser(temp_file_path)
+            ivt_data = parser.parse()
+
+            if not ivt_data:
+                return jsonify({'success': False, 'error': 'Failed to parse Excel file. Please ensure it contains IVT data.'}), 400
+
+            # Update monitoring with IVT data
+            monitoring.fact_ivt_impressions = ivt_data.get('ivt_impressions_percent', 0)
+            monitoring.fact_givt_impressions = ivt_data.get('givt_impressions_percent', 0)
+            monitoring.fact_sivt_impressions = ivt_data.get('sivt_impressions_percent', 0)
+            monitoring.fact_givt_clicks = ivt_data.get('givt_clicks_percent', 0)
+
+            # Update last sync time
+            monitoring.last_sync = datetime.utcnow()
+
+            db.session.commit()
+
+            logger.info(f"✅ Updated monitoring {monitoring_id} with Adriver IVT data:")
+            logger.info(f"   IVT показы: {monitoring.fact_ivt_impressions}%")
+            logger.info(f"   GIVT показы: {monitoring.fact_givt_impressions}%")
+            logger.info(f"   SIVT показы: {monitoring.fact_sivt_impressions}%")
+            logger.info(f"   GIVT клики: {monitoring.fact_givt_clicks}%")
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'ivt_impressions': monitoring.fact_ivt_impressions,
+                    'givt_impressions': monitoring.fact_givt_impressions,
+                    'sivt_impressions': monitoring.fact_sivt_impressions,
+                    'givt_clicks': monitoring.fact_givt_clicks
+                }
+            })
+
+        finally:
+            # Clean up temp file
+            try:
+                import shutil
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+
+    except Exception as e:
+        logger.error(f"Error uploading Adriver Excel: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ============================================================================
@@ -1710,6 +2014,40 @@ def add_report():
 
         db.session.add(report)
         db.session.commit()
+
+        # Automatically create monitoring for this report
+        try:
+            # Get account_id from first campaign
+            account_id = first_campaign.account_id
+
+            # Set monitoring name (use report name or campaign name)
+            monitoring_name = report_name if report_name else f"Мониторинг: {first_campaign.name}"
+
+            # Set dates: use today as start, +30 days as default end
+            from datetime import timedelta
+            today = datetime.now().date()
+            default_end_date = today + timedelta(days=30)
+
+            # Create monitoring
+            monitoring = MonitoringCampaign(
+                name=monitoring_name,
+                account_id=account_id,
+                campaign_ids=campaign_ids,
+                date_from=today,
+                date_to=default_end_date,
+                manager=manager,
+                google_sheet_url=google_sheet_url
+            )
+
+            db.session.add(monitoring)
+            db.session.commit()
+
+            logging.info(f"✅ Auto-created monitoring {monitoring.id} for report {report.id}")
+        except Exception as e:
+            # Don't fail report creation if monitoring creation fails
+            logging.error(f"⚠️ Failed to auto-create monitoring: {e}")
+            # Rollback monitoring creation but keep report
+            db.session.rollback()
 
         # Try to extract brand from sheet (if sheet exists and has data)
         try:
@@ -3036,6 +3374,10 @@ def scheduled_update_reports():
                     reports_updated += 1
                 else:
                     logging.error(f"❌ Failed to update report {report.id}")
+
+                # Add delay after updating a report
+                import time
+                time.sleep(2)  # 2 seconds delay after each report update
             else:
                 logging.debug(f"⏭️ Skipping report {report.id}: Time mismatch (scheduled {scheduled_hour:02d}:{scheduled_minute:02d}, current {current_hour:02d}:{current_minute:02d})")
                 reports_skipped += 1
@@ -3043,6 +3385,115 @@ def scheduled_update_reports():
         logging.info(f"\n✅ SCHEDULED REPORT UPDATE COMPLETED:")
         logging.info(f"   Reports updated: {reports_updated}")
         logging.info(f"   Reports skipped: {reports_skipped}")
+        logging.info(f"{'='*60}\n")
+
+
+def scheduled_refresh_all_monitorings():
+    """
+    Scheduled task to refresh all active monitoring campaigns
+    Runs daily at 09:00 and updates yesterday's data from SAPE API
+    """
+    with app.app_context():
+        now = datetime.now(pytz.timezone('Europe/Moscow'))
+
+        logging.info(f"\n{'='*60}")
+        logging.info(f"⏰ SCHEDULED MONITORING REFRESH - {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        logging.info(f"{'='*60}")
+
+        # Find all active monitorings (not archived)
+        active_monitorings = MonitoringCampaign.query.filter_by(archived=False).all()
+
+        if not active_monitorings:
+            logging.info("ℹ️ No active monitorings found")
+            return
+
+        logging.info(f"📋 Found {len(active_monitorings)} active monitorings")
+
+        monitorings_updated = 0
+        monitorings_failed = 0
+
+        for monitoring in active_monitorings:
+            try:
+                logging.info(f"🔄 Refreshing monitoring {monitoring.id}: {monitoring.name}")
+
+                # Get campaigns
+                campaigns = monitoring.get_campaigns()
+                if not campaigns:
+                    logging.warning(f"⚠️ No campaigns found for monitoring {monitoring.id}")
+                    monitorings_failed += 1
+                    continue
+
+                # Get account
+                account = monitoring.account
+                if not account or not account.api_token:
+                    logging.warning(f"⚠️ Account not configured for monitoring {monitoring.id}")
+                    monitorings_failed += 1
+                    continue
+
+                # Initialize SAPE client
+                client = SapeAPIClient(login=account.login, token=account.api_token)
+
+                if not client.authenticate():
+                    logging.error(f"❌ SAPE authentication failed for monitoring {monitoring.id}")
+                    monitorings_failed += 1
+                    continue
+
+                # Get data from date_from to yesterday
+                from datetime import timedelta
+                yesterday = datetime.now() - timedelta(days=1)
+                date_to = min(yesterday, datetime.combine(monitoring.date_to, datetime.min.time()))
+                date_from = datetime.combine(monitoring.date_from, datetime.min.time())
+
+                # Get campaign IDs
+                campaign_ids = [int(c.campaign_id) for c in campaigns]
+
+                # Request stats
+                stats = client.get_stats(
+                    campaign_ids=campaign_ids,
+                    date_from=date_from,
+                    date_to=date_to,
+                    fields=None
+                )
+
+                if not stats:
+                    logging.error(f"❌ Failed to get stats from SAPE for monitoring {monitoring.id}")
+                    monitorings_failed += 1
+                    continue
+
+                # Extract totals
+                total = stats.get('total', {})
+
+                # Update monitoring with actual data
+                monitoring.fact_impressions = total.get('shows', 0)
+                monitoring.fact_clicks = total.get('clicks', 0)
+                monitoring.fact_visits = total.get('visits', 0)
+                monitoring.fact_bounce_rate = total.get('avgPostclickBounceRate', 0.0)
+                monitoring.fact_time_on_site = total.get('avgVisitDuration', 0.0)
+                monitoring.fact_page_depth = total.get('avgPostclickPageDepth', 0.0)
+                monitoring.fact_robotness = total.get('avgPostclickRobot', 0.0)
+                monitoring.last_sync = datetime.utcnow()
+
+                db.session.commit()
+
+                logging.info(f"✅ Monitoring {monitoring.id} refreshed: {monitoring.fact_impressions:,} impressions, {monitoring.fact_clicks:,} clicks, {monitoring.fact_visits:,} visits")
+                monitorings_updated += 1
+
+                # Add delay between requests to avoid rate limiting
+                import time
+                time.sleep(2)  # 2 seconds delay between each monitoring update
+
+            except Exception as e:
+                logging.error(f"❌ Error refreshing monitoring {monitoring.id}: {e}")
+                monitorings_failed += 1
+                import traceback
+                traceback.print_exc()
+                # Continue with next monitoring after error
+                time.sleep(1)  # Short delay before next attempt
+                continue
+
+        logging.info(f"\n✅ SCHEDULED MONITORING REFRESH COMPLETED:")
+        logging.info(f"   Monitorings updated: {monitorings_updated}")
+        logging.info(f"   Monitorings failed: {monitorings_failed}")
         logging.info(f"{'='*60}\n")
 
 
@@ -3082,11 +3533,24 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC:
             max_instances=1  # Don't run multiple instances simultaneously
         )
 
+        # Add daily monitoring refresh at 03:00 (every day)
+        scheduler.add_job(
+            func=scheduled_refresh_all_monitorings,
+            trigger=CronTrigger(hour=3, minute=0),  # Run daily at 03:00
+            id='daily_monitoring_refresh',
+            name='Автообновление данных мониторинга',
+            replace_existing=True,
+            misfire_grace_time=3600,  # Run within 1 hour if missed
+            coalesce=True,  # Combine multiple missed runs into one
+            max_instances=1  # Don't run multiple instances simultaneously
+        )
+
         # Start scheduler
         scheduler.start()
         logging.info("✅ Scheduler started:")
         logging.info("   - Weekday account sync at 09:00 Moscow time (Mon-Fri)")
         logging.info("   - Hourly report schedule check (every hour at :00)")
+        logging.info("   - Daily monitoring refresh at 03:00 Moscow time (every day)")
 
         # Check if we need to sync on startup (if last sync was >24h ago)
         if should_sync_on_startup():
