@@ -926,35 +926,11 @@ function closeFrequencyHelp() {
 <script>
 // Initialize Select2 for account selection with search
 $(document).ready(function() {
-    console.log('Initializing Select2 for #account_id');
-
-    // Check if Select2 is loaded
-    if (typeof $.fn.select2 === 'undefined') {
-        console.error('Select2 is not loaded!');
-        return;
-    }
-
-    // Initialize Select2
     $('#account_id').select2({
         placeholder: 'Выберите аккаунт',
-        allowClear: true,
-        width: '100%',
-        minimumResultsForSearch: 0, // Always show search box
-        theme: 'default',
-        language: {
-            noResults: function() {
-                return "Аккаунт не найден";
-            },
-            searching: function() {
-                return "Поиск...";
-            },
-            inputTooShort: function() {
-                return "Введите для поиска";
-            }
-        }
+        allowClear: false,
+        width: '100%'
     });
-
-    console.log('Select2 initialized successfully');
 });
 </script>
 
