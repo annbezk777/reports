@@ -3302,6 +3302,7 @@ def archive_report(report_id):
     report = ReportConfig.query.get_or_404(report_id)
 
     report.archived = True
+    report.schedule_enabled = False
     db.session.commit()
 
     flash(f'Отчет "{report.name or report.campaign.name}" перемещен в архив', 'success')
