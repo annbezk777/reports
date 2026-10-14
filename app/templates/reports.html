@@ -14,19 +14,17 @@
     <!-- Toolbar: Tabs + Search + Filter + Actions -->
     <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: center; flex-wrap: wrap;">
         <!-- Tabs -->
-        <div>
-            <div style="display: flex; gap: 8px;">
-                {% if show_archived %}
-                    <a href="{{ url_for('reports') }}" class="tab-button">Активные</a>
-                    <span class="tab-button tab-active">Архив</span>
-                {% else %}
-                    <span class="tab-button tab-active">Активные</span>
-                    <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button">Архив</a>
-                {% endif %}
-            </div>
-            <div onclick="selectAllReports()" style="margin-top: 6px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            {% if show_archived %}
+                <a href="{{ url_for('reports') }}" class="tab-button">Активные</a>
+                <span class="tab-button tab-active">Архив</span>
+            {% else %}
+                <span class="tab-button tab-active">Активные</span>
+                <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button">Архив</a>
+            {% endif %}
+            <span onclick="selectAllReports()" style="font-size: 12px; color: var(--text-secondary); cursor: pointer;">
                 Выбрать все
-            </div>
+            </span>
         </div>
 
         <!-- Search -->
@@ -92,7 +90,7 @@
                 <div style="display: flex; gap: 16px; align-items: start;">
                     <!-- Select -->
                     <input type="checkbox" class="report-select-checkbox" data-report-id="{{ report.id }}"
-                           onchange="updateBulkBar()" style="margin-top: 3px; width: 13px; height: 13px; cursor: pointer; flex-shrink: 0;">
+                           onchange="updateBulkBar()" style="margin-top: 4px; width: 9px; height: 9px; cursor: pointer; flex-shrink: 0;">
 
                     <!-- Left: Info -->
                     <div style="flex: 1;">
