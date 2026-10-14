@@ -14,7 +14,7 @@
     <!-- Toolbar: Tabs + Search + Filter + Actions -->
     <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start; flex-wrap: wrap;">
         <!-- Tabs -->
-        <div style="display: flex; align-items: center; gap: 16px;">
+        <div>
             <div style="display: flex; gap: 8px;">
                 {% if show_archived %}
                     <a href="{{ url_for('reports') }}" class="tab-button" style="width: 90px; text-align: center; font-size: 10px;">Активные</a>
@@ -27,7 +27,7 @@
             <span onclick="selectAllReports()"
                   onmouseover="this.style.color='var(--primary-orange)'"
                   onmouseout="this.style.color='var(--text-secondary)'"
-                  style="font-size: 10px; color: var(--text-secondary); cursor: pointer;">
+                  style="display: block; width: 90px; margin-top: 6px; text-align: center; font-size: 10px; color: var(--text-secondary); cursor: pointer;">
                 Выбрать все
             </span>
         </div>
