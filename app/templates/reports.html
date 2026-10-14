@@ -17,11 +17,11 @@
         <div>
             <div style="display: flex; gap: 8px;">
                 {% if show_archived %}
-                    <a href="{{ url_for('reports') }}" class="tab-button" style="width: 90px; text-align: center;">Активные</a>
-                    <span class="tab-button tab-active" style="width: 90px; text-align: center;">Архив</span>
+                    <a href="{{ url_for('reports') }}" class="tab-button" style="width: 90px; text-align: center; font-size: 10px;">Активные</a>
+                    <span class="tab-button tab-active" style="width: 90px; text-align: center; font-size: 10px;">Архив</span>
                 {% else %}
-                    <span class="tab-button tab-active" style="width: 90px; text-align: center;">Активные</span>
-                    <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button" style="width: 90px; text-align: center;">Архив</a>
+                    <span class="tab-button tab-active" style="width: 90px; text-align: center; font-size: 10px;">Активные</span>
+                    <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button" style="width: 90px; text-align: center; font-size: 10px;">Архив</a>
                 {% endif %}
             </div>
             <span onclick="selectAllReports()"
