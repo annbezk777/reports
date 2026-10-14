@@ -1095,7 +1095,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     <!-- Campaigns Table -->
                     <div style="height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
-                        <table style="width: 100%; border-collapse: collapse;" id="formCampaignsTable">
+                        <table style="width: 100%; min-width: 820px; border-collapse: collapse;" id="formCampaignsTable">
                             <thead style="position: sticky; top: 0; background: var(--bg-light); border-bottom: 2px solid var(--border-color);">
                                 <tr>
                                     <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 40px;"></th>
@@ -1260,7 +1260,9 @@ function openReportFormModal(reportId = null) {
         form.action = `/reports/${reportId}/edit`;
         document.getElementById('reportFormId').value = reportId;
 
-        // Clear campaigns table BEFORE loading new data
+        // Show campaigns section immediately (with loading placeholder) so the
+        // modal doesn't resize once data arrives
+        document.getElementById('formCampaignsSection').style.display = 'block';
         const tbody = document.getElementById('formCampaignsList');
         if (tbody) {
             tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-secondary);">Загрузка...</td></tr>';
