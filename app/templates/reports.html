@@ -14,15 +14,20 @@
     <!-- Toolbar: Tabs + Search + Filter + Actions -->
     <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: center; flex-wrap: wrap;">
         <!-- Tabs -->
-        <div style="display: flex; align-items: center; gap: 8px;">
-            {% if show_archived %}
-                <a href="{{ url_for('reports') }}" class="tab-button">Активные</a>
-                <span class="tab-button tab-active">Архив</span>
-            {% else %}
-                <span class="tab-button tab-active">Активные</span>
-                <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button">Архив</a>
-            {% endif %}
-            <span onclick="selectAllReports()" style="font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+        <div>
+            <div style="display: flex; gap: 8px;">
+                {% if show_archived %}
+                    <a href="{{ url_for('reports') }}" class="tab-button">Активные</a>
+                    <span class="tab-button tab-active">Архив</span>
+                {% else %}
+                    <span class="tab-button tab-active">Активные</span>
+                    <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button">Архив</a>
+                {% endif %}
+            </div>
+            <span onclick="selectAllReports()"
+                  onmouseover="this.style.color='var(--primary-orange)'"
+                  onmouseout="this.style.color='var(--text-secondary)'"
+                  style="display: block; margin-top: 6px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
                 Выбрать все
             </span>
         </div>
