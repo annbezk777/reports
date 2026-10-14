@@ -14,7 +14,7 @@
     <!-- Toolbar: Tabs + Search + Filter + Actions -->
     <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start; flex-wrap: wrap;">
         <!-- Tabs -->
-        <div>
+        <div style="display: flex; align-items: center; gap: 16px;">
             <div style="display: flex; gap: 8px;">
                 {% if show_archived %}
                     <a href="{{ url_for('reports') }}" class="tab-button" style="width: 90px; text-align: center; font-size: 10px;">Активные</a>
@@ -27,7 +27,7 @@
             <span onclick="selectAllReports()"
                   onmouseover="this.style.color='var(--primary-orange)'"
                   onmouseout="this.style.color='var(--text-secondary)'"
-                  style="display: block; margin-top: 6px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                  style="font-size: 10px; color: var(--text-secondary); cursor: pointer;">
                 Выбрать все
             </span>
         </div>
@@ -63,7 +63,7 @@
         </select>
 
         <!-- Add Report Button -->
-        <button onclick="openReportFormModal()" class="btn btn-secondary">
+        <button onclick="openReportFormModal()" class="btn btn-secondary" style="font-size: 10px;">
             <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
@@ -72,14 +72,14 @@
     </div>
 
     <!-- Bulk Action Bar -->
-    <div id="bulkActionBar" style="display: none; align-items: center; gap: 12px; padding: 10px 16px; margin-bottom: 16px; background: var(--bg-light); border-radius: 8px; font-size: 13px;">
+    <div id="bulkActionBar" style="display: none; align-items: center; gap: 12px; padding: 10px 16px; margin-bottom: 16px; background: var(--bg-light); border-radius: 8px; font-size: 10px;">
         <span id="bulkSelectedCount" style="color: var(--text-secondary);"></span>
         {% if show_archived %}
-        <button onclick="bulkDeleteSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; color: #EF4444;">Удалить</button>
+        <button onclick="bulkDeleteSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px; color: #EF4444;">Удалить</button>
         {% else %}
-        <button onclick="bulkArchiveSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">В архив</button>
+        <button onclick="bulkArchiveSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">В архив</button>
         {% endif %}
-        <button onclick="clearBulkSelection()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Отмена</button>
+        <button onclick="clearBulkSelection()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">Отмена</button>
     </div>
 
     <!-- Reports Grid -->
