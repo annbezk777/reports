@@ -1387,6 +1387,9 @@ function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings
                 return;
             }
 
+            // Sort by campaign_id descending (newest first) by default
+            campaigns.sort((a, b) => parseInt(b.campaign_id) - parseInt(a.campaign_id));
+
             let html = '';
             campaigns.forEach(campaign => {
                 // Simple check: campaign.id in selectedCampaignIds (like Jinja2 version)

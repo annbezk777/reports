@@ -768,6 +768,9 @@ function refreshAllMonitorings() {
                         Выберите кампании <span class="required">*</span>
                     </label>
                     <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+                        <button type="button" onclick="openBulkMonitoringModal()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                            Добавить массово
+                        </button>
                         <button type="button" onclick="selectAllCampaigns()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
                             Выбрать все
                         </button>
@@ -890,6 +893,34 @@ function refreshAllMonitorings() {
                 <button type="submit" class="btn btn-primary">Сохранить</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Bulk Campaign IDs Modal -->
+<div id="bulkMonitoringModal" class="modal" style="display: none;" onclick="event.target === this && closeBulkMonitoringModal()">
+    <div class="modal-overlay"></div>
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 560px;">
+        <div class="modal-header">
+            <h2 style="font-size: 16px;">Массовый ввод ID кампаний</h2>
+            <button onclick="closeBulkMonitoringModal()" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 24px;">
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px;">
+                Введите ID кампаний через запятую или каждый с новой строки:
+            </p>
+            <textarea id="bulkMonitoringCampaignIds" rows="8"
+                      placeholder="Например:&#10;283672&#10;284501&#10;285302&#10;&#10;или&#10;&#10;283672, 284501, 285302"
+                      style="width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; color: var(--text-primary); resize: vertical;"></textarea>
+            <div id="bulkMonitoringIdErrors" style="display: none; margin-top: 10px; font-size: 13px; color: #EF4444;"></div>
+        </div>
+        <div style="padding: 16px 24px; border-top: 1px solid var(--border-color); display: flex; gap: 8px; justify-content: flex-end;">
+            <button type="button" onclick="closeBulkMonitoringModal()" class="btn btn-secondary">
+                Отмена
+            </button>
+            <button type="button" onclick="applyBulkMonitoringIds()" class="btn btn-primary">
+                Применить
+            </button>
+        </div>
     </div>
 </div>
 
@@ -1381,7 +1412,7 @@ function loadCampaigns(selectedIds = []) {
                 html += `
                     <tr style="border-bottom: 1px solid var(--border-color);" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='white'">
                         <td style="padding: 8px; text-align: center;">
-                            <input type="checkbox" name="campaign_ids" value="${campaign.id}" ${isChecked} onchange="handleCampaignCheckboxChange(this)">
+                            <input type="checkbox" name="campaign_ids" value="${campaign.id}" data-sape-id="${campaign.campaign_id}" ${isChecked} onchange="handleCampaignCheckboxChange(this)">
                         </td>
                         <td style="padding: 8px;">
                             <div style="font-size: 13px; color: var(--text-primary); margin-bottom: 2px;">
@@ -1403,6 +1434,65 @@ function loadCampaigns(selectedIds = []) {
 }
 
 // Select/deselect all campaigns
+function openBulkMonitoringModal() {
+    const accountId = document.getElementById('account_id').value;
+    if (!accountId) {
+        alert('⚠️ Сначала выберите аккаунт чтобы загрузить список кампаний');
+        return;
+    }
+    document.getElementById('bulkMonitoringCampaignIds').value = '';
+    document.getElementById('bulkMonitoringIdErrors').style.display = 'none';
+    document.getElementById('bulkMonitoringModal').style.display = 'flex';
+}
+
+function closeBulkMonitoringModal() {
+    document.getElementById('bulkMonitoringModal').style.display = 'none';
+}
+
+function applyBulkMonitoringIds() {
+    const bulkInput = document.getElementById('bulkMonitoringCampaignIds').value;
+    const errorDiv = document.getElementById('bulkMonitoringIdErrors');
+
+    const inputIds = bulkInput
+        .split(/[\n,]/)
+        .map(id => id.trim())
+        .filter(id => id.length > 0);
+
+    if (inputIds.length === 0) {
+        errorDiv.textContent = '⚠️ Введите ID кампаний';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    const notFoundIds = [];
+    const matchedDbIds = [];
+
+    inputIds.forEach(inputId => {
+        const checkbox = document.querySelector(`#campaignsList input[data-sape-id="${inputId}"]`);
+        if (checkbox) {
+            matchedDbIds.push(parseInt(checkbox.value));
+        } else {
+            notFoundIds.push(inputId);
+        }
+    });
+
+    if (notFoundIds.length > 0) {
+        errorDiv.innerHTML = `⚠️ Не найдены в выбранном аккаунте: ${notFoundIds.join(', ')}`;
+        errorDiv.style.display = 'block';
+    } else {
+        errorDiv.style.display = 'none';
+    }
+
+    const accountId = document.getElementById('account_id').value;
+    if (matchedDbIds.length > 0 && accountId) {
+        reloadCampaignsWithSelection(accountId, matchedDbIds);
+    }
+
+    if (matchedDbIds.length > 0 && notFoundIds.length === 0) {
+        closeBulkMonitoringModal();
+    }
+}
+
 function selectAllCampaigns() {
     const checkboxes = document.querySelectorAll('#campaignsList input[type="checkbox"]');
     checkboxes.forEach(cb => cb.checked = true);
@@ -1480,7 +1570,7 @@ function reloadCampaignsWithSelection(accountId, selectedIds) {
                 html += `
                     <tr style="border-bottom: 1px solid var(--border-color);" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='white'">
                         <td style="padding: 8px; text-align: center;">
-                            <input type="checkbox" name="campaign_ids" value="${campaign.id}" ${isChecked} onchange="handleCampaignCheckboxChange(this)">
+                            <input type="checkbox" name="campaign_ids" value="${campaign.id}" data-sape-id="${campaign.campaign_id}" ${isChecked} onchange="handleCampaignCheckboxChange(this)">
                         </td>
                         <td style="padding: 8px;">
                             <div style="font-size: 13px; color: var(--text-primary); margin-bottom: 2px;">
