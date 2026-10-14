@@ -1,5 +1,9 @@
 /* SAPE Reports Dashboard - Custom Styles */
 
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 :root {
     /* Colors from Dribbble design */
     --primary-orange: #FF8A5B;

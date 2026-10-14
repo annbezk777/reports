@@ -1082,6 +1082,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         Выберите кампании
                     </label>
                     <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+                        <button type="button" onclick="openBulkFormModal()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                            📝 Добавить массово
+                        </button>
                         <button type="button" onclick="selectAllFormCampaigns()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
                             Выбрать все
                         </button>
@@ -1207,6 +1210,37 @@ document.addEventListener('DOMContentLoaded', () => {
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Campaign IDs Modal -->
+<div id="bulkFormModal" class="modal" style="display: none;" onclick="event.target === this && closeBulkFormModal()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 560px;">
+        <div class="modal-header" style="padding: 20px 24px; border-bottom: 1px solid var(--border-color);">
+            <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                📝 Массовый ввод ID кампаний
+            </h3>
+            <button onclick="closeBulkFormModal()" style="position: absolute; right: 24px; top: 20px; background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 24px; line-height: 1;">
+                ×
+            </button>
+        </div>
+        <div class="modal-body" style="padding: 24px;">
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px;">
+                Введите ID кампаний через запятую или каждый с новой строки:
+            </p>
+            <textarea id="bulkFormCampaignIds" rows="8"
+                      placeholder="Например:&#10;283672&#10;284501&#10;285302&#10;&#10;или&#10;&#10;283672, 284501, 285302"
+                      style="width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; color: var(--text-primary); resize: vertical;"></textarea>
+            <div id="bulkFormIdErrors" style="display: none; margin-top: 10px; font-size: 13px; color: #EF4444;"></div>
+        </div>
+        <div style="padding: 16px 24px; border-top: 1px solid var(--border-color); display: flex; gap: 8px; justify-content: flex-end;">
+            <button type="button" onclick="closeBulkFormModal()" class="btn btn-secondary">
+                Отмена
+            </button>
+            <button type="button" onclick="applyBulkFormIds()" class="btn btn-primary">
+                ✓ Применить
+            </button>
         </div>
     </div>
 </div>
@@ -1340,6 +1374,7 @@ function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings
                     <tr style="border-bottom: 1px solid var(--border-color);" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='white'">
                         <td style="padding: 8px; text-align: center;">
                             <input type="checkbox" name="campaign_ids" value="${campaign.id}"
+                                   data-sape-id="${campaign.campaign_id}"
                                    ${isChecked ? 'checked' : ''}
                                    onchange="handleFormCampaignChange()">
                         </td>
@@ -1442,6 +1477,68 @@ function deselectAllFormCampaigns() {
     });
     updateFormCampaignCounter();
     sortFormCampaignsSelectedFirst();
+}
+
+function openBulkFormModal() {
+    const rows = document.querySelectorAll('#formCampaignsTable input[type="checkbox"]');
+    if (rows.length === 0) {
+        alert('⚠️ Сначала выберите аккаунт чтобы загрузить список кампаний');
+        return;
+    }
+    document.getElementById('bulkFormCampaignIds').value = '';
+    document.getElementById('bulkFormIdErrors').style.display = 'none';
+    document.getElementById('bulkFormModal').style.display = 'flex';
+}
+
+function closeBulkFormModal() {
+    document.getElementById('bulkFormModal').style.display = 'none';
+}
+
+function applyBulkFormIds() {
+    const bulkInput = document.getElementById('bulkFormCampaignIds').value;
+    const errorDiv = document.getElementById('bulkFormIdErrors');
+
+    const inputIds = bulkInput
+        .split(/[\n,]/)
+        .map(id => id.trim())
+        .filter(id => id.length > 0);
+
+    if (inputIds.length === 0) {
+        errorDiv.textContent = '⚠️ Введите ID кампаний';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    document.querySelectorAll('#formCampaignsTable input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+
+    const notFoundIds = [];
+    let foundCount = 0;
+
+    inputIds.forEach(inputId => {
+        const checkbox = document.querySelector(`#formCampaignsTable input[data-sape-id="${inputId}"]`);
+        if (checkbox) {
+            checkbox.checked = true;
+            foundCount++;
+        } else {
+            notFoundIds.push(inputId);
+        }
+    });
+
+    if (notFoundIds.length > 0) {
+        errorDiv.innerHTML = `⚠️ Не найдены в выбранном аккаунте: ${notFoundIds.join(', ')}`;
+        errorDiv.style.display = 'block';
+    } else {
+        errorDiv.style.display = 'none';
+    }
+
+    updateFormCampaignCounter();
+    sortFormCampaignsSelectedFirst();
+
+    if (foundCount > 0 && notFoundIds.length === 0) {
+        closeBulkFormModal();
+    }
 }
 
 function updateFormCampaignCounter() {
