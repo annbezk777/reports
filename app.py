@@ -1234,9 +1234,10 @@ def monitoring():
     """List of monitoring campaigns"""
     # Get manager filter from URL or session
     manager_filter = request.args.get('manager', None)
+    show_archived = request.args.get('show_archived', 'false').lower() == 'true'
 
     # Build query
-    query = MonitoringCampaign.query
+    query = MonitoringCampaign.query.filter(MonitoringCampaign.archived == show_archived)
 
     # Apply manager filter
     if manager_filter:
@@ -1245,7 +1246,6 @@ def monitoring():
         else:
             query = query.filter(MonitoringCampaign.manager == manager_filter)
 
-    # Get all monitorings (show both active and archived, filtering handled by JavaScript)
     all_monitorings = query.order_by(MonitoringCampaign.created_at.desc()).all()
 
     # Get all accounts for the form
@@ -1254,6 +1254,7 @@ def monitoring():
     return render_template('monitoring.html',
                          monitorings=all_monitorings,
                          manager_filter=manager_filter,
+                         show_archived=show_archived,
                          accounts=accounts)
 
 
@@ -1355,6 +1356,32 @@ def delete_monitoring(monitoring_id):
     db.session.commit()
     flash(f'Мониторинг "{monitoring_name}" удален', 'success')
     return redirect(url_for('monitoring'))
+
+
+@app.route('/monitoring/bulk-archive', methods=['POST'])
+@login_required
+def bulk_archive_monitorings():
+    """Archive multiple monitoring campaigns at once"""
+    monitoring_ids = (request.get_json(silent=True) or {}).get('monitoring_ids', [])
+    count = 0
+    for m in MonitoringCampaign.query.filter(MonitoringCampaign.id.in_(monitoring_ids)).all():
+        m.archived = True
+        count += 1
+    db.session.commit()
+    return jsonify({'success': True, 'count': count})
+
+
+@app.route('/monitoring/bulk-delete', methods=['POST'])
+@login_required
+def bulk_delete_monitorings():
+    """Permanently delete multiple monitoring campaigns at once"""
+    monitoring_ids = (request.get_json(silent=True) or {}).get('monitoring_ids', [])
+    count = 0
+    for m in MonitoringCampaign.query.filter(MonitoringCampaign.id.in_(monitoring_ids)).all():
+        db.session.delete(m)
+        count += 1
+    db.session.commit()
+    return jsonify({'success': True, 'count': count})
 
 
 @app.route('/monitoring/create', methods=['POST'])

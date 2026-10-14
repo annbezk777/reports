@@ -21,6 +21,25 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 <div class="content-body">
     <!-- Toolbar -->
     <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start;">
+        <!-- Tabs -->
+        <div>
+            <div style="display: flex; gap: 8px;">
+                {% if show_archived %}
+                    <a href="{{ url_for('monitoring') }}" class="tab-button" style="width: 90px; text-align: center;">Активные</a>
+                    <span class="tab-button tab-active" style="width: 90px; text-align: center;">Архив</span>
+                {% else %}
+                    <span class="tab-button tab-active" style="width: 90px; text-align: center;">Активные</span>
+                    <a href="{{ url_for('monitoring', show_archived='true') }}" class="tab-button" style="width: 90px; text-align: center;">Архив</a>
+                {% endif %}
+            </div>
+            <span onclick="selectAllMonitorings()"
+                  onmouseover="this.style.color='var(--primary-orange)'"
+                  onmouseout="this.style.color='var(--text-secondary)'"
+                  style="display: block; width: 90px; margin-top: 6px; text-align: center; font-size: 10px; color: var(--text-secondary); cursor: pointer;">
+                Выбрать все
+            </span>
+        </div>
+
         <!-- Search -->
         <div style="flex: 1; position: relative;">
             <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -63,6 +82,17 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
         {% endif %}
     </div>
 
+    <!-- Bulk Action Bar -->
+    <div id="bulkMonitoringActionBar" style="display: none; align-items: center; gap: 12px; padding: 10px 16px; margin-bottom: 16px; background: var(--bg-light); border-radius: 8px; font-size: 10px;">
+        <span id="bulkMonitoringSelectedCount" style="color: var(--text-secondary);"></span>
+        {% if show_archived %}
+        <button onclick="bulkDeleteMonitoringsSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">Удалить</button>
+        {% else %}
+        <button onclick="bulkArchiveMonitoringsSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">В архив</button>
+        {% endif %}
+        <button onclick="clearBulkMonitoringSelection()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">Отмена</button>
+    </div>
+
     <!-- Monitoring Grid -->
     <div id="monitoringGrid" style="display: grid; gap: 16px;">
         {% if monitorings %}
@@ -72,6 +102,10 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                  data-manager="{{ monitoring.manager|lower if monitoring.manager else 'unassigned' }}">
 
                 <div style="display: flex; gap: 16px; align-items: start;">
+                    <!-- Select -->
+                    <input type="checkbox" class="monitoring-select-checkbox" data-monitoring-id="{{ monitoring.id }}"
+                           onchange="updateBulkMonitoringBar()" style="margin-top: 4px; width: 9px; height: 9px; cursor: pointer; flex-shrink: 0; accent-color: var(--primary-orange);">
+
                     <!-- Left: Info -->
                     <div style="flex: 1;">
                         <!-- Title, Account, Manager & Timeline in one line -->
@@ -354,6 +388,26 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     Скопировать
                                 </a>
                                 <div class="kebab-divider"></div>
+                                {% if show_archived %}
+                                <form action="{{ url_for('unarchive_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;">
+                                    <button type="submit" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4M3 7l9 4 9-4"/>
+                                        </svg>
+                                        Восстановить
+                                    </button>
+                                </form>
+                                {% else %}
+                                <form action="{{ url_for('archive_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;">
+                                    <button type="submit" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 01-2-2V4a2 2 0 012-2h14a2 2 0 012 2v2a2 2 0 01-2 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                                        </svg>
+                                        В архив
+                                    </button>
+                                </form>
+                                {% endif %}
+                                <div class="kebab-divider"></div>
                                 <form action="{{ url_for('delete_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;" onsubmit="return confirm('Вы уверены, что хотите удалить этот мониторинг?\n\nЭто действие необратимо.');">
                                     <button type="submit" class="kebab-item kebab-item-danger" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
                                         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -385,6 +439,28 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 </div>
 
 <style>
+.tab-button {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 500;
+    text-decoration: none;
+    color: var(--text-secondary);
+    background: white;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+    cursor: pointer;
+    display: inline-block;
+}
+.tab-button:hover {
+    background: var(--bg-light);
+}
+.tab-button.tab-active {
+    background: var(--primary-orange);
+    color: white;
+    border-color: var(--primary-orange);
+}
+
 .report-card {
     background: white;
     border-radius: 12px;
@@ -565,6 +641,75 @@ function filterMonitoring() {
     });
 
     saveMonitoringFilterState();
+}
+
+// Bulk selection
+function getSelectedMonitoringIds() {
+    return Array.from(document.querySelectorAll('.monitoring-select-checkbox:checked'))
+        .map(cb => parseInt(cb.dataset.monitoringId));
+}
+
+function updateBulkMonitoringBar() {
+    const ids = getSelectedMonitoringIds();
+    const bar = document.getElementById('bulkMonitoringActionBar');
+    const countEl = document.getElementById('bulkMonitoringSelectedCount');
+    if (ids.length > 0) {
+        bar.style.display = 'flex';
+        countEl.textContent = `Выбрано: ${ids.length}`;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+function clearBulkMonitoringSelection() {
+    document.querySelectorAll('.monitoring-select-checkbox:checked').forEach(cb => cb.checked = false);
+    updateBulkMonitoringBar();
+}
+
+function selectAllMonitorings() {
+    document.querySelectorAll('.monitoring-card').forEach(card => {
+        if (card.style.display !== 'none') {
+            const cb = card.querySelector('.monitoring-select-checkbox');
+            if (cb) cb.checked = true;
+        }
+    });
+    updateBulkMonitoringBar();
+}
+
+function bulkArchiveMonitoringsSelected() {
+    const ids = getSelectedMonitoringIds();
+    if (ids.length === 0) return;
+    if (!confirm(`Переместить в архив ${ids.length} мониторинг(ов)?`)) return;
+
+    fetch('/monitoring/bulk-archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monitoring_ids: ids })
+    })
+        .then(res => res.json())
+        .then(() => window.location.reload())
+        .catch(err => {
+            console.error('Bulk archive error:', err);
+            alert('Ошибка при архивации');
+        });
+}
+
+function bulkDeleteMonitoringsSelected() {
+    const ids = getSelectedMonitoringIds();
+    if (ids.length === 0) return;
+    if (!confirm(`Удалить безвозвратно ${ids.length} мониторинг(ов)? Это действие нельзя отменить.`)) return;
+
+    fetch('/monitoring/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monitoring_ids: ids })
+    })
+        .then(res => res.json())
+        .then(() => window.location.reload())
+        .catch(err => {
+            console.error('Bulk delete error:', err);
+            alert('Ошибка при удалении');
+        });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
