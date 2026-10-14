@@ -3321,6 +3321,33 @@ def unarchive_report(report_id):
     return redirect(url_for('reports', show_archived='true'))
 
 
+@app.route('/reports/bulk-archive', methods=['POST'])
+@login_required
+def bulk_archive_reports():
+    """Archive multiple reports at once"""
+    report_ids = (request.get_json(silent=True) or {}).get('report_ids', [])
+    count = 0
+    for report in ReportConfig.query.filter(ReportConfig.id.in_(report_ids)).all():
+        report.archived = True
+        report.schedule_enabled = False
+        count += 1
+    db.session.commit()
+    return jsonify({'success': True, 'count': count})
+
+
+@app.route('/reports/bulk-delete', methods=['POST'])
+@login_required
+def bulk_delete_reports():
+    """Permanently delete multiple reports at once"""
+    report_ids = (request.get_json(silent=True) or {}).get('report_ids', [])
+    count = 0
+    for report in ReportConfig.query.filter(ReportConfig.id.in_(report_ids)).all():
+        db.session.delete(report)
+        count += 1
+    db.session.commit()
+    return jsonify({'success': True, 'count': count})
+
+
 @app.route('/reports/<int:report_id>/copy')
 def copy_report(report_id):
     """Copy a report with all settings"""

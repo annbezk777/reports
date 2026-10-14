@@ -63,6 +63,17 @@
         </button>
     </div>
 
+    <!-- Bulk Action Bar -->
+    <div id="bulkActionBar" style="display: none; align-items: center; gap: 12px; padding: 10px 16px; margin-bottom: 16px; background: var(--bg-light); border-radius: 8px; font-size: 13px;">
+        <span id="bulkSelectedCount" style="color: var(--text-secondary);"></span>
+        {% if show_archived %}
+        <button onclick="bulkDeleteSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; color: #EF4444;">Удалить</button>
+        {% else %}
+        <button onclick="bulkArchiveSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">В архив</button>
+        {% endif %}
+        <button onclick="clearBulkSelection()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Отмена</button>
+    </div>
+
     <!-- Reports Grid -->
     <div id="reportsGrid" style="display: grid; gap: 16px;">
         {% if reports %}
@@ -74,6 +85,10 @@
                  data-created-month="{{ report.created_at.strftime('%Y-%m') }}">
 
                 <div style="display: flex; gap: 16px; align-items: start;">
+                    <!-- Select -->
+                    <input type="checkbox" class="report-select-checkbox" data-report-id="{{ report.id }}"
+                           onchange="updateBulkBar()" style="margin-top: 2px; width: 16px; height: 16px; cursor: pointer; flex-shrink: 0;">
+
                     <!-- Left: Info -->
                     <div style="flex: 1;">
                         <!-- Title, Account & Manager in one line -->
@@ -894,6 +909,65 @@ function filterReports() {
     });
 
     saveReportsFilterState();
+}
+
+// Bulk selection
+function getSelectedReportIds() {
+    return Array.from(document.querySelectorAll('.report-select-checkbox:checked'))
+        .map(cb => parseInt(cb.dataset.reportId));
+}
+
+function updateBulkBar() {
+    const ids = getSelectedReportIds();
+    const bar = document.getElementById('bulkActionBar');
+    const countEl = document.getElementById('bulkSelectedCount');
+    if (ids.length > 0) {
+        bar.style.display = 'flex';
+        countEl.textContent = `Выбрано: ${ids.length}`;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+function clearBulkSelection() {
+    document.querySelectorAll('.report-select-checkbox:checked').forEach(cb => cb.checked = false);
+    updateBulkBar();
+}
+
+function bulkArchiveSelected() {
+    const ids = getSelectedReportIds();
+    if (ids.length === 0) return;
+    if (!confirm(`Переместить в архив ${ids.length} отчёт(ов)?`)) return;
+
+    fetch('/reports/bulk-archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ report_ids: ids })
+    })
+        .then(res => res.json())
+        .then(() => window.location.reload())
+        .catch(err => {
+            console.error('Bulk archive error:', err);
+            alert('Ошибка при архивации');
+        });
+}
+
+function bulkDeleteSelected() {
+    const ids = getSelectedReportIds();
+    if (ids.length === 0) return;
+    if (!confirm(`Удалить безвозвратно ${ids.length} отчёт(ов)? Это действие нельзя отменить.`)) return;
+
+    fetch('/reports/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ report_ids: ids })
+    })
+        .then(res => res.json())
+        .then(() => window.location.reload())
+        .catch(err => {
+            console.error('Bulk delete error:', err);
+            alert('Ошибка при удалении');
+        });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
