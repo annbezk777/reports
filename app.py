@@ -3684,7 +3684,22 @@ def scheduled_refresh_all_monitorings():
 import sys
 ENABLE_AUTO_SYNC = os.getenv('ENABLE_AUTO_SYNC', '0') == '1'
 
+# With multiple gunicorn workers, each worker process would otherwise start
+# its own independent scheduler, running every job redundantly in parallel
+# (e.g. hitting the SAPE API N times at once for the same report). Use a
+# non-blocking file lock so only the first worker to grab it runs the
+# scheduler; the lock is released automatically if that worker dies.
+_scheduler_lock_acquired = False
 if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC:
+    import fcntl
+    _scheduler_lock_file = open(os.path.join(os.path.dirname(__file__), '.scheduler.lock'), 'w')
+    try:
+        fcntl.flock(_scheduler_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _scheduler_lock_acquired = True
+    except (IOError, OSError):
+        logging.info("ℹ️ Scheduler already running in another worker, skipping here")
+
+if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
     try:
         scheduler = BackgroundScheduler(timezone=pytz.timezone('Europe/Moscow'))
 
