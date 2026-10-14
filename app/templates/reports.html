@@ -22,10 +22,7 @@
                 <span class="tab-button tab-active">Активные</span>
                 <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button">Архив</a>
             {% endif %}
-            <span onclick="selectAllReports()"
-                  onmouseover="this.style.color='var(--primary-orange)'"
-                  onmouseout="this.style.color='var(--text-secondary)'"
-                  style="font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+            <span onclick="selectAllReports()" style="font-size: 12px; color: var(--text-secondary); cursor: pointer;">
                 Выбрать все
             </span>
         </div>
