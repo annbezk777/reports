@@ -12,16 +12,16 @@
 <!-- Content Body -->
 <div class="content-body">
     <!-- Toolbar: Tabs + Search + Filter + Actions -->
-    <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: center; flex-wrap: wrap;">
+    <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start; flex-wrap: wrap;">
         <!-- Tabs -->
         <div>
             <div style="display: flex; gap: 8px;">
                 {% if show_archived %}
-                    <a href="{{ url_for('reports') }}" class="tab-button">Активные</a>
-                    <span class="tab-button tab-active">Архив</span>
+                    <a href="{{ url_for('reports') }}" class="tab-button" style="width: 90px; text-align: center;">Активные</a>
+                    <span class="tab-button tab-active" style="width: 90px; text-align: center;">Архив</span>
                 {% else %}
-                    <span class="tab-button tab-active">Активные</span>
-                    <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button">Архив</a>
+                    <span class="tab-button tab-active" style="width: 90px; text-align: center;">Активные</span>
+                    <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button" style="width: 90px; text-align: center;">Архив</a>
                 {% endif %}
             </div>
             <span onclick="selectAllReports()"
