@@ -48,13 +48,13 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
             <input type="text"
                    id="searchInput"
                    placeholder="Поиск по названию..."
-                   style="width: 100%; height: 38px; padding: 0 16px 0 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-primary);"
+                   style="width: 100%; height: 38px; padding: 0 16px 0 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary);"
                    onkeyup="filterMonitoring()">
         </div>
 
         <!-- Manager Filter -->
         <select id="managerFilter" onchange="filterMonitoring()"
-                style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-primary); background: white; cursor: pointer;">
+                style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
             <option value="">Все менеджеры</option>
             {% set all_managers = monitorings | map(attribute='manager') | select | unique | list %}
             {% for manager in all_managers %}
@@ -73,7 +73,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
             </svg>
             Обновить все
         </button>
-        <button onclick="openMonitoringModal()" class="btn btn-secondary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px;">
+        <button onclick="openMonitoringModal()" class="btn btn-secondary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px; color: var(--text-secondary);">
             <svg class="btn-icon" style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>

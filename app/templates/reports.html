@@ -38,13 +38,13 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
             <input type="text" id="searchInput" placeholder="Поиск по названию, бренду, менеджеру..."
-                   style="width: 100%; height: 38px; padding: 0 16px 0 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-primary);"
+                   style="width: 100%; height: 38px; padding: 0 16px 0 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary);"
                    oninput="searchReports()">
         </div>
 
         <!-- Month Filter -->
         <select id="monthFilter" onchange="filterReports()"
-                style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-primary); background: white; cursor: pointer;">
+                style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
             <option value="">Все месяцы</option>
             {% for month_year in months_list %}
                 <option value="{{ month_year }}">{{ (month_year ~ '-01')|format_month }}</option>
@@ -53,7 +53,7 @@
 
         <!-- Manager Filter -->
         <select id="managerFilter" onchange="filterReports()"
-                style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-primary); background: white; cursor: pointer;">
+                style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
             <option value="">Все менеджеры</option>
             <option value="Даня">Даня</option>
             <option value="Саша">Саша</option>
@@ -63,7 +63,7 @@
         </select>
 
         <!-- Add Report Button -->
-        <button onclick="openReportFormModal()" class="btn btn-secondary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px;">
+        <button onclick="openReportFormModal()" class="btn btn-secondary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px; color: var(--text-secondary);">
             <svg class="btn-icon" style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
