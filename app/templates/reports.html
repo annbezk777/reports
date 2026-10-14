@@ -1199,8 +1199,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 <!-- Schedule -->
                 <div style="margin-bottom: 24px; padding: 20px; background: var(--bg-light); border-radius: 8px;">
-                    <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 16px 0;">
+                    <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 16px 0; display: flex; align-items: center; gap: 10px;">
                         Расписание обновления
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer;">
+                            <input type="checkbox" id="formScheduleEnabled" name="schedule_enabled" value="1" checked>
+                            Включено
+                        </label>
                     </h4>
                     <div style="display: flex; gap: 24px; align-items: flex-start;">
                         <!-- Days -->
@@ -1325,6 +1329,9 @@ function openReportFormModal(reportId = null) {
                 if (data.google_sheet_url) {
                     loadFormWorksheets(data.worksheet_name);
                 }
+
+                // Set schedule enabled checkbox
+                document.getElementById('formScheduleEnabled').checked = !!data.schedule_enabled;
 
                 // Set schedule days
                 if (data.schedule_days) {

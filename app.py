@@ -1993,6 +1993,7 @@ def get_report_data(report_id):
             'worksheet_name': report.worksheet_name,
             'schedule_days': report.schedule_days,
             'schedule_time': report.schedule_time,
+            'schedule_enabled': report.schedule_enabled,
         })
     except Exception as e:
         logger.error(f"Error getting report data: {e}")
@@ -2185,7 +2186,7 @@ def add_report():
             frequency_variance=0.1,  # DEPRECATED: Default value for backward compatibility
             schedule_days=schedule_days,
             schedule_time=schedule_time,
-            schedule_enabled=True,
+            schedule_enabled=request.form.get('schedule_enabled') == '1',
             manager=manager
         )
 
@@ -3157,6 +3158,7 @@ def edit_report(report_id):
         # Schedule
         schedule_days = request.form.get('schedule_days')
         schedule_time = request.form.get('schedule_time')
+        report.schedule_enabled = request.form.get('schedule_enabled') == '1'
 
         # Update basic info
         url_changed = google_sheet_url and google_sheet_url != report.google_sheet_url
@@ -3540,8 +3542,8 @@ def scheduled_update_reports():
                 reports_skipped += 1
                 continue
 
-            # Check if current time matches scheduled time (within 1 hour window)
-            if current_hour == scheduled_hour and (0 <= current_minute - scheduled_minute < 60):
+            # Check if current time matches scheduled time exactly (job runs every minute)
+            if current_hour == scheduled_hour and current_minute == scheduled_minute:
                 logging.info(f"✅ Matched schedule for report {report.id} ({report.name or 'Unnamed'})")
                 logging.info(f"   Scheduled: {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][current_day-1]} {scheduled_hour:02d}:{scheduled_minute:02d}")
 
@@ -3698,14 +3700,15 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC:
             max_instances=1  # Don't run multiple instances simultaneously
         )
 
-        # Add hourly report update check (runs every hour to check scheduled reports)
+        # Add report update check (runs every minute so staggered schedule_time
+        # values, e.g. 09:03/09:07/09:11, actually get matched and triggered)
         scheduler.add_job(
             func=scheduled_update_reports,
-            trigger=CronTrigger(minute=0),  # Run at the start of every hour
+            trigger=CronTrigger(minute='*'),  # Run every minute
             id='hourly_reports_check',
             name='Проверка расписания обновления отчетов',
             replace_existing=True,
-            misfire_grace_time=3600,  # Run within 1 hour if missed
+            misfire_grace_time=60,
             coalesce=True,  # Combine multiple missed runs into one
             max_instances=1  # Don't run multiple instances simultaneously
         )
