@@ -528,6 +528,27 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 
 <script>
 // Filter function
+const MONITORING_FILTER_STORAGE_KEY = 'monitoringFilterState';
+
+function saveMonitoringFilterState() {
+    sessionStorage.setItem(MONITORING_FILTER_STORAGE_KEY, JSON.stringify({
+        search: document.getElementById('searchInput').value,
+        manager: document.getElementById('managerFilter').value
+    }));
+}
+
+function restoreMonitoringFilterState() {
+    const raw = sessionStorage.getItem(MONITORING_FILTER_STORAGE_KEY);
+    if (!raw) return;
+    try {
+        const state = JSON.parse(raw);
+        if (state.search) document.getElementById('searchInput').value = state.search;
+        if (state.manager) document.getElementById('managerFilter').value = state.manager;
+    } catch (e) {
+        console.error('Error restoring filter state:', e);
+    }
+}
+
 function filterMonitoring() {
     const searchValue = document.getElementById('searchInput').value.toLowerCase();
     const managerValue = document.getElementById('managerFilter').value.toLowerCase();
@@ -542,7 +563,14 @@ function filterMonitoring() {
 
         card.style.display = (matchesSearch && matchesManager) ? '' : 'none';
     });
+
+    saveMonitoringFilterState();
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    restoreMonitoringFilterState();
+    filterMonitoring();
+});
 
 // Kebab menu toggle
 function toggleMonitoringKebab(event, monitoringId) {

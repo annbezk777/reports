@@ -847,6 +847,29 @@ function toggleCampaigns(event, reportId) {
 }
 
 // Search & Filter
+const REPORTS_FILTER_STORAGE_KEY = 'reportsFilterState';
+
+function saveReportsFilterState() {
+    sessionStorage.setItem(REPORTS_FILTER_STORAGE_KEY, JSON.stringify({
+        search: document.getElementById('searchInput').value,
+        month: document.getElementById('monthFilter').value,
+        manager: document.getElementById('managerFilter').value
+    }));
+}
+
+function restoreReportsFilterState() {
+    const raw = sessionStorage.getItem(REPORTS_FILTER_STORAGE_KEY);
+    if (!raw) return;
+    try {
+        const state = JSON.parse(raw);
+        if (state.search) document.getElementById('searchInput').value = state.search;
+        if (state.month) document.getElementById('monthFilter').value = state.month;
+        if (state.manager) document.getElementById('managerFilter').value = state.manager;
+    } catch (e) {
+        console.error('Error restoring filter state:', e);
+    }
+}
+
 function searchReports() {
     filterReports();
 }
@@ -869,7 +892,14 @@ function filterReports() {
 
         card.style.display = (matchesSearch && matchesMonth && matchesManager) ? '' : 'none';
     });
+
+    saveReportsFilterState();
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    restoreReportsFilterState();
+    filterReports();
+});
 
 function openDatePickerModal(reportId, reportName) {
     // Set report info
