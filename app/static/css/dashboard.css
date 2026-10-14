@@ -189,7 +189,7 @@ body:has(.sidebar.collapsed) .sidebar-toggle {
 }
 
 .content-body {
-    padding: 32px 20px;
+    padding: 24px;
 }
 
 /* Metric Cards */
@@ -250,7 +250,6 @@ body:has(.sidebar.collapsed) .sidebar-toggle {
     border-radius: 8px;
     font-weight: 500;
     font-size: 14px;
-    border: none;
     cursor: pointer;
     transition: all 0.2s;
     display: inline-flex;
@@ -262,6 +261,7 @@ body:has(.sidebar.collapsed) .sidebar-toggle {
 .btn-primary {
     background: linear-gradient(135deg, var(--primary-orange), var(--secondary-orange));
     color: white;
+    border: none;
 }
 
 .btn-primary:hover {

@@ -347,6 +347,13 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     Adriver .xlsx
                                 </button>
                                 <div class="kebab-divider"></div>
+                                <a href="{{ url_for('copy_monitoring', monitoring_id=monitoring.id) }}" class="kebab-item" onclick="return confirm('Создать копию мониторинга?')" style="width: 100%; text-align: left; text-decoration: none; color: inherit; display: flex; align-items: center; gap: 12px;">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                    </svg>
+                                    Скопировать
+                                </a>
+                                <div class="kebab-divider"></div>
                                 <form action="{{ url_for('delete_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;" onsubmit="return confirm('Вы уверены, что хотите удалить этот мониторинг?\n\nЭто действие необратимо.');">
                                     <button type="submit" class="kebab-item kebab-item-danger" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
                                         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -914,7 +921,7 @@ function refreshAllMonitorings() {
     width: 100%;
     height: 100%;
     z-index: 9999;
-    display: flex;
+    /* display: flex moved to inline style via JS */
     align-items: center;
     justify-content: center;
 }

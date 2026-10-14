@@ -1287,6 +1287,64 @@ def unarchive_monitoring(monitoring_id):
     return redirect(url_for('monitoring'))
 
 
+@app.route('/monitoring/<int:monitoring_id>/copy')
+@login_required
+def copy_monitoring(monitoring_id):
+    """Copy monitoring campaign with all settings"""
+    original = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+    # Create a copy with all plan settings, but reset fact data
+    new_monitoring = MonitoringCampaign(
+        name=f"{original.name} (копия)",
+        account_id=original.account_id,
+        campaign_ids=original.campaign_ids,
+        date_from=original.date_from,
+        date_to=original.date_to,
+        plan_impressions=original.plan_impressions,
+        plan_clicks=original.plan_clicks,
+        plan_visits=original.plan_visits,
+        plan_conversions=original.plan_conversions,
+        plan_bounce_rate=original.plan_bounce_rate,
+        plan_page_depth=original.plan_page_depth,
+        plan_robotness=original.plan_robotness,
+        plan_time_on_site=original.plan_time_on_site,
+        plan_pi=original.plan_pi,
+        plan_ivt_impressions=original.plan_ivt_impressions,
+        plan_givt_impressions=original.plan_givt_impressions,
+        plan_sivt=original.plan_sivt,
+        plan_givt_clicks=original.plan_givt_clicks,
+        plan_vtr=original.plan_vtr,
+        metrika_counter_id=original.metrika_counter_id,
+        metrika_goal_id=original.metrika_goal_id,
+        utm_source=original.utm_source,
+        utm_campaign=original.utm_campaign,
+        manager=original.manager,
+        google_sheet_url=original.google_sheet_url,
+        # Reset all fact data
+        fact_impressions=None,
+        fact_clicks=None,
+        fact_visits=None,
+        fact_bounce_rate=None,
+        fact_time_on_site=None,
+        fact_page_depth=None,
+        fact_robotness=None,
+        fact_ivt_impressions=None,
+        fact_givt_impressions=None,
+        fact_sivt_impressions=None,
+        fact_givt_clicks=None,
+        fact_vtr=None,
+        last_sync=None,
+        active=True,
+        archived=False
+    )
+
+    db.session.add(new_monitoring)
+    db.session.commit()
+
+    flash(f'Создана копия мониторинга "{original.name}".', 'success')
+    return redirect(url_for('monitoring'))
+
+
 @app.route('/monitoring/<int:monitoring_id>/delete', methods=['POST'])
 @login_required
 def delete_monitoring(monitoring_id):
@@ -3300,7 +3358,7 @@ def copy_report(report_id):
     db.session.commit()
 
     flash(f'Создана копия отчета "{original_name}". Укажите новую ссылку на Google Sheets.', 'success')
-    return redirect(url_for('edit_report', report_id=new_report.id))
+    return redirect(url_for('reports'))
 
 
 # ==================== TEST API ENDPOINTS ====================
