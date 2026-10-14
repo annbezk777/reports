@@ -36,6 +36,11 @@ body {
     padding: 0;
 }
 
+/* Form controls don't inherit font-family from body by default */
+input, select, textarea, button {
+    font-family: inherit;
+}
+
 /* Sidebar Styles */
 .sidebar {
     position: fixed;
