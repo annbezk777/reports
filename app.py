@@ -80,6 +80,12 @@ def format_month(date_string):
         return date_string
 
 
+@app.template_filter('to_moscow')
+def to_moscow(dt):
+    """Convert a naive UTC datetime (stored via datetime.utcnow()) to Moscow time for display"""
+    if not dt:
+        return dt
+    return pytz.utc.localize(dt).astimezone(pytz.timezone('Europe/Moscow'))
 
 
 
@@ -1858,6 +1864,120 @@ def refresh_all_monitorings():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def parse_asana_paste(text):
+    """
+    Parse the raw copy-pasted task fields from Asana's task detail pane.
+    Fields appear as alternating label/value lines (with occasional blank
+    lines), e.g.:
+        показы
+        7562000;0;0
+
+        Формат
+        Видео
+
+    Fields like "показы"/"клики" hold three semicolon-separated values,
+    one slot per ad format (Видео, Баннер, ТГБ) - only the slot matching
+    the task's own "Формат" field is meaningful, the rest are 0/unused.
+    """
+    FORMAT_INDEX = {'видео': 0, 'баннер': 1, 'тгб': 2}
+    LIST_LABELS = {'показы': 'impressions', 'клики': 'clicks'}
+    SINGLE_LABELS = {
+        'vtr': 'vtr',
+        'pi': 'pi',
+        'отказы': 'bounce',
+        'время': 'time',
+        'глубина': 'depth',
+        'роботность': 'robotness',
+    }
+
+    lines = [l.strip() for l in text.split('\n')]
+    raw = {}
+    i = 0
+    while i < len(lines):
+        label = lines[i].lower()
+        if label == 'формат' or label in LIST_LABELS or label in SINGLE_LABELS:
+            j = i + 1
+            while j < len(lines) and lines[j] == '':
+                j += 1
+            if j < len(lines):
+                raw[label] = lines[j]
+            i = j + 1
+        else:
+            i += 1
+
+    result = {}
+    fmt_idx = FORMAT_INDEX.get(raw.get('формат', '').strip().lower())
+    result['format'] = raw.get('формат', '')
+
+    for label, key in LIST_LABELS.items():
+        value = raw.get(label)
+        if value and fmt_idx is not None:
+            parts = [p.strip() for p in value.split(';')]
+            if fmt_idx < len(parts):
+                try:
+                    result[key] = float(parts[fmt_idx].replace(',', '.'))
+                except ValueError:
+                    pass
+
+    for label, key in SINGLE_LABELS.items():
+        value = raw.get(label)
+        if value:
+            try:
+                result[key] = float(value.replace(',', '.'))
+            except ValueError:
+                pass
+
+    return result
+
+
+@app.route('/monitoring/<int:monitoring_id>/import-asana-paste', methods=['POST'])
+@login_required
+def import_asana_paste(monitoring_id):
+    """Parse pasted Asana task fields and update this monitoring's plan values"""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    text = (request.get_json(silent=True) or {}).get('text', '')
+
+    if not text.strip():
+        return jsonify({'success': False, 'error': 'Пустой текст'}), 400
+
+    parsed = parse_asana_paste(text)
+
+    if 'impressions' not in parsed and 'clicks' not in parsed and 'vtr' not in parsed:
+        return jsonify({'success': False, 'error': 'Не удалось распознать поля. Проверьте, что скопирован весь блок с полями задачи.'}), 400
+
+    updated_fields = []
+    if 'impressions' in parsed:
+        monitoring.plan_impressions = int(parsed['impressions'])
+        updated_fields.append('показы')
+    if 'clicks' in parsed:
+        monitoring.plan_clicks = int(parsed['clicks'])
+        updated_fields.append('клики')
+    if 'vtr' in parsed:
+        monitoring.plan_vtr = parsed['vtr']
+        updated_fields.append('VTR')
+    if 'pi' in parsed:
+        monitoring.plan_pi = parsed['pi']
+        updated_fields.append('PI')
+    if 'bounce' in parsed:
+        monitoring.plan_bounce_rate = parsed['bounce']
+        updated_fields.append('отказы')
+    if 'time' in parsed:
+        monitoring.plan_time_on_site = parsed['time']
+        updated_fields.append('время')
+    if 'depth' in parsed:
+        monitoring.plan_page_depth = parsed['depth']
+        updated_fields.append('глубина')
+    if 'robotness' in parsed:
+        monitoring.plan_robotness = parsed['robotness']
+        updated_fields.append('роботность')
+
+    db.session.commit()
+
+    logger.info(f"✅ Imported Asana paste data for monitoring {monitoring_id}: {updated_fields}")
+
+    return jsonify({'success': True, 'updated_fields': updated_fields, 'format': parsed.get('format', '')})
+
+
 @app.route('/upload_adriver_excel/<int:monitoring_id>', methods=['POST'])
 @login_required
 def upload_adriver_excel(monitoring_id):
@@ -3468,67 +3588,50 @@ def init_db():
 
 # ==================== SCHEDULED REPORTS ====================
 
+def get_next_report_update_date(report):
+    """
+    Determine which single day the scheduler should write next: the day
+    right after report.last_update (our own system's record of when this
+    report was last successfully updated, from either a manual run or a
+    scheduled one). This is what makes scheduled updates incremental -
+    one new day per run - instead of re-writing the whole period.
+
+    Falls back to yesterday if the report has never been updated.
+    """
+    from datetime import timedelta
+    fallback = datetime.now() - timedelta(days=1)
+
+    if report.last_update:
+        return report.last_update + timedelta(days=1)
+
+    return fallback
+
+
 def run_report_update(report, date_from=None, date_to=None):
     """
-    Run report update programmatically (for scheduled updates)
-    This is a helper function that runs the report update logic without Flask request context
+    Run report update programmatically (for scheduled updates).
+
+    Writes exactly one day of data per run - the day after whatever the
+    sheet's last filled date is - so repeated runs never re-write
+    existing rows. Delegates to run_report_old's write logic (the same
+    code path as the manual "Обновить сейчас" button) instead of
+    duplicating the multi-section detection/write logic here.
     """
     try:
-        logging.info(f"🔄 Updating report: {report.name or 'Unnamed'} (ID: {report.id})")
-
-        # Get all campaigns for this report
-        campaigns = Campaign.query.filter(Campaign.id.in_(report.campaign_ids)).all()
-        if not campaigns:
-            logging.warning(f"⚠️ No campaigns found for report {report.id}")
-            return False
-
-        # Get account from first campaign
-        account = campaigns[0].account
-
-        # Initialize SAPE client
-        sape_client = SapeAPIClient(login=account.login, token=account.api_token)
-
-        if not sape_client.authenticate():
-            logging.error(f"❌ SAPE authentication failed for report {report.id}")
-            return False
-
-        # Use provided dates or default to current month (from 1st to yesterday)
         if not date_from or not date_to:
-            from datetime import timedelta
-            now = datetime.now()
-            date_to = now - timedelta(days=1)  # Yesterday
-            date_from = datetime(now.year, now.month, 1)  # First day of current month
+            target_date = get_next_report_update_date(report)
+            date_from = date_to = target_date
 
-        # Initialize Google Sheets client
-        gs_client = GoogleSheetsClient(
-            credentials_file=app.config['GOOGLE_CREDENTIALS_FILE'],
-            scopes=app.config['GOOGLE_SCOPES']
-        )
+        logging.info(f"🔄 Scheduled update for report {report.id} ({report.name or 'Unnamed'}): {date_from.strftime('%Y-%m-%d')}")
 
-        # Determine report mode and call appropriate update logic
-        # (This is a simplified version - you may need to adapt based on report type)
+        date_from_str = date_from.strftime('%Y-%m-%d')
+        date_to_str = date_to.strftime('%Y-%m-%d')
+        with app.test_request_context(
+            f'/reports/{report.id}/run-old?date_from={date_from_str}&date_to={date_to_str}'
+        ):
+            run_report_old(report.id)
 
-        # For now, we'll use a simple daily stats update for all campaigns
-        total_impressions = 0
-        total_clicks = 0
-
-        for campaign in campaigns:
-            daily_data = sape_client.get_daily_stats(
-                campaign_ids=[int(campaign.campaign_id)],
-                date_from=date_from,
-                date_to=date_to,
-                include_video_metrics=(campaign.format_type in ['V', 'CTV'])
-            )
-
-            if daily_data:
-                total_impressions += sum(d['impressions'] for d in daily_data)
-                total_clicks += sum(d['clicks'] for d in daily_data)
-
-        # Update report timestamp
-        report.last_update = datetime.utcnow()
-        db.session.commit()
-
-        logging.info(f"✅ Report {report.id} updated successfully. Impressions: {total_impressions:,}, Clicks: {total_clicks:,}")
+        logging.info(f"✅ Scheduled update completed for report {report.id}")
         return True
 
     except Exception as e:

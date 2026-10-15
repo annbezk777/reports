@@ -156,7 +156,7 @@
                                 {{ activity.report_name }}
                             </div>
                             <div style="font-size: 13px; color: var(--text-secondary);">
-                                Обновлен {{ activity.last_update.strftime('%d.%m.%Y в %H:%M') }}
+                                Обновлен {{ (activity.last_update|to_moscow).strftime('%d.%m.%Y в %H:%M') }}
                                 {% if activity.status == 'success' %}
                                     <span class="badge badge-success" style="margin-left: 8px;">Успешно</span>
                                 {% endif %}

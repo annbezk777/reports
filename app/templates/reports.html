@@ -214,7 +214,7 @@
                                 <!-- Last Update (right) -->
                                 <span style="font-size: 11px; color: var(--text-secondary); white-space: nowrap;">
                                     {% if report.last_update %}
-                                        Обновлено: {{ report.last_update.strftime('%d.%m.%Y в %H:%M') }}
+                                        Обновлено: {{ (report.last_update|to_moscow).strftime('%d.%m.%Y в %H:%M') }}
                                     {% else %}
                                         Еще не обновлялся
                                     {% endif %}

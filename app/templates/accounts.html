@@ -120,7 +120,7 @@
                         <td>
                             {% if account.last_sync %}
                                 <span class="sync-time" data-timestamp="{{ account.last_sync.timestamp() }}">
-                                    {{ account.last_sync.strftime('%d.%m.%Y %H:%M') }}
+                                    {{ (account.last_sync|to_moscow).strftime('%d.%m.%Y %H:%M') }}
                                 </span>
                             {% else %}
                                 <span style="color: var(--text-light); font-size: 13px;">Не синхронизирован</span>

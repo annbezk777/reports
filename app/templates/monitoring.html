@@ -340,7 +340,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                             <div style="display: flex; align-items: center; gap: 6px;">
                                 {% if monitoring.last_sync %}
                                 <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10b981; flex-shrink: 0;"></span>
-                                <span>Данные обновлены: <strong style="color: #1c1917;">{{ monitoring.last_sync.strftime('%d.%m.%Y в %H:%M') }}</strong></span>
+                                <span>Данные обновлены: <strong style="color: #1c1917;">{{ (monitoring.last_sync|to_moscow).strftime('%d.%m.%Y в %H:%M') }}</strong></span>
                                 {% else %}
                                 <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #d6d3d1; flex-shrink: 0;"></span>
                                 <span>Данные пока не подгружены по API</span>
@@ -379,6 +379,12 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                                     </svg>
                                     Adriver .xlsx
+                                </button>
+                                <button onclick="openAsanaPasteModal({{ monitoring.id }}, '{{ monitoring.name }}')" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                    Вставить из Asana
                                 </button>
                                 <div class="kebab-divider"></div>
                                 <a href="{{ url_for('copy_monitoring', monitoring_id=monitoring.id) }}" class="kebab-item" onclick="return confirm('Создать копию мониторинга?')" style="width: 100%; text-align: left; text-decoration: none; color: inherit; display: flex; align-items: center; gap: 12px;">
@@ -1116,6 +1122,37 @@ function refreshAllMonitorings() {
     </div>
 </div>
 
+<!-- Asana Paste Modal -->
+<div id="asanaPasteModal" class="modal" style="display: none;" onclick="event.target === this && closeAsanaPasteModal()">
+    <div class="modal-overlay"></div>
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 560px;">
+        <div class="modal-header">
+            <h2>Вставить из Asana</h2>
+            <button onclick="closeAsanaPasteModal()" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label style="font-size: 14px; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px; display: block;">
+                    Мониторинг
+                </label>
+                <div id="asanaPasteMonitoringName" style="padding: 10px 12px; background: var(--bg-light); border-radius: 8px; font-size: 14px; color: var(--text-primary); font-weight: 500;"></div>
+            </div>
+            <div class="form-group" style="margin-top: 16px;">
+                <label style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px; display: block;">
+                    Скопируйте и вставьте сюда поля из задачи Asana
+                </label>
+                <textarea id="asanaPasteText" rows="12" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; color: var(--text-primary); font-family: monospace; resize: vertical;" placeholder="Формат&#10;Видео&#10;показы&#10;7562000;0;0&#10;..."></textarea>
+            </div>
+            <div id="asanaPasteError" style="display: none; margin-top: 10px; font-size: 13px; color: #EF4444;"></div>
+            <div id="asanaPasteSuccess" style="display: none; margin-top: 10px; font-size: 13px; color: #10B981;"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" onclick="closeAsanaPasteModal()" class="btn btn-secondary">Отмена</button>
+            <button type="button" onclick="submitAsanaPaste()" class="btn btn-primary">Применить</button>
+        </div>
+    </div>
+</div>
+
 <style>
 /* Modal styles */
 .modal {
@@ -1428,6 +1465,59 @@ function closeUploadModal() {
     const modal = document.getElementById('uploadModal');
     modal.style.display = 'none';
     document.body.style.overflow = '';
+}
+
+let currentAsanaPasteMonitoringId = null;
+
+function openAsanaPasteModal(monitoringId, monitoringName) {
+    currentAsanaPasteMonitoringId = monitoringId;
+    document.getElementById('asanaPasteMonitoringName').textContent = monitoringName;
+    document.getElementById('asanaPasteText').value = '';
+    document.getElementById('asanaPasteError').style.display = 'none';
+    document.getElementById('asanaPasteSuccess').style.display = 'none';
+    document.getElementById('asanaPasteModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAsanaPasteModal() {
+    document.getElementById('asanaPasteModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function submitAsanaPaste() {
+    const text = document.getElementById('asanaPasteText').value;
+    const errorDiv = document.getElementById('asanaPasteError');
+    const successDiv = document.getElementById('asanaPasteSuccess');
+    errorDiv.style.display = 'none';
+    successDiv.style.display = 'none';
+
+    if (!text.trim()) {
+        errorDiv.textContent = 'Вставьте скопированный текст из задачи';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    fetch(`/monitoring/${currentAsanaPasteMonitoringId}/import-asana-paste`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                successDiv.textContent = `Обновлено (${data.format}): ${data.updated_fields.join(', ')}`;
+                successDiv.style.display = 'block';
+                setTimeout(() => window.location.reload(), 1200);
+            } else {
+                errorDiv.textContent = data.error || 'Не удалось распознать данные';
+                errorDiv.style.display = 'block';
+            }
+        })
+        .catch(err => {
+            console.error('Asana paste import error:', err);
+            errorDiv.textContent = 'Ошибка при отправке';
+            errorDiv.style.display = 'block';
+        });
 }
 
 // Handle upload form submission
