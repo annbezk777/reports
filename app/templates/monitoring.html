@@ -116,6 +116,17 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     {{ monitoring.name }}
                                 </h3>
 
+                                {% if monitoring.asana_kpi_comment %}
+                                <span class="kpi-info-icon">
+                                    <svg width="14" height="14" fill="none" stroke="#f59e0b" stroke-width="2" viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="12" y1="11" x2="12" y2="16"></line>
+                                        <circle cx="12" cy="8" r="0.5" fill="#f59e0b"></circle>
+                                    </svg>
+                                    <span class="kpi-tooltip">{{ monitoring.asana_kpi_comment }}</span>
+                                </span>
+                                {% endif %}
+
                                 <span style="color: #D1D5DB;">•</span>
 
                                 <!-- Account -->
@@ -259,14 +270,8 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         {% set ctr_diff = monitoring.get_ctr_diff() %}
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if ctr_diff is not none %}color: {% if ctr_diff > 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % ctr_diff) if ctr_diff > 0 else ('%.2f' % ctr_diff)) if ctr_diff is not none else '—' }}</td>
 
-                                        {% set visits_diff = monitoring.get_visits_diff_percent() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if visits_diff is not none %}color: {% if visits_diff > 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">
-                                            {% if visits_diff is not none %}
-                                                {{ ('+%.1f%%' % visits_diff) if visits_diff > 0 else ('%.1f%%' % visits_diff) }}
-                                            {% else %}
-                                                —
-                                            {% endif %}
-                                        </td>
+                                        {% set perf_visits = monitoring.get_uniform_performance_percent(monitoring.fact_visits, monitoring.plan_visits) %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if perf_visits %}color: {% if perf_visits >= 100 %}#16a34a{% elif perf_visits >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_visits) if perf_visits else '—' }}</td>
 
                                         {% set vtr_diff = monitoring.get_vtr_diff() %}
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if vtr_diff is not none %}color: {% if vtr_diff > 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0f' % vtr_diff) if vtr_diff > 0 else ('%.0f' % vtr_diff)) if vtr_diff is not none else '—' }}</td>
@@ -894,6 +899,16 @@ function refreshAllMonitorings() {
                     </div>
                 </div>
 
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="asana_task_url">Ссылка на задачу Asana</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="asana_task_url" name="asana_task_url" placeholder="https://app.asana.com/.../task/..." style="flex: 1;">
+                            <button type="button" onclick="syncAsanaPlan()" class="btn btn-secondary" style="flex-shrink: 0;">Обновить</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Период -->
                 <div class="form-row">
                     <div class="form-group">
@@ -967,7 +982,7 @@ function refreshAllMonitorings() {
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="plan_vtr">VTR (%)</label>
+                        <label for="plan_vtr" id="plan_vtr_label">VTR (%)</label>
                         <input type="number" id="plan_vtr" name="plan_vtr" step="1" min="0" max="100" placeholder="70">
                     </div>
 
@@ -1116,6 +1131,36 @@ function refreshAllMonitorings() {
     </div>
 </div>
 <style>
+/* KPI info icon tooltip */
+.kpi-info-icon {
+    position: relative;
+    display: inline-flex;
+    cursor: help;
+    flex-shrink: 0;
+}
+.kpi-info-icon .kpi-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #292524;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.4;
+    white-space: pre-line;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 6px;
+    width: 240px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 50;
+}
+.kpi-info-icon:hover .kpi-tooltip {
+    display: block;
+}
+
 /* Modal styles */
 .modal {
     position: fixed;
@@ -1326,6 +1371,7 @@ function openMonitoringModal(monitoringId = null) {
                 document.getElementById('name').value = data.name || '';
                 document.getElementById('account_id').value = data.account_id || '';
                 document.getElementById('manager').value = data.manager || '';
+                document.getElementById('asana_task_url').value = data.asana_task_url || '';
                 document.getElementById('date_from').value = data.date_from || '';
                 document.getElementById('date_to').value = data.date_to || '';
 
@@ -1334,8 +1380,10 @@ function openMonitoringModal(monitoringId = null) {
                 document.getElementById('plan_clicks').value = data.plan_clicks || '';
                 document.getElementById('plan_visits').value = data.plan_visits || '';
 
-                // Load VTR from saved data (default to 70 if not set)
-                document.getElementById('plan_vtr').value = data.plan_vtr || 70;
+                // Load VTR/VR from saved data (default: 70% for video VTR, 50% for banner/ТГБ VR)
+                const isVrFormat = data.format_label === 'VR';
+                document.getElementById('plan_vtr').value = data.plan_vtr || (isVrFormat ? 50 : 70);
+                document.getElementById('plan_vtr_label').textContent = (data.format_label || 'VTR') + ' (%)';
 
                 document.getElementById('plan_conversions').value = data.plan_conversions || '';
                 document.getElementById('plan_bounce_rate').value = data.plan_bounce_rate || '';
@@ -1366,12 +1414,43 @@ function openMonitoringModal(monitoringId = null) {
         form.reset();
         // Set default VTR value after reset
         document.getElementById('plan_vtr').value = 70;
+        document.getElementById('plan_vtr_label').textContent = 'VTR (%)';
         document.getElementById('campaignsList').innerHTML = '<tr><td colspan="2" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Выберите аккаунт для загрузки кампаний</td></tr>';
     }
 
     modal.style.display = 'flex';
     // Блокируем прокрутку основной страницы
     document.body.style.overflow = 'hidden';
+}
+
+function syncAsanaPlan() {
+    const monitoringId = document.getElementById('monitoringId').value;
+    if (!monitoringId) {
+        alert('Сначала сохраните мониторинг, потом можно будет подтянуть план из Asana');
+        return;
+    }
+    if (!document.getElementById('asana_task_url').value) {
+        alert('Укажите ссылку на задачу Asana');
+        return;
+    }
+    if (!confirm('Обновить план из Asana?\nТекущие значения показов/кликов и остальных плановых полей будут заменены данными из задачи.')) {
+        return;
+    }
+    fetch(`/monitoring/${monitoringId}/sync-asana`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const prorationNote = data.prorated ? '\n⚠ Показы/клики распределены пропорционально на период мониторинга (задача в Asana покрывает более широкий диапазон дат).' : '';
+                alert(`Синхронизировано из Asana (${data.task_name}, формат: ${data.format}).\nОбновлены поля: ${data.updated_fields.join(', ')}${prorationNote}`);
+                window.location.reload();
+            } else {
+                alert('Ошибка синхронизации: ' + (data.error || 'неизвестная ошибка'));
+            }
+        })
+        .catch(err => {
+            console.error('Asana sync error:', err);
+            alert('Ошибка при обращении к серверу');
+        });
 }
 
 // Обработчик отправки формы
@@ -1381,9 +1460,11 @@ document.getElementById('monitoringForm').addEventListener('submit', function(e)
     const planPi = parseFloat(document.getElementById('plan_pi').value) || 0;
     const planVtr = parseFloat(document.getElementById('plan_vtr').value) || 0;
 
-    // 1. Если VTR не выставлен, устанавливаем 70% по умолчанию
+    // 1. Если VTR/VR не выставлен, устанавливаем значение по умолчанию
+    // (70% для видео-формата VTR, 50% для баннер/ТГБ VR - это разные метрики)
     if (!planVtr || planVtr === 0) {
-        document.getElementById('plan_vtr').value = 70;
+        const isVr = document.getElementById('plan_vtr_label').textContent.trim().startsWith('VR');
+        document.getElementById('plan_vtr').value = isVr ? 50 : 70;
     }
 
     // 2. Автоматический расчёт plan_visits

@@ -22,6 +22,8 @@ logs/
 google_credentials.json
 service_account.json
 google-sheets-service-account.json
+asana_credentials.txt
+.env
 
 # IDE
 .vscode/

@@ -58,6 +58,11 @@ from app.models import db, SapeAccount, Client, Campaign, ReportConfig, ReportLo
 db.init_app(app)
 migrate = Migrate(app, db)
 
+
+class AsanaSyncError(Exception):
+    """User-facing error raised while syncing a monitoring from Asana"""
+    pass
+
 # Import API clients
 from app.api.sape_client import SapeAPIClient
 from app.api.google_sheets_client import GoogleSheetsClient
@@ -1390,6 +1395,124 @@ def bulk_delete_monitorings():
     return jsonify({'success': True, 'count': count})
 
 
+def _sync_monitoring_from_asana(monitoring):
+    """Pull media-plan target fields from the linked Asana task onto
+    `monitoring`. Returns a result dict (not yet committed) or raises
+    AsanaSyncError with a user-facing message."""
+    from app.api.asana_client import AsanaClient
+
+    if not monitoring.asana_task_url:
+        raise AsanaSyncError('У мониторинга не указана ссылка на задачу Asana')
+
+    client = AsanaClient()
+    task_gid = client.extract_task_gid(monitoring.asana_task_url)
+    if not task_gid:
+        raise AsanaSyncError('Не удалось распознать ID задачи из ссылки')
+
+    try:
+        task = client.get_task(task_gid)
+    except Exception as e:
+        logger.error(f"Error fetching Asana task {task_gid}: {e}")
+        raise AsanaSyncError(f'Ошибка запроса к Asana: {e}')
+
+    # Use THIS monitoring's own format (from its SAPE campaigns) to pick
+    # which показы/клики slot to read, rather than the task's own
+    # "Формат" field - that field can have multiple formats selected
+    # (one task covering several monitorings) or simply be filled in
+    # wrong, since it's manual.
+    monitoring_campaigns = monitoring.get_campaigns()
+    format_type = monitoring_campaigns[0].format_type if monitoring_campaigns else None
+    format_idx = AsanaClient.format_index_for_campaign_type(format_type)
+
+    parsed = client.parse_monitoring_fields(task, format_idx=format_idx)
+
+    # A single Asana task can cover a media plan that spans several
+    # months while a monitoring only tracks one of them (e.g. task is
+    # 14.09-31.10, monitoring is just October) - показы/клики are totals
+    # for the task's whole period, so prorate them down to the overlap
+    # with this monitoring's own date_from/date_to.
+    task_date_from = parsed.get('task_date_from')
+    task_date_to = parsed.get('task_date_to')
+    prorated = False
+    if task_date_from and task_date_to and (task_date_from != monitoring.date_from or task_date_to != monitoring.date_to):
+        for key in ('impressions', 'clicks'):
+            if key in parsed:
+                prorated_value = AsanaClient.prorate_to_period(
+                    parsed[key], task_date_from, task_date_to, monitoring.date_from, monitoring.date_to
+                )
+                if prorated_value != parsed[key]:
+                    prorated = True
+                parsed[key] = prorated_value
+
+    field_map = {
+        'impressions': 'plan_impressions',
+        'clicks': 'plan_clicks',
+        'pi': 'plan_pi',
+        'bounce': 'plan_bounce_rate',
+        'time': 'plan_time_on_site',
+        'depth': 'plan_page_depth',
+        'robotness': 'plan_robotness',
+    }
+    # Asana only tracks VTR (video completion rate). For video monitorings
+    # that's exactly what the "VTR" column shows, so map it across. For
+    # banner/TGB monitorings that same DB slot is displayed as "VR"
+    # (viewability rate) - a different metric Asana doesn't provide, so
+    # don't overwrite it with VTR data.
+    if monitoring.is_video_format():
+        field_map['vtr'] = 'plan_vtr'
+
+    updated_fields = []
+    for key, attr in field_map.items():
+        if key in parsed:
+            value = parsed[key]
+            if attr in ('plan_impressions', 'plan_clicks'):
+                value = int(value)
+            setattr(monitoring, attr, value)
+            updated_fields.append(attr)
+
+    if 'kpi_comment' in parsed:
+        monitoring.asana_kpi_comment = parsed['kpi_comment']
+        updated_fields.append('asana_kpi_comment')
+
+    # Визиты = клики × PI, same calculation the edit form does client-side -
+    # recompute here too since this sync path bypasses that JS entirely.
+    if ('plan_clicks' in updated_fields or 'plan_pi' in updated_fields) and monitoring.plan_clicks and monitoring.plan_pi:
+        monitoring.plan_visits = round(monitoring.plan_clicks * (monitoring.plan_pi / 100))
+        updated_fields.append('plan_visits')
+
+    if not updated_fields:
+        raise AsanaSyncError('Не удалось распознать ни одного поля в задаче Asana')
+
+    logger.info(f"✅ Synced monitoring {monitoring.id} from Asana task {task_gid}: {updated_fields}")
+
+    return {
+        'task_name': parsed.get('task_name'),
+        'format': parsed.get('format'),
+        'updated_fields': updated_fields,
+        'prorated': prorated,
+    }
+
+
+@app.route('/monitoring/<int:monitoring_id>/sync-asana', methods=['POST'])
+@login_required
+def sync_monitoring_from_asana(monitoring_id):
+    """Explicit manual re-pull of the media plan from the linked Asana
+    task. This is the ONLY way to re-sync besides changing the link
+    itself - deliberately not tied to the regular SAPE "Обновить сейчас"
+    fact refresh, and deliberately not triggered implicitly on every
+    edit save, so it never silently overwrites manual corrections."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+    try:
+        result = _sync_monitoring_from_asana(monitoring)
+    except AsanaSyncError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+    db.session.commit()
+
+    return jsonify({'success': True, **result})
+
+
 @app.route('/monitoring/create', methods=['POST'])
 @login_required
 def create_monitoring():
@@ -1530,9 +1653,28 @@ def edit_monitoring(monitoring_id):
         google_sheet_url = request.form.get('google_sheet_url')
         monitoring.google_sheet_url = google_sheet_url if google_sheet_url else None
 
+        # Asana task URL - only auto-pull the plan when the link is newly
+        # added or changed to a different task. If it's unchanged, leave
+        # plan_impressions/plan_clicks/etc as whatever was just submitted -
+        # otherwise every save would re-overwrite manual corrections with
+        # the Asana task's numbers.
+        previous_asana_task_url = monitoring.asana_task_url
+        asana_task_url = request.form.get('asana_task_url')
+        monitoring.asana_task_url = asana_task_url if asana_task_url else None
+
+        asana_warning = None
+        if monitoring.asana_task_url and monitoring.asana_task_url != previous_asana_task_url:
+            try:
+                _sync_monitoring_from_asana(monitoring)
+            except AsanaSyncError as e:
+                asana_warning = str(e)
+
         db.session.commit()
 
-        flash('Мониторинг успешно обновлен', 'success')
+        if asana_warning:
+            flash(f'Мониторинг обновлен, но не удалось подтянуть план из Asana: {asana_warning}', 'error')
+        else:
+            flash('Мониторинг успешно обновлен', 'success')
         return redirect(url_for('monitoring'))
 
     except Exception as e:
@@ -1620,7 +1762,9 @@ def get_monitoring_data(monitoring_id):
             'metrika_counter_id': monitoring.metrika_counter_id,
             'utm_source': monitoring.utm_source,
             'google_sheet_url': monitoring.google_sheet_url,
-            'manager': monitoring.manager
+            'asana_task_url': monitoring.asana_task_url,
+            'manager': monitoring.manager,
+            'format_label': monitoring.get_format_label()
         })
     except Exception as e:
         logger.error(f"Error getting monitoring data: {e}")

@@ -208,6 +208,8 @@ class MonitoringCampaign(db.Model):
     # Manager & metadata
     manager = db.Column(db.String(100), nullable=True)
     google_sheet_url = db.Column(db.String(500), nullable=True)  # Ссылка на Google таблицу
+    asana_task_url = db.Column(db.String(500), nullable=True)  # Ссылка на задачу Asana
+    asana_kpi_comment = db.Column(db.Text, nullable=True)  # Комментарий из поля KPI задачи Asana
 
     # Status
     active = db.Column(db.Boolean, default=True)
@@ -233,10 +235,6 @@ class MonitoringCampaign(db.Model):
             return 0
         delta = self.date_to - self.date_from
         return delta.days + 1  # Include both start and end dates
-
-    def get_total_days_for_calculation(self):
-        """Calculate total days for performance calculation (always +1 day)"""
-        return self.get_total_days() + 1
 
     def get_days_left(self):
         """Calculate days left until monitoring end date"""
@@ -271,7 +269,7 @@ class MonitoringCampaign(db.Model):
         Calculate performance percentage with uniform daily distribution
 
         Formula: (Fact / Expected_plan_for_passed_days) * 100%
-        Where: Expected_plan = (Total_plan / (Total_days + 1)) * Days_passed_until_yesterday
+        Where: Expected_plan = (Total_plan / Total_days) * Days_passed_until_yesterday
 
         Args:
             fact_value: Actual value (for yesterday)
@@ -283,7 +281,7 @@ class MonitoringCampaign(db.Model):
         if not fact_value or not plan_value or plan_value == 0:
             return None
 
-        total_days = self.get_total_days_for_calculation()  # Always +1 day
+        total_days = self.get_total_days()
         days_passed = self.get_days_passed_until_yesterday()
 
         if total_days == 0 or days_passed == 0:
@@ -369,28 +367,28 @@ class MonitoringCampaign(db.Model):
 
     def get_bounce_diff(self):
         """Отказы: показать разницу со знаком < или > (<5.6 или >5.6)"""
-        if self.fact_bounce_rate is None or self.plan_bounce_rate is None:
+        if self.fact_bounce_rate is None or not self.plan_bounce_rate:
             return None
         diff = self.fact_bounce_rate - self.plan_bounce_rate
         return round(diff, 1)
 
     def get_time_diff_seconds(self):
         """Время: показать разницу в секундах (+15с или -15с)"""
-        if self.fact_time_on_site is None or self.plan_time_on_site is None:
+        if self.fact_time_on_site is None or not self.plan_time_on_site:
             return None
         diff = self.fact_time_on_site - self.plan_time_on_site
         return round(diff, 0)
 
     def get_depth_diff(self):
         """Глубина: показать разницу со знаком < или > (<0.4 или >0.4)"""
-        if self.fact_page_depth is None or self.plan_page_depth is None:
+        if self.fact_page_depth is None or not self.plan_page_depth:
             return None
         diff = self.fact_page_depth - self.plan_page_depth
         return round(diff, 1)
 
     def get_robotness_diff(self):
         """Роботность: показать разницу (-6.8 или +6.8)"""
-        if self.fact_robotness is None or self.plan_robotness is None:
+        if self.fact_robotness is None or not self.plan_robotness:
             return None
         diff = self.fact_robotness - self.plan_robotness
         return round(diff, 1)
@@ -398,7 +396,7 @@ class MonitoringCampaign(db.Model):
     def get_pi_diff_percent(self):
         """PI: показать разницу в процентах (>25% или <25%)"""
         fact_pi = self.get_fact_pi()
-        if fact_pi is None or self.plan_pi is None:
+        if fact_pi is None or not self.plan_pi:
             return None
         diff = fact_pi - self.plan_pi
         return round(diff, 1)
@@ -414,7 +412,7 @@ class MonitoringCampaign(db.Model):
 
     def get_vtr_diff(self):
         """VTR: показать разницу (+11 или -9)"""
-        if self.fact_vtr is None or self.plan_vtr is None:
+        if self.fact_vtr is None or not self.plan_vtr:
             return None
         diff = self.fact_vtr - self.plan_vtr
         return round(diff, 0)
