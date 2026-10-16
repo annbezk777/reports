@@ -3618,41 +3618,57 @@ def init_db():
 
 # ==================== SCHEDULED REPORTS ====================
 
-def get_next_report_update_date(report):
+def get_next_report_update_range(report):
     """
-    Determine which single day the scheduler should write next: the day
-    right after report.last_update (our own system's record of when this
-    report was last successfully updated, from either a manual run or a
-    scheduled one). This is what makes scheduled updates incremental -
-    one new day per run - instead of re-writing the whole period.
+    Determine the date range the scheduler should write next: from the
+    day right after whatever date was last written, through yesterday
+    (we only ever have complete data up to yesterday - never "today").
 
-    Falls back to yesterday if the report has never been updated.
+    report.last_update is a run timestamp (set to "now" at the moment a
+    run completes), and every run - manual or scheduled - always writes
+    through "yesterday relative to that run". So the last day actually
+    written is (last_update's date - 1 day), and the next day to write
+    is last_update's date itself (no further +1 - a previous version of
+    this function added an extra day here, which pushed daily schedules
+    to write "today" instead of "yesterday").
+
+    For schedules that run less often than daily (e.g. weekly), this
+    returns the FULL gap since the last run, not just a single day, so
+    nothing in between gets silently skipped.
     """
     from datetime import timedelta
-    fallback = datetime.now() - timedelta(days=1)
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday = today - timedelta(days=1)
 
     if report.last_update:
-        return report.last_update + timedelta(days=1)
+        date_from = report.last_update.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        date_from = yesterday
 
-    return fallback
+    return date_from, yesterday
 
 
 def run_report_update(report, date_from=None, date_to=None):
     """
     Run report update programmatically (for scheduled updates).
 
-    Writes exactly one day of data per run - the day after whatever the
-    sheet's last filled date is - so repeated runs never re-write
-    existing rows. Delegates to run_report_old's write logic (the same
+    Writes from the day after the sheet's last filled date through
+    yesterday - covering the full gap since the last run (not just a
+    single day), so repeated runs never re-write existing rows and
+    nothing gets silently skipped for schedules that run less often
+    than daily. Delegates to run_report_old's write logic (the same
     code path as the manual "Обновить сейчас" button) instead of
     duplicating the multi-section detection/write logic here.
     """
     try:
         if not date_from or not date_to:
-            target_date = get_next_report_update_date(report)
-            date_from = date_to = target_date
+            date_from, date_to = get_next_report_update_range(report)
 
-        logging.info(f"🔄 Scheduled update for report {report.id} ({report.name or 'Unnamed'}): {date_from.strftime('%Y-%m-%d')}")
+        if date_from.date() > date_to.date():
+            logging.info(f"ℹ️ Report {report.id} ({report.name or 'Unnamed'}) already up to date (next date {date_from.date()} is after yesterday {date_to.date()}), nothing to write")
+            return True
+
+        logging.info(f"🔄 Scheduled update for report {report.id} ({report.name or 'Unnamed'}): {date_from.strftime('%Y-%m-%d')} to {date_to.strftime('%Y-%m-%d')}")
 
         date_from_str = date_from.strftime('%Y-%m-%d')
         date_to_str = date_to.strftime('%Y-%m-%d')
