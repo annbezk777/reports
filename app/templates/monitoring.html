@@ -1571,14 +1571,16 @@ function syncAsanaPlan() {
         alert('Сначала сохраните мониторинг, потом можно будет подтянуть план из Asana');
         return;
     }
-    if (!document.getElementById('asana_task_url').value) {
+    const asanaTaskUrl = document.getElementById('asana_task_url').value;
+    if (!asanaTaskUrl) {
         alert('Укажите ссылку на задачу Asana');
         return;
     }
     if (!confirm('Обновить план из Asana?\nТекущие значения показов/кликов и остальных плановых полей будут заменены данными из задачи.')) {
         return;
     }
-    fetch(`/monitoring/${monitoringId}/sync-asana`, { method: 'POST' })
+    const body = new URLSearchParams({ asana_task_url: asanaTaskUrl });
+    fetch(`/monitoring/${monitoringId}/sync-asana`, { method: 'POST', body })
         .then(res => res.json())
         .then(data => {
             if (data.success) {

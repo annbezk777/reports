@@ -1500,8 +1500,18 @@ def sync_monitoring_from_asana(monitoring_id):
     task. This is the ONLY way to re-sync besides changing the link
     itself - deliberately not tied to the regular SAPE "Обновить сейчас"
     fact refresh, and deliberately not triggered implicitly on every
-    edit save, so it never silently overwrites manual corrections."""
+    edit save, so it never silently overwrites manual corrections.
+
+    Also accepts the Asana link field's current value even if the main
+    form hasn't been saved yet, and saves it first - so pasting a link
+    and clicking "Обновить" works in one click instead of failing with
+    "ссылка не указана"."""
     monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+    submitted_url = request.form.get('asana_task_url')
+    if submitted_url and submitted_url != monitoring.asana_task_url:
+        monitoring.asana_task_url = submitted_url
+        db.session.commit()
 
     try:
         result = _sync_monitoring_from_asana(monitoring)
