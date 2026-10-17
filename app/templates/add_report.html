@@ -203,6 +203,19 @@
             <p class="text-gray-600 text-xs mt-1">Выберите ответственного менеджера</p>
         </div>
 
+        <!-- Asana Task Link -->
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="asana_task_url">
+                Ссылка на задачу Asana (необязательно)
+            </label>
+            <input class="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                   id="asana_task_url"
+                   name="asana_task_url"
+                   type="url"
+                   placeholder="https://app.asana.com/1/.../task/...">
+            <p class="text-gray-600 text-xs mt-1">Если указать, плановые показатели в автоматически созданном мониторинге подтянутся из задачи сразу при создании отчёта</p>
+        </div>
+
         <!-- Campaign Mode -->
         <div class="mb-6" id="campaignModeSection">
             <label class="block text-gray-700 text-sm font-bold mb-2">

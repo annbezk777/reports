@@ -2489,6 +2489,7 @@ def add_report():
         campaign_mode = request.form.get('campaign_mode', 'separate')
         google_sheet_url = request.form.get('google_sheet_url')
         worksheet_name = request.form.get('worksheet_name', '').strip() or None
+        asana_task_url = request.form.get('asana_task_url', '').strip() or None
 
         # Schedule
         schedule_days = request.form.get('schedule_days')
@@ -2616,13 +2617,45 @@ def add_report():
                 date_from=today,
                 date_to=default_end_date,
                 manager=manager,
-                google_sheet_url=google_sheet_url
+                google_sheet_url=google_sheet_url,
+                asana_task_url=asana_task_url
             )
 
             db.session.add(monitoring)
             db.session.commit()
 
             logging.info(f"✅ Auto-created monitoring {monitoring.id} for report {report.id}")
+
+            # If an Asana task was linked, pull its plan straight away -
+            # using the task's own "дата старта"/"дата завершения" fields
+            # as the monitoring's period (instead of the today+30d
+            # default) when the task actually has them set.
+            if asana_task_url:
+                try:
+                    from app.api.asana_client import AsanaClient
+                    client = AsanaClient()
+                    task_gid = client.extract_task_gid(asana_task_url)
+                    if task_gid:
+                        task = client.get_task(task_gid)
+                        monitoring_campaigns = monitoring.get_campaigns()
+                        format_type = monitoring_campaigns[0].format_type if monitoring_campaigns else None
+                        format_idx = AsanaClient.format_index_for_campaign_type(format_type)
+                        parsed = client.parse_monitoring_fields(task, format_idx=format_idx)
+                        if parsed.get('task_date_from') and parsed.get('task_date_to'):
+                            monitoring.date_from = parsed['task_date_from']
+                            monitoring.date_to = parsed['task_date_to']
+                            db.session.commit()
+
+                        asana_result = _sync_monitoring_from_asana(monitoring)
+                        db.session.commit()
+                        logging.info(f"✅ Synced auto-created monitoring {monitoring.id} from Asana: {asana_result['updated_fields']}")
+                    else:
+                        logging.warning(f"⚠️ Could not extract Asana task GID from {asana_task_url}")
+                except AsanaSyncError as e:
+                    logging.warning(f"⚠️ Asana sync failed for auto-created monitoring {monitoring.id}: {e}")
+                except Exception as e:
+                    db.session.rollback()
+                    logging.error(f"⚠️ Unexpected error syncing Asana for auto-created monitoring {monitoring.id}: {e}")
         except Exception as e:
             # Don't fail report creation if monitoring creation fails
             logging.error(f"⚠️ Failed to auto-create monitoring: {e}")
