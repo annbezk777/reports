@@ -25,3 +25,6 @@ gunicorn==21.2.0
 # Utils
 python-dotenv==1.0.0
 pytz==2023.3
+
+# Weborama verifier integration (headless browser)
+playwright==1.60.0
