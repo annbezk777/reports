@@ -4249,6 +4249,11 @@ else:
         logging.info("ℹ️ Auto-sync disabled (ENABLE_AUTO_SYNC=0). Use manual sync from UI.")
 
 
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

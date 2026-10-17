@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Страница не найдена</title>
+
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=optional" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=14102001">
+
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--peach-bg);
+        }
+
+        .err404-wrap {
+            width: 100%;
+            max-width: 440px;
+            padding: 0 20px;
+            text-align: center;
+        }
+
+        .err404-card {
+            background: var(--bg-white);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: var(--shadow-sm);
+            padding: 40px 32px;
+        }
+
+        .err404-img {
+            width: 100%;
+            margin: 0 auto 20px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: var(--bg-light);
+        }
+
+        .err404-img img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .err404-code {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-light);
+            letter-spacing: 0.05em;
+            margin: 0 0 16px;
+        }
+
+        .err404-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin: 0 0 24px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="err404-wrap">
+        <div class="err404-card">
+            <div class="err404-img">
+                <img src="{{ url_for('static', filename='img/404-cat.jpg') }}" alt="окак">
+            </div>
+            <p class="err404-code">ОШИБКА 404</p>
+            <p class="err404-text">Такой страницы не существует — похоже, вы свернули не туда.</p>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary">На главную</a>
+        </div>
+    </div>
+</body>
+</html>
