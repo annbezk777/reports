@@ -43,6 +43,7 @@ instance/
 backups/
 *.backup
 *.bak
+ops_backups/
 
 # Local server
 .local_server.pid

@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import hashlib
 import random
@@ -54,7 +54,7 @@ class PrintLogger:
 sys.stdout = PrintLogger(logger, logging.INFO)
 
 # Initialize database
-from app.models import db, SapeAccount, Client, Campaign, ReportConfig, ReportLog, MonitoringCampaign
+from app.models import db, SapeAccount, Client, Campaign, ReportConfig, ReportLog, MonitoringCampaign, VerifierLink, VerifierLinkMapping
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -1645,6 +1645,21 @@ def edit_monitoring(monitoring_id):
         monitoring.plan_sivt = float(plan_sivt) if plan_sivt else None
         monitoring.plan_givt_clicks = float(plan_givt_clicks) if plan_givt_clicks else None
 
+        # IVT показатели (факт) - ручной ввод или Excel-выгрузка Adriver
+        fact_ivt = request.form.get('fact_ivt_impressions')
+        fact_givt = request.form.get('fact_givt_impressions')
+        fact_sivt = request.form.get('fact_sivt_impressions')
+        fact_givt_clicks = request.form.get('fact_givt_clicks')
+        adriver_impressions = request.form.get('adriver_impressions')
+        adriver_clicks = request.form.get('adriver_clicks')
+
+        monitoring.fact_ivt_impressions = float(fact_ivt) if fact_ivt else None
+        monitoring.fact_givt_impressions = float(fact_givt) if fact_givt else None
+        monitoring.fact_sivt_impressions = float(fact_sivt) if fact_sivt else None
+        monitoring.fact_givt_clicks = float(fact_givt_clicks) if fact_givt_clicks else None
+        monitoring.adriver_impressions = int(adriver_impressions) if adriver_impressions else None
+        monitoring.adriver_clicks = int(adriver_clicks) if adriver_clicks else None
+
         # Manager
         manager = request.form.get('manager')
         monitoring.manager = manager if manager else None
@@ -1759,12 +1774,35 @@ def get_monitoring_data(monitoring_id):
             'plan_givt_impressions': monitoring.plan_givt_impressions,
             'plan_sivt_impressions': monitoring.plan_sivt,  # Fix field name
             'plan_givt_clicks': monitoring.plan_givt_clicks,
+            'fact_ivt_impressions': monitoring.fact_ivt_impressions,
+            'fact_givt_impressions': monitoring.fact_givt_impressions,
+            'fact_sivt_impressions': monitoring.fact_sivt_impressions,
+            'fact_givt_clicks': monitoring.fact_givt_clicks,
+            'adriver_impressions': monitoring.adriver_impressions,
+            'adriver_clicks': monitoring.adriver_clicks,
             'metrika_counter_id': monitoring.metrika_counter_id,
             'utm_source': monitoring.utm_source,
             'google_sheet_url': monitoring.google_sheet_url,
             'asana_task_url': monitoring.asana_task_url,
             'manager': monitoring.manager,
-            'format_label': monitoring.get_format_label()
+            'format_label': monitoring.get_format_label(),
+            'verifier_links': [{
+                'id': link.id,
+                'verifier_type': link.verifier_type,
+                'label': link.label,
+                'permalink_url': link.permalink_url,
+                'ivt_impressions_percent': link.ivt_impressions_percent,
+                'givt_impressions_percent': link.givt_impressions_percent,
+                'sivt_impressions_percent': link.sivt_impressions_percent,
+                'givt_clicks_percent': link.givt_clicks_percent,
+                'mappings': [{
+                    'id': mapping.id,
+                    'sape_campaign_id': mapping.sape_campaign_id,
+                    'insertion_name': mapping.insertion_name,
+                    'verifier_impressions': mapping.verifier_impressions,
+                    'verifier_clicks': mapping.verifier_clicks,
+                } for mapping in link.mappings],
+            } for link in monitoring.verifier_links]
         })
     except Exception as e:
         logger.error(f"Error getting monitoring data: {e}")
@@ -2053,13 +2091,16 @@ def upload_adriver_excel(monitoring_id):
             monitoring.fact_givt_impressions = ivt_data.get('givt_impressions_percent', 0)
             monitoring.fact_sivt_impressions = ivt_data.get('sivt_impressions_percent', 0)
             monitoring.fact_givt_clicks = ivt_data.get('givt_clicks_percent', 0)
+            monitoring.adriver_impressions = ivt_data.get('impressions')
+            monitoring.adriver_clicks = ivt_data.get('clicks')
 
             # Update last sync time
             monitoring.last_sync = datetime.utcnow()
 
             db.session.commit()
 
-            logger.info(f"✅ Updated monitoring {monitoring_id} with Adriver IVT data:")
+            logger.info(f"✅ Updated monitoring {monitoring_id} with Adriver data:")
+            logger.info(f"   Показы/клики: {monitoring.adriver_impressions}/{monitoring.adriver_clicks}")
             logger.info(f"   IVT показы: {monitoring.fact_ivt_impressions}%")
             logger.info(f"   GIVT показы: {monitoring.fact_givt_impressions}%")
             logger.info(f"   SIVT показы: {monitoring.fact_sivt_impressions}%")
@@ -2071,7 +2112,9 @@ def upload_adriver_excel(monitoring_id):
                     'ivt_impressions': monitoring.fact_ivt_impressions,
                     'givt_impressions': monitoring.fact_givt_impressions,
                     'sivt_impressions': monitoring.fact_sivt_impressions,
-                    'givt_clicks': monitoring.fact_givt_clicks
+                    'givt_clicks': monitoring.fact_givt_clicks,
+                    'adriver_impressions': monitoring.adriver_impressions,
+                    'adriver_clicks': monitoring.adriver_clicks,
                 }
             })
 
@@ -2088,6 +2131,272 @@ def upload_adriver_excel(monitoring_id):
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================================
+# VERIFIER LINKS (Weborama / Adriver permalinks per monitoring)
+# ============================================================================
+
+@app.route('/monitoring/<int:monitoring_id>/verifier-links/add', methods=['POST'])
+@login_required
+def add_verifier_link(monitoring_id):
+    MonitoringCampaign.query.get_or_404(monitoring_id)
+    data = request.get_json(silent=True) or {}
+
+    verifier_type = data.get('verifier_type')
+    if verifier_type not in ('weborama', 'adriver'):
+        return jsonify({'success': False, 'error': 'Неизвестный тип верификатора'}), 400
+
+    link = VerifierLink(
+        monitoring_id=monitoring_id,
+        verifier_type=verifier_type,
+        label=(data.get('label') or '').strip() or None,
+        permalink_url=(data.get('permalink_url') or '').strip() or None,
+    )
+    db.session.add(link)
+    db.session.flush()
+
+    # Every permalink starts with one mapping row to fill in - the "+"
+    # button in the UI adds more when one permalink covers several
+    # SAPE campaigns (e.g. a banner + a video insertion).
+    if verifier_type == 'weborama':
+        db.session.add(VerifierLinkMapping(verifier_link_id=link.id))
+
+    db.session.commit()
+
+    return jsonify({'success': True, 'id': link.id})
+
+
+@app.route('/verifier-links/<int:link_id>/update', methods=['POST'])
+@login_required
+def update_verifier_link(link_id):
+    link = VerifierLink.query.get_or_404(link_id)
+    data = request.get_json(silent=True) or {}
+
+    if 'label' in data:
+        link.label = (data.get('label') or '').strip() or None
+    if 'permalink_url' in data:
+        link.permalink_url = (data.get('permalink_url') or '').strip() or None
+    for field in ('ivt_impressions_percent', 'givt_impressions_percent', 'sivt_impressions_percent', 'givt_clicks_percent'):
+        if field in data:
+            value = data.get(field)
+            setattr(link, field, float(value) if value not in (None, '') else None)
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/verifier-links/<int:link_id>/delete', methods=['POST'])
+@login_required
+def delete_verifier_link(link_id):
+    link = VerifierLink.query.get_or_404(link_id)
+    db.session.delete(link)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/verifier-links/<int:link_id>/mappings/add', methods=['POST'])
+@login_required
+def add_verifier_mapping(link_id):
+    VerifierLink.query.get_or_404(link_id)
+    mapping = VerifierLinkMapping(verifier_link_id=link_id)
+    db.session.add(mapping)
+    db.session.commit()
+    return jsonify({'success': True, 'id': mapping.id})
+
+
+@app.route('/verifier-link-mappings/<int:mapping_id>/update', methods=['POST'])
+@login_required
+def update_verifier_mapping(mapping_id):
+    mapping = VerifierLinkMapping.query.get_or_404(mapping_id)
+    data = request.get_json(silent=True) or {}
+
+    if 'sape_campaign_id' in data:
+        value = data.get('sape_campaign_id')
+        mapping.sape_campaign_id = int(value) if value not in (None, '') else None
+    if 'insertion_name' in data:
+        mapping.insertion_name = (data.get('insertion_name') or '').strip() or None
+    if 'verifier_impressions' in data:
+        value = data.get('verifier_impressions')
+        mapping.verifier_impressions = int(value) if value not in (None, '') else None
+    if 'verifier_clicks' in data:
+        value = data.get('verifier_clicks')
+        mapping.verifier_clicks = int(value) if value not in (None, '') else None
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/verifier-link-mappings/<int:mapping_id>/delete', methods=['POST'])
+@login_required
+def delete_verifier_mapping(mapping_id):
+    mapping = VerifierLinkMapping.query.get_or_404(mapping_id)
+    db.session.delete(mapping)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/verifier-links/<int:link_id>/upload-excel', methods=['POST'])
+@login_required
+def upload_verifier_link_excel(link_id):
+    """Upload an Adriver Excel export for one specific verifier link -
+    stores the raw показы/клики (compared as-is against SAPE, not net of
+    IVT) plus the IVT/GIVT/SIVT breakdown already parsed by
+    AdriverExcelParser but previously discarded."""
+    link = VerifierLink.query.get_or_404(link_id)
+
+    if link.verifier_type != 'adriver':
+        return jsonify({'success': False, 'error': 'Excel-загрузка доступна только для Adriver'}), 400
+
+    if 'excel_file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+
+    file = request.files['excel_file']
+    if file.filename == '' or not file.filename.lower().endswith(('.xlsx', '.xls')):
+        return jsonify({'success': False, 'error': 'Invalid file format. Please upload .xlsx or .xls file'}), 400
+
+    import tempfile
+    temp_dir = tempfile.mkdtemp()
+    temp_file_path = os.path.join(temp_dir, file.filename)
+    file.save(temp_file_path)
+
+    try:
+        from parse_adriver_excel import AdriverExcelParser
+        parser = AdriverExcelParser(temp_file_path)
+        ivt_data = parser.parse()
+
+        if not ivt_data:
+            return jsonify({'success': False, 'error': 'Failed to parse Excel file. Please ensure it contains IVT data.'}), 400
+
+        link.verifier_impressions = ivt_data.get('impressions')
+        link.verifier_clicks = ivt_data.get('clicks')
+        link.ivt_impressions = ivt_data.get('ivt_impressions')
+        link.ivt_impressions_percent = ivt_data.get('ivt_impressions_percent')
+        link.givt_impressions = ivt_data.get('givt_impressions')
+        link.givt_impressions_percent = ivt_data.get('givt_impressions_percent')
+        link.sivt_impressions = ivt_data.get('sivt_impressions')
+        link.sivt_impressions_percent = ivt_data.get('sivt_impressions_percent')
+        link.ivt_clicks = ivt_data.get('ivt_clicks')
+        link.ivt_clicks_percent = ivt_data.get('ivt_clicks_percent')
+        link.givt_clicks = ivt_data.get('givt_clicks')
+        link.givt_clicks_percent = ivt_data.get('givt_clicks_percent')
+        link.sivt_clicks = ivt_data.get('sivt_clicks')
+        link.sivt_clicks_percent = ivt_data.get('sivt_clicks_percent')
+        link.last_fetched_at = datetime.utcnow()
+
+        db.session.commit()
+
+        logger.info(f"✅ Updated verifier link {link_id} from Adriver Excel: impressions={link.verifier_impressions}, clicks={link.verifier_clicks}")
+
+        return jsonify({
+            'success': True,
+            'verifier_impressions': link.verifier_impressions,
+            'verifier_clicks': link.verifier_clicks,
+        })
+    finally:
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+class WeboramaLinkFetchError(Exception):
+    """Link-level failure (no permalink, page didn't load, period hasn't
+    started yet) - as opposed to a single mapping not matching, which
+    doesn't block the rest of the link's mappings."""
+    pass
+
+
+def _fetch_and_apply_weborama_link(link):
+    """Fetches link.permalink_url ONCE and applies the result to every one
+    of this link's mappings - a single Weborama page load already returns
+    every Insertion row, so there's no need to hit the same permalink
+    again per mapping (that would also be ~20s slower per extra mapping).
+
+    Each mapping is matched independently: exact match on its own
+    insertion_name if set, otherwise a one-time format guess (by the
+    mapping's own SAPE campaign if picked, else the monitoring's format)
+    that also records the matched name for next time. A mapping that
+    can't be matched is recorded as failed in the returned dict but does
+    NOT stop the other mappings from being updated.
+    """
+    if not link.permalink_url:
+        raise WeboramaLinkFetchError('У пермалинка не указана ссылка')
+
+    monitoring = link.monitoring
+    yesterday = (datetime.now() - timedelta(days=1)).date()
+    date_from = monitoring.date_from
+    date_to = min(monitoring.date_to, yesterday)
+
+    if date_from > date_to:
+        raise WeboramaLinkFetchError('Период мониторинга ещё не наступил')
+
+    from app.api.weborama_client import fetch_insertions
+    results = fetch_insertions(link.permalink_url, date_from, date_to)
+
+    mapping_results = []
+    for mapping in link.mappings:
+        if mapping.insertion_name:
+            matched = results.get(mapping.insertion_name)
+            if not matched:
+                mapping_results.append({
+                    'id': mapping.id, 'success': False,
+                    'error': f'Insertion "{mapping.insertion_name}" не найден. Доступны: {", ".join(results.keys())}',
+                })
+                continue
+        else:
+            campaign = mapping.campaign
+            if campaign:
+                format_key = 'video' if campaign.format_type in ('V', 'CTV') else 'banner'
+            else:
+                format_key = 'video' if monitoring.is_video_format() else 'banner'
+            matched = next((r for r in results.values() if r['format_guess'] == format_key), None)
+            if not matched:
+                mapping_results.append({
+                    'id': mapping.id, 'success': False,
+                    'error': f'Insertion не задан, и не удалось угадать по формату "{format_key}". Доступны: {", ".join(results.keys())}',
+                })
+                continue
+
+        mapping.verifier_impressions = matched['impressions']
+        mapping.verifier_clicks = matched['clicks']
+        mapping.insertion_name = matched['insertion_name']
+        mapping.last_fetched_at = datetime.utcnow()
+        mapping_results.append({
+            'id': mapping.id, 'success': True,
+            'insertion_name': matched['insertion_name'],
+            'verifier_impressions': matched['impressions'],
+            'verifier_clicks': matched['clicks'],
+        })
+
+    link.last_fetched_at = datetime.utcnow()
+    db.session.commit()
+
+    return {
+        'date_from': date_from.strftime('%Y-%m-%d'),
+        'date_to': date_to.strftime('%Y-%m-%d'),
+        'available_insertions': list(results.keys()),
+        'mappings': mapping_results,
+    }
+
+
+@app.route('/verifier-links/<int:link_id>/fetch-weborama', methods=['POST'])
+@login_required
+def fetch_weborama_link(link_id):
+    link = VerifierLink.query.get_or_404(link_id)
+
+    if link.verifier_type != 'weborama':
+        return jsonify({'success': False, 'error': 'Доступно только для Weborama'}), 400
+
+    try:
+        result = _fetch_and_apply_weborama_link(link)
+    except WeboramaLinkFetchError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error fetching Weborama permalink for link {link_id}: {e}")
+        return jsonify({'success': False, 'error': f'Ошибка получения данных из Weborama: {e}'}), 502
+
+    logger.info(f"✅ Fetched verifier link {link_id} from Weborama ({result['date_from']}..{result['date_to']}): {result['mappings']}")
+
+    return jsonify({'success': True, **result})
 
 
 # ============================================================================
@@ -3880,6 +4189,67 @@ def scheduled_refresh_all_monitorings():
         logging.info(f"{'='*60}\n")
 
 
+def scheduled_refresh_weborama_verifiers():
+    """
+    Scheduled task to refresh every Weborama verifier permalink daily.
+
+    Runs after scheduled_refresh_all_monitorings so the discrepancy %
+    compares against fresh SAPE fact data. Each link is its own headless
+    browser session (~20-25s) run one at a time - this IS the queue: a
+    plain sequential loop where a single broken/unreachable permalink is
+    caught, logged, and skipped without blocking the rest of the links
+    or crashing the job. No external queue/worker needed - the daily
+    cron interval already de-duplicates retries, and misfire_grace_time
+    on the job below covers a missed run.
+    """
+    with app.app_context():
+        now = datetime.now(pytz.timezone('Europe/Moscow'))
+        logging.info(f"\n{'='*60}")
+        logging.info(f"⏰ SCHEDULED WEBORAMA VERIFIER REFRESH - {now.strftime('%Y-%m-%d %H:%M:%S')}")
+        logging.info(f"{'='*60}")
+
+        links = (VerifierLink.query
+                 .join(MonitoringCampaign)
+                 .filter(VerifierLink.verifier_type == 'weborama')
+                 .filter(VerifierLink.permalink_url.isnot(None))
+                 .filter(MonitoringCampaign.archived == False)
+                 .all())
+
+        if not links:
+            logging.info("ℹ️ No Weborama verifier permalinks found")
+            return
+
+        logging.info(f"📋 Found {len(links)} Weborama permalink(s) to refresh")
+
+        import time
+        updated = 0
+        failed = 0
+
+        for link in links:
+            try:
+                result = _fetch_and_apply_weborama_link(link)
+                mapping_summary = ', '.join(
+                    f"{m.get('insertion_name') or ('mapping ' + str(m['id']))}={'OK' if m['success'] else 'ERR'}"
+                    for m in result['mappings']
+                ) or 'нет сопоставлений'
+                logging.info(f"✅ Weborama link {link.id} ({link.monitoring.name}): {mapping_summary}")
+                updated += 1
+            except WeboramaLinkFetchError as e:
+                logging.warning(f"⚠️ Weborama link {link.id} ({link.monitoring.name}) skipped: {e}")
+                failed += 1
+            except Exception as e:
+                logging.error(f"❌ Weborama link {link.id} ({link.monitoring.name}) failed: {e}")
+                db.session.rollback()
+                failed += 1
+
+            time.sleep(2)  # short breather between browser sessions
+
+        logging.info(f"\n✅ SCHEDULED WEBORAMA VERIFIER REFRESH COMPLETED:")
+        logging.info(f"   Links updated: {updated}")
+        logging.info(f"   Links failed: {failed}")
+        logging.info(f"{'='*60}\n")
+
+
 # ==================== SCHEDULER ====================
 
 # Initialize and start scheduler only when enabled
@@ -3944,12 +4314,26 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
             max_instances=1  # Don't run multiple instances simultaneously
         )
 
+        # Add daily Weborama verifier refresh at 03:30 - after the SAPE
+        # fact refresh above, so discrepancy % compares against fresh data
+        scheduler.add_job(
+            func=scheduled_refresh_weborama_verifiers,
+            trigger=CronTrigger(hour=3, minute=30),
+            id='daily_weborama_verifier_refresh',
+            name='Автообновление верификаторов Weborama',
+            replace_existing=True,
+            misfire_grace_time=3600,
+            coalesce=True,
+            max_instances=1
+        )
+
         # Start scheduler
         scheduler.start()
         logging.info("✅ Scheduler started:")
         logging.info("   - Weekday account sync at 09:00 Moscow time (Mon-Fri)")
         logging.info("   - Hourly report schedule check (every hour at :00)")
         logging.info("   - Daily monitoring refresh at 03:00 Moscow time (every day)")
+        logging.info("   - Daily Weborama verifier refresh at 03:30 Moscow time (every day)")
 
         # Check if we need to sync on startup (if last sync was >24h ago)
         if should_sync_on_startup():

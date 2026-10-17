@@ -199,6 +199,10 @@ class MonitoringCampaign(db.Model):
     fact_givt_clicks = db.Column(db.Float, nullable=True)  # Фактический GIVT клики (%)
     fact_vtr = db.Column(db.Float, nullable=True)  # Фактический VTR (%)
 
+    # Сырые показы/клики из Adriver - для сверки расхождений с SAPE (не очищенные от IVT)
+    adriver_impressions = db.Column(db.Integer, nullable=True)
+    adriver_clicks = db.Column(db.Integer, nullable=True)
+
     # Yandex Metrika settings
     metrika_counter_id = db.Column(db.String(50), nullable=True)  # Номер счетчика Метрики
     metrika_goal_id = db.Column(db.String(50), nullable=True)  # ID цели для конверсий
@@ -430,3 +434,110 @@ class MonitoringCampaign(db.Model):
         if days > 0 and self.plan_clicks:
             return int(self.plan_clicks / days)
         return 0
+
+    def get_adriver_impressions_diff_percent(self):
+        """% = (SAPE − Adriver) / Adriver × 100 - та же формула, что и для верификаторов-пермалинков"""
+        if not self.adriver_impressions or not self.fact_impressions:
+            return None
+        return round((self.fact_impressions - self.adriver_impressions) / self.adriver_impressions * 100, 1)
+
+    def get_adriver_clicks_diff_percent(self):
+        if not self.adriver_clicks or not self.fact_clicks:
+            return None
+        return round((self.fact_clicks - self.adriver_clicks) / self.adriver_clicks * 100, 1)
+
+
+class VerifierLink(db.Model):
+    """A verifier (Weborama/Adriver) permalink attached to a monitoring.
+
+    One permalink can cover several SAPE campaigns at once (e.g. one
+    Weborama campaign with a "Sape_Banner_X" and a "Sape_Video_X"
+    insertion) - see VerifierLinkMapping for the per-campaign numbers.
+    """
+    __tablename__ = 'verifier_links'
+
+    id = db.Column(db.Integer, primary_key=True)
+    monitoring_id = db.Column(db.Integer, db.ForeignKey('monitoring_campaigns.id'), nullable=False)
+
+    verifier_type = db.Column(db.String(20), nullable=False)  # 'weborama' | 'adriver'
+    label = db.Column(db.String(100), nullable=True)  # Направление, например "Особый"
+    permalink_url = db.Column(db.String(1000), nullable=True)
+
+    # Устаревшие поля одиночного сопоставления (до перехода на
+    # VerifierLinkMapping) - оставлены в схеме для совместимости со старыми
+    # строками, новым кодом не используются.
+    insertion_name = db.Column(db.String(200), nullable=True)
+    sape_campaign_ids = db.Column(db.JSON, nullable=True)
+    verifier_impressions = db.Column(db.Integer, nullable=True)
+    verifier_clicks = db.Column(db.Integer, nullable=True)
+
+    # Из Excel-выгрузки Adriver (сырые числа, не только %)
+    ivt_impressions = db.Column(db.Integer, nullable=True)
+    ivt_impressions_percent = db.Column(db.Float, nullable=True)
+    givt_impressions = db.Column(db.Integer, nullable=True)
+    givt_impressions_percent = db.Column(db.Float, nullable=True)
+    sivt_impressions = db.Column(db.Integer, nullable=True)
+    sivt_impressions_percent = db.Column(db.Float, nullable=True)
+    ivt_clicks = db.Column(db.Integer, nullable=True)
+    ivt_clicks_percent = db.Column(db.Float, nullable=True)
+    givt_clicks = db.Column(db.Integer, nullable=True)
+    givt_clicks_percent = db.Column(db.Float, nullable=True)
+    sivt_clicks = db.Column(db.Integer, nullable=True)
+    sivt_clicks_percent = db.Column(db.Float, nullable=True)
+
+    last_fetched_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    monitoring = db.relationship('MonitoringCampaign', backref=db.backref('verifier_links', cascade='all, delete-orphan'))
+
+    def __repr__(self):
+        return f'<VerifierLink {self.verifier_type}:{self.label or self.id}>'
+
+
+class VerifierLinkMapping(db.Model):
+    """One (SAPE campaign, Weborama Insertion) pairing under a permalink.
+
+    A single Weborama permalink's Insertions table can hold several rows
+    (e.g. one per ad format) - each gets its own mapping here so every
+    campaign's показы/клики are tracked and compared independently,
+    without re-fetching the same permalink once per campaign.
+    """
+    __tablename__ = 'verifier_link_mappings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    verifier_link_id = db.Column(db.Integer, db.ForeignKey('verifier_links.id'), nullable=False)
+
+    sape_campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.id'), nullable=True)
+    insertion_name = db.Column(db.String(200), nullable=True)  # Точное название Insertion в Weborama (напр. "Sape_Banner_Lyovushka")
+
+    verifier_impressions = db.Column(db.Integer, nullable=True)
+    verifier_clicks = db.Column(db.Integer, nullable=True)
+    last_fetched_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    verifier_link = db.relationship('VerifierLink', backref=db.backref('mappings', cascade='all, delete-orphan'))
+    campaign = db.relationship('Campaign')
+
+    def __repr__(self):
+        return f'<VerifierLinkMapping {self.insertion_name or self.id}>'
+
+    def _sape_facts(self):
+        """Показы/клики SAPE для сравнения - пока берём агрегат по всему
+        мониторингу (сравнение по конкретной SAPE-кампании потребовало бы
+        отдельного живого запроса к SAPE API - не реализовано)."""
+        monitoring = self.verifier_link.monitoring
+        return monitoring.fact_impressions, monitoring.fact_clicks
+
+    def get_impressions_diff_percent(self):
+        """% = (SAPE − верификатор) / верификатор × 100"""
+        sape_impressions, _ = self._sape_facts()
+        if not self.verifier_impressions or not sape_impressions:
+            return None
+        return round((sape_impressions - self.verifier_impressions) / self.verifier_impressions * 100, 1)
+
+    def get_clicks_diff_percent(self):
+        """% = (SAPE − верификатор) / верификатор × 100"""
+        _, sape_clicks = self._sape_facts()
+        if not self.verifier_clicks or not sape_clicks:
+            return None
+        return round((sape_clicks - self.verifier_clicks) / self.verifier_clicks * 100, 1)
