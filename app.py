@@ -212,8 +212,12 @@ def login():
 
 
 @app.route('/register', methods=['GET', 'POST'])
+@login_required
 def register():
-    """Registration page"""
+    """Add a new user. Admin-only (requires login) - there is no public
+    self-registration; the admin sets the initial password here and
+    hands it to the new user directly, so the account is active
+    immediately with no email-verification step."""
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '').strip()
@@ -243,25 +247,19 @@ def register():
             conn.close()
             return render_template('register.html')
 
-        # Generate verification code
-        verification_code = str(random.randint(100000, 999999))
         password_hash = hashlib.sha256(password.encode()).hexdigest()
 
-        # Create user
+        # Create user - active and verified immediately, since the
+        # password is handed to them directly by an already-trusted admin
         cursor.execute('''
 INSERT INTO users (email, password_hash, verification_code, email_verified, active)
-VALUES (?, ?, ?, 0, 1)
-''', (email, password_hash, verification_code))
+VALUES (?, ?, NULL, 1, 1)
+''', (email, password_hash))
         conn.commit()
         conn.close()
 
-        # Send verification email
-        if send_verification_email(email, verification_code):
-            flash('Регистрация успешна! Проверьте почту и введите код подтверждения.', 'success')
-            return redirect(url_for('verify_email') + f'?email={email}')
-        else:
-            flash('Ошибка отправки email. Код: ' + verification_code, 'error')
-            return redirect(url_for('verify_email') + f'?email={email}')
+        flash(f'Пользователь {email} создан. Сообщите ему пароль лично.', 'success')
+        return redirect(url_for('register'))
 
     return render_template('register.html')
 
