@@ -159,6 +159,10 @@ class MonitoringCampaign(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)  # Название мониторинга
 
+    # The report this monitoring was auto-created for (nullable - older
+    # monitorings predate this link and some are created standalone)
+    report_config_id = db.Column(db.Integer, db.ForeignKey('report_configs.id'), nullable=True)
+
     # Campaign references
     account_id = db.Column(db.Integer, db.ForeignKey('sape_accounts.id'), nullable=False)
     campaign_ids = db.Column(db.JSON, nullable=False)  # List of SAPE campaign IDs
@@ -223,6 +227,7 @@ class MonitoringCampaign(db.Model):
 
     # Relationships
     account = db.relationship('SapeAccount', backref='monitoring_campaigns', lazy=True)
+    report_config = db.relationship('ReportConfig', backref='monitoring_campaigns', lazy=True)
 
     def __repr__(self):
         return f'<MonitoringCampaign {self.name}>'

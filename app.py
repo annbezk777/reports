@@ -2612,6 +2612,7 @@ def add_report():
             # Create monitoring
             monitoring = MonitoringCampaign(
                 name=monitoring_name,
+                report_config_id=report.id,
                 account_id=account_id,
                 campaign_ids=campaign_ids,
                 date_from=today,
