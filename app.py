@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, abort
 from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -165,6 +165,23 @@ def login_required(f):
     return decorated_function
 
 
+ADMIN_EMAIL = 'a.bereznyak@sape.ru'
+
+
+def admin_required(f):
+    """Restricts a route to ADMIN_EMAIL only. Everyone else (including
+    other logged-in users) gets a plain 404, not a 403 - the feature
+    shouldn't even appear to exist for them."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login', next=request.url))
+        if session.get('user_email') != ADMIN_EMAIL:
+            abort(404)
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Login page"""
@@ -212,7 +229,7 @@ def login():
 
 
 @app.route('/register', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def register():
     """Add a new user. Admin-only (requires login) - there is no public
     self-registration; the admin sets the initial password here and
@@ -336,7 +353,7 @@ def logout():
 
 
 @app.route('/users/<int:user_id>/reset-password', methods=['POST'])
-@login_required
+@admin_required
 def admin_reset_password(user_id):
     """Admin-only password reset for an existing user - replaces the old
     self-service "забыли пароль" email-code flow, which leaked the reset
