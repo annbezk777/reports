@@ -99,13 +99,45 @@
         </div>
 
         <!-- Info Box -->
-        <div style="background: var(--peach-light); border-radius: 8px; padding: 14px 16px;">
+        <div style="background: var(--peach-light); border-radius: 8px; padding: 14px 16px; margin-bottom: 32px;">
             <p style="font-size: 13px; color: var(--text-primary); margin: 0; line-height: 1.5;">
                 Аккаунт создаётся сразу активным, без письма с кодом подтверждения. Пароль нужно сообщить новому пользователю лично (в мессенджере, по телефону и т.п.) — он сможет сменить его после первого входа.
             </p>
         </div>
+
+        <!-- Existing users -->
+        <h2 style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0 0 12px;">Пользователи</h2>
+        <div style="background: var(--bg-white); border-radius: 16px; box-shadow: var(--shadow-sm); border: 1px solid var(--border-color); overflow: hidden;">
+            {% for u in users %}
+            <div style="padding: 14px 20px; {% if not loop.last %}border-bottom: 1px solid var(--border-color);{% endif %}">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <div>
+                        <div style="font-size: 14px; color: var(--text-primary); font-weight: 500;">{{ u.email }}</div>
+                        {% if not u.active %}<div style="font-size: 12px; color: var(--text-light);">неактивен</div>{% endif %}
+                    </div>
+                    <button type="button" onclick="toggleReset({{ u.id }})" style="border: none; background: none; color: var(--primary-orange); font-size: 13px; font-weight: 500; cursor: pointer; padding: 4px 8px;">
+                        Сбросить пароль
+                    </button>
+                </div>
+                <form id="reset-form-{{ u.id }}" method="POST" action="{{ url_for('admin_reset_password', user_id=u.id) }}" style="display: none; margin-top: 12px; gap: 8px; align-items: center;">
+                    <input type="password" name="new_password" placeholder="Новый пароль" minlength="6" required
+                           style="flex: 1; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">
+                    <button type="submit" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;">Сохранить</button>
+                </form>
+            </div>
+            {% else %}
+            <div style="padding: 20px; text-align: center; font-size: 13px; color: var(--text-secondary);">Пользователей пока нет</div>
+            {% endfor %}
+        </div>
     </div>
 </div>
+
+<script>
+function toggleReset(userId) {
+    const form = document.getElementById('reset-form-' + userId);
+    form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+}
+</script>
 
 <style>
 input:focus {

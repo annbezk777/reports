@@ -226,15 +226,15 @@ def register():
         # Validation
         if not email.endswith('@sape.ru'):
             flash('Email должен заканчиваться на @sape.ru', 'error')
-            return render_template('register.html')
+            return redirect(url_for('register'))
 
         if len(password) < 6:
             flash('Пароль должен содержать минимум 6 символов', 'error')
-            return render_template('register.html')
+            return redirect(url_for('register'))
 
         if password != password_confirm:
             flash('Пароли не совпадают', 'error')
-            return render_template('register.html')
+            return redirect(url_for('register'))
 
         # Check if user exists
         conn = get_db_connection()
@@ -245,7 +245,7 @@ def register():
         if existing_user:
             flash('Пользователь с таким email уже существует', 'error')
             conn.close()
-            return render_template('register.html')
+            return redirect(url_for('register'))
 
         password_hash = hashlib.sha256(password.encode()).hexdigest()
 
@@ -261,7 +261,13 @@ VALUES (?, ?, NULL, 1, 1)
         flash(f'Пользователь {email} создан. Сообщите ему пароль лично.', 'success')
         return redirect(url_for('register'))
 
-    return render_template('register.html')
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, email, active FROM users ORDER BY email')
+    users = cursor.fetchall()
+    conn.close()
+
+    return render_template('register.html', users=users)
 
 
 @app.route('/verify-email', methods=['GET', 'POST'])
@@ -329,153 +335,38 @@ def logout():
     return redirect(url_for('login'))
 
 
-@app.route('/forgot-password', methods=['GET', 'POST'])
-def forgot_password():
-    """Forgot password page"""
-    if request.method == 'POST':
-        email = request.form.get('email', '').strip().lower()
+@app.route('/users/<int:user_id>/reset-password', methods=['POST'])
+@login_required
+def admin_reset_password(user_id):
+    """Admin-only password reset for an existing user - replaces the old
+    self-service "забыли пароль" email-code flow, which leaked the reset
+    code directly in the page response whenever SMTP failed to send
+    (which it always did here, since no SMTP credentials are configured).
+    The admin now sets the new password directly and hands it to the
+    user, same trust model as creating an account."""
+    new_password = request.form.get('new_password', '').strip()
 
-        if not email.endswith('@sape.ru'):
-            flash('Email должен заканчиваться на @sape.ru', 'error')
-            return render_template('forgot_password.html')
+    if len(new_password) < 6:
+        flash('Пароль должен содержать минимум 6 символов', 'error')
+        return redirect(url_for('register'))
 
-        # Check if user exists
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT id, email FROM users WHERE email = ? AND active = 1', (email,))
-        user = cursor.fetchone()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT email FROM users WHERE id = ?', (user_id,))
+    user = cursor.fetchone()
 
-        if user:
-            # Generate reset token (6-digit code)
-            reset_token = str(random.randint(100000, 999999))
-
-            # Set expiration time (1 hour from now)
-            from datetime import datetime, timedelta
-            expires = datetime.utcnow() + timedelta(hours=1)
-
-            # Save token to database
-            cursor.execute(
-                'UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE email = ?',
-                (reset_token, expires.isoformat(), email)
-            )
-            conn.commit()
-
-            # Send email with reset code
-            email_sent = False
-            try:
-                msg = MIMEMultipart()
-                msg['From'] = SMTP_EMAIL
-                msg['To'] = email
-                msg['Subject'] = 'Восстановление пароля - SAPE Reports Panel'
-
-                body = f"""
-Здравствуйте!
-
-Вы запросили восстановление пароля для панели отчетов SAPE.
-
-Ваш код для сброса пароля: {reset_token}
-
-Код действителен в течение 1 часа.
-
-Перейдите по ссылке для ввода кода и нового пароля:
-http://localhost:5006/reset-password
-
-Если вы не запрашивали восстановление пароля, просто проигнорируйте это письмо.
-
---
-SAPE Reports Panel
-                """
-
-                msg.attach(MIMEText(body, 'plain', 'utf-8'))
-
-                server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-                server.starttls()
-                if SMTP_PASSWORD:
-                    server.login(SMTP_EMAIL, SMTP_PASSWORD)
-                server.send_message(msg)
-                server.quit()
-                email_sent = True
-
-            except Exception as e:
-                print(f"Error sending reset email: {e}")
-                # Don't show error - just display code instead
-                email_sent = False
-
-            if email_sent:
-                flash(f'Код восстановления отправлен на {email}', 'success')
-            else:
-                # If email failed, show code directly (for development)
-                flash(f'SMTP не настроен. Ваш код восстановления: {reset_token}', 'info')
-                print(f"🔑 RESET CODE for {email}: {reset_token}")
-
-            return redirect(url_for('reset_password'))
-        else:
-            # Don't reveal if user exists or not (security)
-            flash(f'Если пользователь существует, код восстановления отправлен на {email}', 'info')
-            return redirect(url_for('reset_password'))
-
+    if not user:
         conn.close()
+        flash('Пользователь не найден', 'error')
+        return redirect(url_for('register'))
 
-    return render_template('forgot_password.html')
+    password_hash = hashlib.sha256(new_password.encode()).hexdigest()
+    cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash, user_id))
+    conn.commit()
+    conn.close()
 
-
-@app.route('/reset-password', methods=['GET', 'POST'])
-def reset_password():
-    """Reset password with token"""
-    if request.method == 'POST':
-        email = request.form.get('email', '').strip().lower()
-        reset_token = request.form.get('reset_token', '').strip()
-        new_password = request.form.get('new_password', '').strip()
-        confirm_password = request.form.get('confirm_password', '').strip()
-
-        # Validation
-        if not email.endswith('@sape.ru'):
-            flash('Email должен заканчиваться на @sape.ru', 'error')
-            return render_template('reset_password.html')
-
-        if len(new_password) < 6:
-            flash('Пароль должен содержать минимум 6 символов', 'error')
-            return render_template('reset_password.html')
-
-        if new_password != confirm_password:
-            flash('Пароли не совпадают', 'error')
-            return render_template('reset_password.html')
-
-        # Check token
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            'SELECT id, reset_token_expires FROM users WHERE email = ? AND reset_token = ? AND active = 1',
-            (email, reset_token)
-        )
-        user = cursor.fetchone()
-
-        if user:
-            # Check if token expired
-            from datetime import datetime
-            expires = datetime.fromisoformat(user['reset_token_expires'])
-
-            if datetime.utcnow() > expires:
-                flash('Код восстановления истек. Запросите новый код.', 'error')
-                conn.close()
-                return redirect(url_for('forgot_password'))
-
-            # Update password
-            password_hash = hashlib.sha256(new_password.encode()).hexdigest()
-            cursor.execute(
-                'UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE email = ?',
-                (password_hash, email)
-            )
-            conn.commit()
-            conn.close()
-
-            flash('Пароль успешно изменен! Войдите с новым паролем.', 'success')
-            return redirect(url_for('login'))
-        else:
-            flash('Неверный email или код восстановления', 'error')
-            conn.close()
-
-    return render_template('reset_password.html')
+    flash(f'Пароль для {user["email"]} изменён. Сообщите его пользователю лично.', 'success')
+    return redirect(url_for('register'))
 
 
 # ==================== ROUTES ====================
