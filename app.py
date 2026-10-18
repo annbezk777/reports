@@ -3853,6 +3853,12 @@ def archive_report(report_id):
 
     report.archived = True
     report.schedule_enabled = False
+
+    # Archive the linked monitoring too, if this report has one
+    monitoring = MonitoringCampaign.query.filter_by(report_config_id=report.id).first()
+    if monitoring:
+        monitoring.archived = True
+
     db.session.commit()
 
     flash(f'Отчет "{report.name or report.campaign.name}" перемещен в архив', 'success')
@@ -3865,6 +3871,12 @@ def unarchive_report(report_id):
     report = ReportConfig.query.get_or_404(report_id)
 
     report.archived = False
+
+    # Restore the linked monitoring too, if this report has one
+    monitoring = MonitoringCampaign.query.filter_by(report_config_id=report.id).first()
+    if monitoring:
+        monitoring.archived = False
+
     db.session.commit()
 
     flash(f'Отчет "{report.name or report.campaign.name}" восстановлен из архива', 'success')
@@ -3880,6 +3892,9 @@ def bulk_archive_reports():
     for report in ReportConfig.query.filter(ReportConfig.id.in_(report_ids)).all():
         report.archived = True
         report.schedule_enabled = False
+        monitoring = MonitoringCampaign.query.filter_by(report_config_id=report.id).first()
+        if monitoring:
+            monitoring.archived = True
         count += 1
     db.session.commit()
     return jsonify({'success': True, 'count': count})

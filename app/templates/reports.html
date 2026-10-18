@@ -107,6 +107,20 @@
                                     {{ report.name if report.name else report.campaign.name }}
                                 </h3>
 
+                                <!-- Schedule status badge -->
+                                {% set schedule_summary = report.get_schedule_summary() %}
+                                {% if schedule_summary %}
+                                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: #f0fdf4; color: #15803d; font-size: 10px; font-weight: 600;">
+                                    <svg width="9" height="9" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    Авто: {{ schedule_summary }}
+                                </span>
+                                {% else %}
+                                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: #f5f5f4; color: #78716c; font-size: 10px; font-weight: 600;">
+                                    <svg width="9" height="9" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    Авто выключено
+                                </span>
+                                {% endif %}
+
                                 <span style="color: #D1D5DB;">•</span>
 
                                 <!-- Account -->

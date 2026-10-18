@@ -160,6 +160,18 @@ class ReportConfig(db.Model):
                 return m
         return None
 
+    def get_schedule_summary(self):
+        """Короткое описание расписания автообновления для карточки -
+        None, если автообновление выключено или дни не выбраны."""
+        if not self.schedule_enabled or not self.schedule_days:
+            return None
+        day_names = {'1': 'Пн', '2': 'Вт', '3': 'Ср', '4': 'Чт', '5': 'Пт', '6': 'Сб', '7': 'Вс'}
+        day_nums = [d for d in self.schedule_days.split(',') if d]
+        days = [day_names.get(d, d) for d in day_nums]
+        days_label = 'Пн-Вс' if len(day_nums) == 7 else ', '.join(days)
+        time_label = self.schedule_time or '09:00'
+        return f'{days_label} в {time_label}'
+
 
 class ReportLog(db.Model):
     """Report execution log"""
