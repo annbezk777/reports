@@ -135,7 +135,7 @@
                                 </div>
                                 {% endif %}
 
-                                {% set asana_monitoring = report.monitoring_campaigns | selectattr('asana_task_url') | first %}
+                                {% set asana_monitoring = report.get_asana_monitoring() %}
                                 {% if asana_monitoring %}
                                 <span style="color: #D1D5DB;">•</span>
 

@@ -136,6 +136,30 @@ class ReportConfig(db.Model):
             return []
         return Campaign.query.filter(Campaign.id.in_(self.campaign_ids)).all()
 
+    def get_asana_monitoring(self):
+        """Find the monitoring whose Asana link should be shown on this
+        report's card. Usually the directly-linked one (report_config_id),
+        but a "total" monitoring spanning several reports' campaigns
+        (e.g. one combined CTV monitoring covering two separate CTV_*
+        reports) never gets a report_config_id of its own - fall back to
+        an orphan monitoring whose campaign set fully contains this
+        report's campaigns."""
+        direct = next((m for m in self.monitoring_campaigns if m.asana_task_url), None)
+        if direct:
+            return direct
+
+        if not self.campaign_ids:
+            return None
+        report_campaigns = set(self.campaign_ids)
+        orphans = MonitoringCampaign.query.filter(
+            MonitoringCampaign.report_config_id.is_(None),
+            MonitoringCampaign.asana_task_url.isnot(None)
+        ).all()
+        for m in orphans:
+            if m.campaign_ids and report_campaigns.issubset(set(m.campaign_ids)):
+                return m
+        return None
+
 
 class ReportLog(db.Model):
     """Report execution log"""
