@@ -1214,7 +1214,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </select>
                 </div>
 
-                <!-- Asana Task Link (create mode only - a report's asana link lives on its auto-created monitoring, not on the report itself) -->
+                <!-- Asana Task Link - stored on the report's linked monitoring, not on the report itself -->
                 <div id="formAsanaSection" style="margin-bottom: 24px;">
                     <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
                         Ссылка на задачу Asana (необязательно)
@@ -1223,7 +1223,7 @@ document.addEventListener('DOMContentLoaded', () => {
                            placeholder="https://app.asana.com/1/.../task/..."
                            style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
                     <p style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                        Если указать, плановые показатели в автоматически созданном мониторинге подтянутся из задачи сразу при создании отчёта
+                        Если указать (или изменить), плановые показатели в связанном мониторинге подтянутся из задачи сразу при сохранении
                     </p>
                 </div>
 
@@ -1414,7 +1414,7 @@ function openReportFormModal(reportId = null) {
         submitText.textContent = 'Сохранить изменения';
         form.action = `/reports/${reportId}/edit`;
         document.getElementById('reportFormId').value = reportId;
-        document.getElementById('formAsanaSection').style.display = 'none';
+        document.getElementById('formAsanaTaskUrl').value = '';
 
         // Show campaigns section immediately (with loading placeholder) so the
         // modal doesn't resize once data arrives
@@ -1436,6 +1436,7 @@ function openReportFormModal(reportId = null) {
                 document.getElementById('formManager').value = data.manager || '';
                 document.getElementById('formGoogleSheetUrl').value = data.google_sheet_url || '';
                 document.getElementById('formScheduleTime').value = data.schedule_time || '09:00';
+                document.getElementById('formAsanaTaskUrl').value = data.asana_task_url || '';
 
                 // Set campaign mode
                 const modeRadio = document.querySelector(`input[name="campaign_mode"][value="${data.campaign_mode}"]`);
@@ -1476,7 +1477,6 @@ function openReportFormModal(reportId = null) {
         submitText.textContent = 'Создать отчет';
         form.action = '{{ url_for("add_report") }}';
         document.getElementById('reportFormId').value = '';
-        document.getElementById('formAsanaSection').style.display = 'block';
         form.reset();
 
         // Reset day buttons

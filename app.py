@@ -2381,6 +2381,7 @@ def get_report_data(report_id):
     """API endpoint to get report data for editing"""
     try:
         report = ReportConfig.query.get_or_404(report_id)
+        monitoring = MonitoringCampaign.query.filter_by(report_config_id=report.id).first()
 
         return jsonify({
             'id': report.id,
@@ -2396,6 +2397,7 @@ def get_report_data(report_id):
             'schedule_days': report.schedule_days,
             'schedule_time': report.schedule_time,
             'schedule_enabled': report.schedule_enabled,
+            'asana_task_url': monitoring.asana_task_url if monitoring else None,
         })
     except Exception as e:
         logger.error(f"Error getting report data: {e}")
@@ -3715,7 +3717,63 @@ def edit_report(report_id):
 
         db.session.commit()
 
-        flash('Отчет успешно обновлен', 'success')
+        # Asana link lives on the report's linked monitoring, not on the
+        # report itself - update it there, creating the monitoring if this
+        # older report never got one auto-created, and re-sync on change.
+        asana_flash_shown = False
+        asana_task_url = request.form.get('asana_task_url', '').strip() or None
+        monitoring = MonitoringCampaign.query.filter_by(report_config_id=report.id).first()
+        if asana_task_url or monitoring:
+            if not monitoring:
+                from datetime import timedelta
+                today = datetime.now().date()
+                monitoring = MonitoringCampaign(
+                    name=report.name or report.campaign.name,
+                    report_config_id=report.id,
+                    account_id=report.campaign.account_id,
+                    campaign_ids=report.campaign_ids,
+                    date_from=today,
+                    date_to=today + timedelta(days=30),
+                    manager=report.manager,
+                    google_sheet_url=report.google_sheet_url
+                )
+                db.session.add(monitoring)
+
+            if monitoring.asana_task_url != asana_task_url:
+                monitoring.asana_task_url = asana_task_url
+                db.session.commit()
+
+                if asana_task_url:
+                    try:
+                        from app.api.asana_client import AsanaClient
+                        client = AsanaClient()
+                        task_gid = client.extract_task_gid(asana_task_url)
+                        if task_gid:
+                            task = client.get_task(task_gid)
+                            monitoring_campaigns = monitoring.get_campaigns()
+                            format_type = monitoring_campaigns[0].format_type if monitoring_campaigns else None
+                            format_idx = AsanaClient.format_index_for_campaign_type(format_type)
+                            parsed = client.parse_monitoring_fields(task, format_idx=format_idx)
+                            if parsed.get('task_date_from') and parsed.get('task_date_to'):
+                                monitoring.date_from = parsed['task_date_from']
+                                monitoring.date_to = parsed['task_date_to']
+                                db.session.commit()
+
+                        asana_result = _sync_monitoring_from_asana(monitoring)
+                        db.session.commit()
+                        flash(f'Отчет обновлён. План из Asana подтянут в мониторинг ({", ".join(asana_result["updated_fields"])})', 'success')
+                        asana_flash_shown = True
+                    except AsanaSyncError as e:
+                        flash(f'Отчет обновлён. Ссылка Asana сохранена, но план не подтянулся: {e}', 'warning')
+                        asana_flash_shown = True
+                    except Exception as e:
+                        db.session.rollback()
+                        logging.error(f"⚠️ Unexpected error syncing Asana for monitoring {monitoring.id}: {e}")
+                        flash('Отчет обновлён. Ссылка Asana сохранена, но при синхронизации произошла ошибка', 'warning')
+                        asana_flash_shown = True
+
+        if not asana_flash_shown:
+            flash('Отчет успешно обновлен', 'success')
         return redirect(url_for('reports'))
 
     # GET request - show edit form
