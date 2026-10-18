@@ -949,7 +949,9 @@ function refreshAllMonitorings() {
                         <label for="asana_task_url">Ссылка на задачу Asana</label>
                         <div style="display: flex; gap: 8px;">
                             <input type="text" id="asana_task_url" name="asana_task_url" placeholder="https://app.asana.com/.../task/..." style="flex: 1;">
-                            <button type="button" onclick="syncAsanaPlan()" class="btn btn-secondary" style="flex-shrink: 0;">Обновить</button>
+                            <button type="button" onclick="syncAsanaPlan()" class="btn btn-secondary" title="Обновить план из Asana" style="flex-shrink: 0; padding: 0; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1634,12 +1636,18 @@ let lastRenderedVerifierLinks = [];
 let expandedVerifierLinkIds = new Set();
 
 function toggleVerifierCardExpand(linkId) {
-    if (expandedVerifierLinkIds.has(linkId)) {
-        expandedVerifierLinkIds.delete(linkId);
-    } else {
-        expandedVerifierLinkIds.add(linkId);
-    }
-    renderVerifierLinks(lastRenderedVerifierLinks);
+    // Сохраняем несохранённый ввод во всех карточках ДО перерисовки -
+    // renderVerifierLinks ниже строит разметку из lastRenderedVerifierLinks
+    // (данные на момент последней загрузки с сервера), а не из текущих
+    // значений полей на экране.
+    saveAllVerifierLinks().then(() => {
+        if (expandedVerifierLinkIds.has(linkId)) {
+            expandedVerifierLinkIds.delete(linkId);
+        } else {
+            expandedVerifierLinkIds.add(linkId);
+        }
+        reloadVerifierLinks(document.getElementById('monitoringId').value);
+    });
 }
 
 function renderVerifierLinks(links) {
@@ -1729,7 +1737,12 @@ function renderVerifierLinks(links) {
                     <input type="text" placeholder="например, Левушка" value="${link.label || ''}" class="vl-label">
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
-                    <label>Ссылка на пермалинк Weborama</label>
+                    <label style="display: flex; align-items: center; gap: 4px;">
+                        Ссылка на пермалинк Weborama
+                        ${link.permalink_url ? `<a href="${link.permalink_url}" target="_blank" title="Открыть пермалинк" style="display: inline-flex; color: var(--text-secondary);">
+                            <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                        </a>` : ''}
+                    </label>
                     <input type="text" placeholder="https://adap-interface.wbrm.ru/.../permalink/link/hash/..." value="${link.permalink_url || ''}" class="vl-url">
                 </div>
             </div>
@@ -1790,24 +1803,31 @@ function addVerifierLink(verifierType) {
         alert('Сначала сохраните мониторинг, потом можно будет добавить пермалинк верификатора');
         return;
     }
-    fetch(`/monitoring/${monitoringId}/verifier-links/add`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({verifier_type: verifierType})
-    })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                expandedVerifierLinkIds.add(data.id);
-                reloadVerifierLinks(monitoringId);
-            } else {
-                alert('Ошибка: ' + (data.error || 'неизвестная ошибка'));
-            }
-        });
+    // Сохраняем то, что уже напечатано в существующих карточках, ДО
+    // создания новой - иначе reloadVerifierLinks ниже перетрёт несохранённый
+    // ввод свежими (пустыми) данными с сервера.
+    saveAllVerifierLinks().then(() => {
+        fetch(`/monitoring/${monitoringId}/verifier-links/add`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({verifier_type: verifierType})
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    expandedVerifierLinkIds.add(data.id);
+                    reloadVerifierLinks(monitoringId);
+                } else {
+                    alert('Ошибка: ' + (data.error || 'неизвестная ошибка'));
+                }
+            });
+    });
 }
 
 function addVerifierMappingRow(linkId) {
-    fetch(`/verifier-links/${linkId}/mappings/add`, { method: 'POST' })
+    // Та же защита, что и в addVerifierLink - сохраняем несохранённый ввод
+    // во всех карточках перед перезагрузкой с сервера.
+    saveAllVerifierLinks().then(() => fetch(`/verifier-links/${linkId}/mappings/add`, { method: 'POST' })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
@@ -1815,7 +1835,7 @@ function addVerifierMappingRow(linkId) {
             } else {
                 alert('Ошибка: ' + (data.error || 'неизвестная ошибка'));
             }
-        });
+        }));
 }
 
 function deleteVerifierMappingRow(mappingId) {
