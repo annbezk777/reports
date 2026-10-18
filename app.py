@@ -3795,38 +3795,44 @@ def edit_report(report_id):
                 )
                 db.session.add(monitoring)
 
-            if monitoring.asana_task_url != asana_task_url:
-                monitoring.asana_task_url = asana_task_url
-                db.session.commit()
+            monitoring.asana_task_url = asana_task_url
+            db.session.commit()
 
-                if asana_task_url:
-                    try:
-                        from app.api.asana_client import AsanaClient
-                        client = AsanaClient()
-                        task_gid = client.extract_task_gid(asana_task_url)
-                        if task_gid:
-                            task = client.get_task(task_gid)
-                            monitoring_campaigns = monitoring.get_campaigns()
-                            format_type = monitoring_campaigns[0].format_type if monitoring_campaigns else None
-                            format_idx = AsanaClient.format_index_for_campaign_type(format_type)
-                            parsed = client.parse_monitoring_fields(task, format_idx=format_idx)
-                            if parsed.get('task_date_from') and parsed.get('task_date_to'):
-                                monitoring.date_from = parsed['task_date_from']
-                                monitoring.date_to = parsed['task_date_to']
-                                db.session.commit()
+            # Always (re-)sync when a URL is present, not just when it
+            # changed - a previous save could have saved the URL itself
+            # (this commit happens unconditionally) but failed partway
+            # through the actual Asana fetch below, leaving the
+            # monitoring with a link but no dates/plan. Gating the retry
+            # on "did the URL change" meant that failure could never be
+            # retried just by hitting save again with the same link.
+            if asana_task_url:
+                try:
+                    from app.api.asana_client import AsanaClient
+                    client = AsanaClient()
+                    task_gid = client.extract_task_gid(asana_task_url)
+                    if task_gid:
+                        task = client.get_task(task_gid)
+                        monitoring_campaigns = monitoring.get_campaigns()
+                        format_type = monitoring_campaigns[0].format_type if monitoring_campaigns else None
+                        format_idx = AsanaClient.format_index_for_campaign_type(format_type)
+                        parsed = client.parse_monitoring_fields(task, format_idx=format_idx)
+                        if parsed.get('task_date_from') and parsed.get('task_date_to'):
+                            monitoring.date_from = parsed['task_date_from']
+                            monitoring.date_to = parsed['task_date_to']
+                            db.session.commit()
 
-                        asana_result = _sync_monitoring_from_asana(monitoring)
-                        db.session.commit()
-                        flash(f'Отчет обновлён. План из Asana подтянут в мониторинг ({", ".join(asana_result["updated_fields"])})', 'success')
-                        asana_flash_shown = True
-                    except AsanaSyncError as e:
-                        flash(f'Отчет обновлён. Ссылка Asana сохранена, но план не подтянулся: {e}', 'warning')
-                        asana_flash_shown = True
-                    except Exception as e:
-                        db.session.rollback()
-                        logging.error(f"⚠️ Unexpected error syncing Asana for monitoring {monitoring.id}: {e}")
-                        flash('Отчет обновлён. Ссылка Asana сохранена, но при синхронизации произошла ошибка', 'warning')
-                        asana_flash_shown = True
+                    asana_result = _sync_monitoring_from_asana(monitoring)
+                    db.session.commit()
+                    flash(f'Отчет обновлён. План из Asana подтянут в мониторинг ({", ".join(asana_result["updated_fields"])})', 'success')
+                    asana_flash_shown = True
+                except AsanaSyncError as e:
+                    flash(f'Отчет обновлён. Ссылка Asana сохранена, но план не подтянулся: {e}', 'warning')
+                    asana_flash_shown = True
+                except Exception as e:
+                    db.session.rollback()
+                    logging.error(f"⚠️ Unexpected error syncing Asana for monitoring {monitoring.id}: {e}")
+                    flash('Отчет обновлён. Ссылка Asana сохранена, но при синхронизации произошла ошибка', 'warning')
+                    asana_flash_shown = True
 
         if not asana_flash_shown:
             flash('Отчет успешно обновлен', 'success')
