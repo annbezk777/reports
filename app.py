@@ -1725,6 +1725,46 @@ def get_monitoring_data(monitoring_id):
         return jsonify({'error': str(e)}), 500
 
 
+def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to):
+    """Fetch SAPE fact показы/клики for exactly the campaigns that have a
+    Weborama verifier mapping, one API call per campaign (SAPE's
+    multi-campaign stats call groups by date, not by campaign, so there's
+    no way to get a per-campaign breakdown from a single combined call).
+
+    Without this, the verifier discrepancy % would compare WCM's показы
+    for one campaign against the whole monitoring's combined SAPE fact
+    (all its campaigns) - wrong whenever a monitoring bundles more
+    campaigns than the permalink actually covers. Scoped to only mapped
+    campaigns, and only called from the existing refresh flows, so it
+    adds at most a handful of extra requests, not one per monitoring."""
+    mappings = [
+        m for link in monitoring.verifier_links if link.verifier_type == 'weborama'
+        for m in link.mappings if m.sape_campaign_id
+    ]
+    if not mappings:
+        return
+
+    for mapping in mappings:
+        campaign = mapping.campaign
+        if not campaign:
+            continue
+        try:
+            stats = client.get_stats(
+                campaign_ids=[int(campaign.campaign_id)],
+                date_from=date_from,
+                date_to=date_to,
+                fields=None
+            )
+            if not stats:
+                continue
+            total = stats.get('total', {})
+            mapping.sape_fact_impressions = total.get('shows', 0)
+            mapping.sape_fact_clicks = total.get('clicks', 0)
+            mapping.sape_fact_updated_at = datetime.utcnow()
+        except Exception as e:
+            logger.error(f"⚠️ Failed to fetch per-campaign SAPE fact for mapping {mapping.id} (campaign {campaign.campaign_id}): {e}")
+
+
 @app.route('/monitoring/<int:monitoring_id>/refresh', methods=['POST'])
 @login_required
 def refresh_monitoring_data(monitoring_id):
@@ -1814,6 +1854,8 @@ def refresh_monitoring_data(monitoring_id):
             vr_value = total.get('vr', 0.0)
             monitoring.fact_vtr = int(round(vr_value)) if vr_value else None
             logger.info(f"🎯 Banner/TGB format detected, loaded VR: {monitoring.fact_vtr}%")
+
+        _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
 
         monitoring.last_sync = datetime.utcnow()
 
@@ -1927,6 +1969,8 @@ def refresh_all_monitorings():
                 else:
                     vr_value = total.get('vr', 0.0)
                     monitoring.fact_vtr = int(round(vr_value)) if vr_value else None
+
+                _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
 
                 monitoring.last_sync = datetime.utcnow()
 
@@ -4171,6 +4215,9 @@ def scheduled_refresh_all_monitorings():
                 monitoring.fact_time_on_site = total.get('avgVisitDuration', 0.0)
                 monitoring.fact_page_depth = total.get('avgPostclickPageDepth', 0.0)
                 monitoring.fact_robotness = total.get('avgPostclickRobot', 0.0)
+
+                _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
+
                 monitoring.last_sync = datetime.utcnow()
 
                 db.session.commit()

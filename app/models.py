@@ -465,15 +465,97 @@ class MonitoringCampaign(db.Model):
         return 0
 
     def get_adriver_impressions_diff_percent(self):
-        """% = (SAPE − Adriver) / Adriver × 100 - та же формула, что и для верификаторов-пермалинков"""
+        """% = (Adriver − SAPE) / Adriver × 100 - отрицательное значение,
+        когда у нас в платформе (SAPE) показов больше, чем у верификатора."""
         if not self.adriver_impressions or not self.fact_impressions:
             return None
-        return round((self.fact_impressions - self.adriver_impressions) / self.adriver_impressions * 100, 1)
+        return round((self.adriver_impressions - self.fact_impressions) / self.adriver_impressions * 100, 1)
 
     def get_adriver_clicks_diff_percent(self):
+        """% = (SAPE − Adriver) / Adriver × 100 - для кликов знак не
+        инвертируется, в отличие от показов (см. get_adriver_impressions_diff_percent)."""
         if not self.adriver_clicks or not self.fact_clicks:
             return None
         return round((self.fact_clicks - self.adriver_clicks) / self.adriver_clicks * 100, 1)
+
+    def get_weborama_impressions(self):
+        """Sum of показы across every Weborama mapping on this monitoring -
+        a monitoring can have several insertions (banner+video from one
+        permalink, or several permalinks), so the table-level summary is
+        their total, not any single mapping's value."""
+        total = 0
+        found = False
+        for link in self.verifier_links:
+            if link.verifier_type != 'weborama':
+                continue
+            for mapping in link.mappings:
+                if mapping.verifier_impressions:
+                    total += mapping.verifier_impressions
+                    found = True
+        return total if found else None
+
+    def get_weborama_clicks(self):
+        total = 0
+        found = False
+        for link in self.verifier_links:
+            if link.verifier_type != 'weborama':
+                continue
+            for mapping in link.mappings:
+                if mapping.verifier_clicks:
+                    total += mapping.verifier_clicks
+                    found = True
+        return total if found else None
+
+    def _weborama_mappings(self):
+        return [
+            m for link in self.verifier_links if link.verifier_type == 'weborama'
+            for m in link.mappings
+        ]
+
+    def get_weborama_sape_fact_impressions(self):
+        """Sum of the per-campaign SAPE fact for exactly the campaigns that
+        have a Weborama mapping - NOT the whole monitoring's combined fact,
+        which may include other campaigns the permalink doesn't cover.
+        Falls back to the mapping's own fallback (monitoring total) for any
+        mapping that hasn't been refreshed with per-campaign data yet."""
+        total = 0
+        found = False
+        for m in self._weborama_mappings():
+            sape_imp, _ = m._sape_facts()
+            if sape_imp:
+                total += sape_imp
+                found = True
+        return total if found else None
+
+    def get_weborama_sape_fact_clicks(self):
+        total = 0
+        found = False
+        for m in self._weborama_mappings():
+            _, sape_clk = m._sape_facts()
+            if sape_clk:
+                total += sape_clk
+                found = True
+        return total if found else None
+
+    def get_weborama_impressions_diff_percent(self):
+        """% = (Weborama − SAPE) / Weborama × 100, scoped to just the
+        mapped campaigns' own SAPE fact (see get_weborama_sape_fact_impressions).
+        Negative when SAPE shows more than Weborama (sign intentionally
+        flipped vs. clicks - see get_weborama_clicks_diff_percent)."""
+        imp = self.get_weborama_impressions()
+        sape_fact = self.get_weborama_sape_fact_impressions()
+        if not imp or not sape_fact:
+            return None
+        return round((imp - sape_fact) / imp * 100, 1)
+
+    def get_weborama_clicks_diff_percent(self):
+        """% = (SAPE − Weborama) / Weborama × 100 - sign NOT flipped here,
+        unlike impressions (see get_weborama_impressions_diff_percent)."""
+        clk = self.get_weborama_clicks()
+        sape_fact = self.get_weborama_sape_fact_clicks()
+        if not clk or not sape_fact:
+            return None
+        return round((sape_fact - clk) / clk * 100, 1)
 
 
 class VerifierLink(db.Model):
@@ -544,6 +626,15 @@ class VerifierLinkMapping(db.Model):
     last_fetched_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # SAPE fact показы/клики for THIS mapping's own campaign only (not the
+    # whole monitoring - a monitoring can bundle several campaigns and the
+    # verifier permalink usually only covers one of them). Fetched via a
+    # separate per-campaign SAPE API call each time the monitoring is
+    # refreshed - see _refresh_verifier_campaign_facts() in app.py.
+    sape_fact_impressions = db.Column(db.Integer, nullable=True)
+    sape_fact_clicks = db.Column(db.Integer, nullable=True)
+    sape_fact_updated_at = db.Column(db.DateTime, nullable=True)
+
     verifier_link = db.relationship('VerifierLink', backref=db.backref('mappings', cascade='all, delete-orphan'))
     campaign = db.relationship('Campaign')
 
@@ -551,9 +642,13 @@ class VerifierLinkMapping(db.Model):
         return f'<VerifierLinkMapping {self.insertion_name or self.id}>'
 
     def _sape_facts(self):
-        """Показы/клики SAPE для сравнения - пока берём агрегат по всему
-        мониторингу (сравнение по конкретной SAPE-кампании потребовало бы
-        отдельного живого запроса к SAPE API - не реализовано)."""
+        """Показы/клики SAPE для сравнения - предпочитаем факт по самой
+        этой кампании (sape_fact_*, см. выше); до первого обновления
+        мониторинга после появления этого поля откатываемся на агрегат
+        по всему мониторингу (менее точно, если в мониторинге несколько
+        кампаний)."""
+        if self.sape_fact_impressions is not None or self.sape_fact_clicks is not None:
+            return self.sape_fact_impressions, self.sape_fact_clicks
         monitoring = self.verifier_link.monitoring
         return monitoring.fact_impressions, monitoring.fact_clicks
 

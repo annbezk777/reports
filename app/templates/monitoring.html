@@ -194,24 +194,36 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     <col style="width: 7%;" />
                                     <col style="width: 7%;" />
                                     <col style="width: 7%;" />
+                                    <col style="width: 7%;" />
+                                    <col style="width: 7%;" />
+                                    <col style="width: 7%;" />
+                                    <col style="width: 7%;" />
                                 </colgroup>
                                 <thead>
                                     <tr>
-                                        <th class="col-label">Показатель</th>
+                                        <th class="col-label" rowspan="2" style="vertical-align: bottom;">Показатель</th>
+                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Показы</th>
+                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Клики</th>
+                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">CTR</th>
+                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Визиты</th>
+                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">{{ monitoring.get_format_label() }}</th>
+                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Отказы</th>
+                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Время</th>
+                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Глубина</th>
+                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Роботн.</th>
+                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">PI</th>
+                                        <th class="col-data" colspan="6" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">ADRIVER</th>
+                                        <th class="col-data" colspan="2" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">WEBORAMA</th>
+                                    </tr>
+                                    <tr>
+                                        <th class="col-data" style="border-left: 1px solid #e7e5e4;">IVT</th>
+                                        <th class="col-data">GIVT</th>
+                                        <th class="col-data">SIVT</th>
+                                        <th class="col-data">GIVT (к)</th>
                                         <th class="col-data">Показы</th>
                                         <th class="col-data">Клики</th>
-                                        <th class="col-data">CTR</th>
-                                        <th class="col-data">Визиты</th>
-                                        <th class="col-data">{{ monitoring.get_format_label() }}</th>
-                                        <th class="col-data">Отказы</th>
-                                        <th class="col-data">Время</th>
-                                        <th class="col-data">Глубина</th>
-                                        <th class="col-data">Роботн.</th>
-                                        <th class="col-data">PI</th>
-                                        <th class="col-data">IVT показы (%)</th>
-                                        <th class="col-data">GIVT показы (%)</th>
-                                        <th class="col-data">SIVT показы (%)</th>
-                                        <th class="col-data">GIVT клики (%)</th>
+                                        <th class="col-data" style="border-left: 1px solid #e7e5e4;">Показы</th>
+                                        <th class="col-data">Клики</th>
                                     </tr>
                                 </thead>
                                 <tbody style="font-size: 9px; color: #44403c; border-top: 1px solid #e7e5e4;">
@@ -230,10 +242,14 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≥ %.0f' % monitoring.plan_page_depth) if monitoring.plan_page_depth else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≤ %.0f%%' % monitoring.plan_robotness) if monitoring.plan_robotness else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≥ %.0f%%' % monitoring.plan_pi) if monitoring.plan_pi else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≤ %.1f%%' % monitoring.plan_ivt_impressions) if monitoring.plan_ivt_impressions else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e; border-left: 1px solid #e7e5e4;">{{ ('≤ %.1f%%' % monitoring.plan_ivt_impressions) if monitoring.plan_ivt_impressions else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≤ %.1f%%' % monitoring.plan_givt_impressions) if monitoring.plan_givt_impressions else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≤ %.1f%%' % monitoring.plan_sivt) if monitoring.plan_sivt else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≤ %.1f%%' % monitoring.plan_givt_clicks) if monitoring.plan_givt_clicks else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e;">—</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e;">—</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e; border-left: 1px solid #e7e5e4;">—</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e;">—</td>
                                     </tr>
 
                                     <!-- ФАКТ -->
@@ -251,10 +267,20 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.0f' % monitoring.fact_page_depth) if monitoring.fact_page_depth else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.0f%%' % monitoring.fact_robotness) if monitoring.fact_robotness else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.0f%%' % monitoring.get_fact_pi()) if monitoring.get_fact_pi() else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_ivt_impressions) if monitoring.fact_ivt_impressions else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917; border-left: 1px solid #e7e5e4;">{{ ('%.2f%%' % monitoring.fact_ivt_impressions) if monitoring.fact_ivt_impressions else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_givt_impressions) if monitoring.fact_givt_impressions else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_sivt_impressions) if monitoring.fact_sivt_impressions else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_givt_clicks) if monitoring.fact_givt_clicks else '—' }}</td>
+
+                                        {% set adr_imp = monitoring.adriver_impressions %}
+                                        {% set adr_clk = monitoring.adriver_clicks %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(adr_imp).replace(',', ' ') if adr_imp else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(adr_clk).replace(',', ' ') if adr_clk else '—' }}</td>
+
+                                        {% set wcm_imp = monitoring.get_weborama_impressions() %}
+                                        {% set wcm_clk = monitoring.get_weborama_clicks() %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917; border-left: 1px solid #e7e5e4;">{{ "{:,}".format(wcm_imp).replace(',', ' ') if wcm_imp else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(wcm_clk).replace(',', ' ') if wcm_clk else '—' }}</td>
                                     </tr>
 
                                     <!-- ВЫПОЛНЕНИЕ -->
@@ -291,51 +317,26 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         {% set pi_diff = monitoring.get_pi_diff_percent() %}
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if pi_diff is not none %}color: {% if pi_diff > 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % pi_diff) if pi_diff > 0 else ('%.1f' % pi_diff)) if pi_diff is not none else '—' }}</td>
 
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e; border-left: 1px solid #e7e5e4;">—</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e;">—</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e;">—</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e;">—</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e;">—</td>
+
+                                        {% set adr_imp_diff = monitoring.get_adriver_impressions_diff_percent() %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if adr_imp_diff is not none %}color: {% if adr_imp_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % adr_imp_diff) if adr_imp_diff > 0 else ('%.1f%%' % adr_imp_diff)) if adr_imp_diff is not none else '—' }}</td>
+
+                                        {% set adr_clk_diff = monitoring.get_adriver_clicks_diff_percent() %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if adr_clk_diff is not none %}color: {% if adr_clk_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % adr_clk_diff) if adr_clk_diff > 0 else ('%.1f%%' % adr_clk_diff)) if adr_clk_diff is not none else '—' }}</td>
+
+                                        {% set wcm_imp_diff = monitoring.get_weborama_impressions_diff_percent() %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; border-left: 1px solid #e7e5e4; {% if wcm_imp_diff is not none %}color: {% if wcm_imp_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % wcm_imp_diff) if wcm_imp_diff > 0 else ('%.1f%%' % wcm_imp_diff)) if wcm_imp_diff is not none else '—' }}</td>
+
+                                        {% set wcm_clk_diff = monitoring.get_weborama_clicks_diff_percent() %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if wcm_clk_diff is not none %}color: {% if wcm_clk_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % wcm_clk_diff) if wcm_clk_diff > 0 else ('%.1f%%' % wcm_clk_diff)) if wcm_clk_diff is not none else '—' }}</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
-
-                        <!-- Verifier Links (Weborama) + Adriver -->
-                        {% if monitoring.verifier_links or monitoring.adriver_impressions or monitoring.adriver_clicks %}
-                        <div style="padding: 8px 16px; background: rgba(250, 250, 249, 0.4); border-top: 1px solid rgba(231, 229, 228, 0.6); font-size: 9px;">
-                            <div style="font-weight: 600; color: #44403c; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; font-size: 8px;">Верификаторы</div>
-                            {% for link in monitoring.verifier_links %}
-                            {% for mapping in link.mappings %}
-                            {% set imp_diff = mapping.get_impressions_diff_percent() %}
-                            {% set clk_diff = mapping.get_clicks_diff_percent() %}
-                            <div style="display: flex; align-items: center; gap: 14px; padding: 4px 0; flex-wrap: wrap;">
-                                <span style="font-weight: 600; color: #57534e; min-width: 90px;">Weborama{% if link.label %} ({{ link.label }}){% endif %}{% if mapping.campaign %} — {{ mapping.campaign.name }}{% endif %}</span>
-                                <span style="color: #78716c;">Показы: <strong style="color: #1c1917;">{{ "{:,}".format(mapping.verifier_impressions).replace(',', ' ') if mapping.verifier_impressions else '—' }}</strong></span>
-                                <span style="{% if imp_diff is not none %}color: {% if imp_diff|abs <= 5 %}#16a34a{% elif imp_diff|abs <= 15 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %} font-weight: 600;">{{ (('+%.1f%%' % imp_diff) if imp_diff > 0 else ('%.1f%%' % imp_diff)) if imp_diff is not none else '—' }}</span>
-                                <span style="color: #78716c;">Клики: <strong style="color: #1c1917;">{{ "{:,}".format(mapping.verifier_clicks).replace(',', ' ') if mapping.verifier_clicks else '—' }}</strong></span>
-                                <span style="{% if clk_diff is not none %}color: {% if clk_diff|abs <= 5 %}#16a34a{% elif clk_diff|abs <= 15 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %} font-weight: 600;">{{ (('+%.1f%%' % clk_diff) if clk_diff > 0 else ('%.1f%%' % clk_diff)) if clk_diff is not none else '—' }}</span>
-                                {% if link.permalink_url %}
-                                <a href="{{ link.permalink_url }}" target="_blank" style="color: #a8a29e; text-decoration: underline;">ссылка</a>
-                                {% endif %}
-                            </div>
-                            {% endfor %}
-                            {% endfor %}
-                            {% if monitoring.adriver_impressions or monitoring.adriver_clicks %}
-                            {% set adriver_imp_diff = monitoring.get_adriver_impressions_diff_percent() %}
-                            {% set adriver_clk_diff = monitoring.get_adriver_clicks_diff_percent() %}
-                            <div style="display: flex; align-items: center; gap: 14px; padding: 4px 0; flex-wrap: wrap;">
-                                <span style="font-weight: 600; color: #57534e; min-width: 90px;">Adriver</span>
-                                <span style="color: #78716c;">Показы: <strong style="color: #1c1917;">{{ "{:,}".format(monitoring.adriver_impressions).replace(',', ' ') if monitoring.adriver_impressions else '—' }}</strong></span>
-                                <span style="{% if adriver_imp_diff is not none %}color: {% if adriver_imp_diff|abs <= 5 %}#16a34a{% elif adriver_imp_diff|abs <= 15 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %} font-weight: 600;">{{ (('+%.1f%%' % adriver_imp_diff) if adriver_imp_diff > 0 else ('%.1f%%' % adriver_imp_diff)) if adriver_imp_diff is not none else '—' }}</span>
-                                <span style="color: #78716c;">Клики: <strong style="color: #1c1917;">{{ "{:,}".format(monitoring.adriver_clicks).replace(',', ' ') if monitoring.adriver_clicks else '—' }}</strong></span>
-                                <span style="{% if adriver_clk_diff is not none %}color: {% if adriver_clk_diff|abs <= 5 %}#16a34a{% elif adriver_clk_diff|abs <= 15 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %} font-weight: 600;">{{ (('+%.1f%%' % adriver_clk_diff) if adriver_clk_diff > 0 else ('%.1f%%' % adriver_clk_diff)) if adriver_clk_diff is not none else '—' }}</span>
-                                {% if monitoring.fact_ivt_impressions is not none %}
-                                <span style="color: #a8a29e;">IVT показы: {{ '%.1f%%' % monitoring.fact_ivt_impressions }}</span>
-                                {% endif %}
-                            </div>
-                            {% endif %}
-                        </div>
-                        {% endif %}
 
                         <!-- Campaigns Accordion Section -->
                         {% set campaigns = monitoring.get_campaigns() %}
