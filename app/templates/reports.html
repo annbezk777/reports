@@ -1186,12 +1186,25 @@ document.addEventListener('DOMContentLoaded', () => {
                         Выберите аккаунт SAPE
                     </label>
                     <select id="formAccountId" name="account_id" required
-                            onchange="loadFormCampaigns(this.value)"
+                            onchange="loadFormClients(this.value); loadFormCampaigns(this.value)"
                             style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
                         <option value="">Выберите аккаунт</option>
                         {% for account in accounts %}
                         <option value="{{ account.id }}">{{ account.name }} | {{ account.login }}</option>
                         {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Advertiser (Client) Filter -->
+                <div id="formClientSection" style="display: none; margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Рекламодатель
+                        <span style="font-size: 11px; font-weight: 400; color: var(--text-secondary);">(необязательно, для фильтра кампаний)</span>
+                    </label>
+                    <select id="formClientId"
+                            onchange="loadFormCampaigns(document.getElementById('formAccountId').value)"
+                            style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                        <option value="">Все рекламодатели</option>
                     </select>
                 </div>
 
@@ -1453,6 +1466,7 @@ function openReportFormModal(reportId = null) {
                 // Load account and campaigns with settings
                 if (data.account_id) {
                     document.getElementById('formAccountId').value = data.account_id;
+                    loadFormClients(data.account_id);
                     loadFormCampaigns(data.account_id, data.campaign_ids || [], data.campaign_settings || {});
                 }
 
@@ -1486,6 +1500,8 @@ function openReportFormModal(reportId = null) {
         form.action = '{{ url_for("add_report") }}';
         document.getElementById('reportFormId').value = '';
         form.reset();
+        document.getElementById('formClientSection').style.display = 'none';
+        document.getElementById('formClientId').innerHTML = '<option value="">Все рекламодатели</option>';
 
         // Reset day buttons
         document.querySelectorAll('.day-button').forEach(btn => {
@@ -1506,18 +1522,38 @@ function closeReportFormModal() {
 }
 
 // Load campaigns for selected account
+function loadFormClients(accountId, selectedClientId = '') {
+    const section = document.getElementById('formClientSection');
+    const select = document.getElementById('formClientId');
+    if (!accountId) {
+        section.style.display = 'none';
+        select.innerHTML = '<option value="">Все рекламодатели</option>';
+        return;
+    }
+    fetch(`/api/clients/${accountId}`)
+        .then(res => res.json())
+        .then(clients => {
+            select.innerHTML = '<option value="">Все рекламодатели</option>' +
+                clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            select.value = selectedClientId || '';
+            section.style.display = clients.length > 0 ? 'block' : 'none';
+        });
+}
+
 function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings = {}) {
     if (!accountId) {
         document.getElementById('formCampaignsSection').style.display = 'none';
         return;
     }
 
+    const clientId = document.getElementById('formClientId').value;
 
     document.getElementById('formCampaignsSection').style.display = 'block';
     const tbody = document.getElementById('formCampaignsList');
     tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Загрузка кампаний...</td></tr>';
 
-    fetch(`/api/campaigns/${accountId}`)
+    const campaignsUrl = clientId ? `/api/campaigns/${accountId}?client_id=${clientId}` : `/api/campaigns/${accountId}`;
+    fetch(campaignsUrl)
         .then(res => res.json())
         .then(campaigns => {
             if (campaigns.length === 0) {
