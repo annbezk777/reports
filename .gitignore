@@ -51,3 +51,8 @@ ops_backups/
 # Temporary files
 *.tmp
 sync_august_accounts.py
+
+# Runtime status file - rewritten by the app itself (scheduled sync writes
+# a fresh timestamp here), tracking it in git caused production's own
+# working tree to go dirty and block `git pull` on the next deploy
+.last_sync
