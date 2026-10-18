@@ -1180,19 +1180,17 @@ document.addEventListener('DOMContentLoaded', () => {
             <form id="reportForm" method="POST" action="{{ url_for('add_report') }}">
                 <input type="hidden" id="reportFormId" name="report_id" value="">
 
-                <!-- Account Selection -->
-                <div style="margin-bottom: 24px;">
+                <!-- Account Selection - single-box typeahead combobox (not select2 -
+                     select2 always renders a separate search row under the main
+                     box when open; this types directly into the same field) -->
+                <div style="margin-bottom: 24px; position: relative;">
                     <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
                         Выберите аккаунт SAPE
                     </label>
-                    <select id="formAccountId" name="account_id" required
-                            onchange="loadFormClients(this.value); loadFormCampaigns(this.value)"
-                            style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
-                        <option value="">Выберите аккаунт</option>
-                        {% for account in accounts %}
-                        <option value="{{ account.id }}">{{ account.name }} | {{ account.login }}</option>
-                        {% endfor %}
-                    </select>
+                    <input type="text" id="formAccountSearch" autocomplete="off" placeholder="Выберите аккаунт"
+                           style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                    <input type="hidden" id="formAccountId" name="account_id">
+                    <div id="formAccountDropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; background: white; border: 1px solid var(--border-color); border-radius: 8px; max-height: 240px; overflow-y: auto; z-index: 50; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);"></div>
                 </div>
 
                 <!-- Advertiser (Client) Filter -->
@@ -1344,7 +1342,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 16px 0; display: flex; align-items: center; gap: 10px;">
                         Расписание обновления
                         <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer;">
-                            <input type="checkbox" id="formScheduleEnabled" name="schedule_enabled" value="1" checked>
+                            <input type="checkbox" id="formScheduleEnabled" name="schedule_enabled" value="1" checked style="accent-color: var(--primary-orange);">
                             Включено
                         </label>
                     </h4>
@@ -1466,6 +1464,8 @@ function openReportFormModal(reportId = null) {
                 // Load account and campaigns with settings
                 if (data.account_id) {
                     document.getElementById('formAccountId').value = data.account_id;
+                    const matchedAccount = FORM_ACCOUNTS.find(a => a.id === String(data.account_id));
+                    document.getElementById('formAccountSearch').value = matchedAccount ? matchedAccount.label : '';
                     loadFormClients(data.account_id);
                     loadFormCampaigns(data.account_id, data.campaign_ids || [], data.campaign_settings || {});
                 }
@@ -1500,6 +1500,7 @@ function openReportFormModal(reportId = null) {
         form.action = '{{ url_for("add_report") }}';
         document.getElementById('reportFormId').value = '';
         form.reset();
+        document.getElementById('formAccountDropdown').style.display = 'none';
         document.getElementById('formClientSection').style.display = 'none';
         document.getElementById('formClientId').innerHTML = '<option value="">Все рекламодатели</option>';
 
@@ -1814,112 +1815,86 @@ document.getElementById('reportFormModal')?.addEventListener('click', (e) => {
 });
 </script>
 
-<!-- Select2 CSS -->
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-
-<!-- Select2 Custom Styling -->
 <style>
-.select2-container--default .select2-selection--single {
-    height: 42px !important;
-    padding: 10px 16px !important;
-    border: 1px solid var(--border-color) !important;
-    border-radius: 8px !important;
-    font-size: 14px !important;
+.account-combobox-option {
+    padding: 10px 16px;
+    font-size: 14px;
+    cursor: pointer;
 }
-
-.select2-container--default .select2-selection--single .select2-selection__rendered {
-    line-height: 20px !important;
-    padding: 0 !important;
-    color: var(--text-primary) !important;
-}
-
-.select2-container--default .select2-selection--single .select2-selection__arrow {
-    height: 40px !important;
-    right: 8px !important;
-}
-
-.select2-container--default .select2-search--dropdown .select2-search__field {
-    border: 1px solid var(--border-color) !important;
-    border-radius: 6px !important;
-    padding: 8px 12px !important;
-    font-size: 14px !important;
-}
-
-.select2-container--default .select2-results__option {
-    padding: 10px 16px !important;
-    font-size: 14px !important;
-}
-
-.select2-container--default .select2-results__option--highlighted[aria-selected] {
-    background-color: var(--peach-light) !important;
-    color: var(--primary-orange) !important;
-}
-
-.select2-container--default .select2-results__option[aria-selected=true] {
-    background-color: var(--primary-orange) !important;
-    color: white !important;
-}
-
-.select2-dropdown {
-    border: 1px solid var(--border-color) !important;
-    border-radius: 8px !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+.account-combobox-option:hover,
+.account-combobox-option.active {
+    background-color: var(--peach-light);
+    color: var(--primary-orange);
 }
 </style>
 
-<!-- jQuery (required for Select2) -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-<!-- Select2 JS -->
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
 <script>
-// Initialize Select2 when document is ready
-$(document).ready(function() {
-    initializeAccountSelect2();
-});
+// Единое поле выбора аккаунта: печатаешь прямо в той же ячейке, что и
+// открывает список - без отдельной "второй ячейки" под полем, как
+// было с select2 (его дропдаун всегда рисует самостоятельный input
+// поиска под основным полем, визуально сливать их до конца не вышло).
+const FORM_ACCOUNTS = [
+    {% for account in accounts %}
+    {id: '{{ account.id }}', label: {{ (account.name ~ ' | ' ~ account.login) | tojson }}},
+    {% endfor %}
+];
 
-function initializeAccountSelect2() {
-    // Уничтожить существующий экземпляр Select2, если он есть
-    if ($('#formAccountId').hasClass('select2-hidden-accessible')) {
-        $('#formAccountId').select2('destroy');
+function renderAccountOptions(filterText) {
+    const dropdown = document.getElementById('formAccountDropdown');
+    const needle = filterText.trim().toLowerCase();
+    const filtered = needle
+        ? FORM_ACCOUNTS.filter(a => a.label.toLowerCase().includes(needle))
+        : FORM_ACCOUNTS;
+
+    if (filtered.length === 0) {
+        dropdown.innerHTML = '<div style="padding: 10px 16px; font-size: 13px; color: var(--text-secondary);">Аккаунт не найден</div>';
+    } else {
+        dropdown.innerHTML = filtered.map(a =>
+            `<div class="account-combobox-option" data-id="${a.id}" data-label="${a.label.replace(/"/g, '&quot;')}">${a.label}</div>`
+        ).join('');
     }
+    dropdown.style.display = 'block';
+}
 
-    // Инициализация Select2 с поиском
-    $('#formAccountId').select2({
-        placeholder: 'Выберите аккаунт',
-        allowClear: true,
-        width: '100%',
-        minimumResultsForSearch: 0,
-        dropdownParent: $('#reportFormModal'),
-        theme: 'default',
-        language: {
-            noResults: function() {
-                return "Аккаунт не найден";
-            },
-            searching: function() {
-                return "Поиск...";
-            },
-            inputTooShort: function() {
-                return "Введите текст для поиска";
-            },
-            inputTooLong: function() {
-                return "Слишком длинный запрос";
-            },
-            loadingMore: function() {
-                return "Загрузка...";
-            },
-            maximumSelected: function() {
-                return "Достигнут максимум";
-            },
-            errorLoading: function() {
-                return "Ошибка загрузки";
-            }
+function selectFormAccount(id, label) {
+    document.getElementById('formAccountId').value = id;
+    document.getElementById('formAccountSearch').value = label;
+    document.getElementById('formAccountDropdown').style.display = 'none';
+    loadFormClients(id);
+    loadFormCampaigns(id);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('formAccountSearch');
+    const dropdown = document.getElementById('formAccountDropdown');
+
+    searchInput.addEventListener('focus', () => renderAccountOptions(searchInput.value));
+    searchInput.addEventListener('input', () => renderAccountOptions(searchInput.value));
+
+    dropdown.addEventListener('click', (e) => {
+        const opt = e.target.closest('.account-combobox-option');
+        if (!opt) return;
+        selectFormAccount(opt.dataset.id, opt.dataset.label);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#formAccountSearch') && !e.target.closest('#formAccountDropdown')) {
+            dropdown.style.display = 'none';
         }
     });
 
-    console.log('Select2 инициализирован для выбора аккаунта');
-}
+    // account_id - сейчас скрытое поле (не <select>), так что HTML5
+    // required на нём ненадёжен (в некоторых браузерах форма просто
+    // молча не отправляется без видимой подсказки) - проверяем сами.
+    document.getElementById('reportForm').addEventListener('submit', (e) => {
+        if (!document.getElementById('formAccountId').value) {
+            e.preventDefault();
+            searchInput.style.borderColor = '#dc2626';
+            searchInput.focus();
+            alert('Выберите аккаунт SAPE');
+        }
+    });
+});
 </script>
 
 {% endblock %}
