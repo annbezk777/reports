@@ -317,10 +317,17 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         {% set pi_diff = monitoring.get_pi_diff_percent() %}
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if pi_diff is not none %}color: {% if pi_diff > 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % pi_diff) if pi_diff > 0 else ('%.1f' % pi_diff)) if pi_diff is not none else '—' }}</td>
 
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e; border-left: 1px solid #e7e5e4;">—</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e;">—</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e;">—</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; color: #a8a29e;">—</td>
+                                        {% set ivt_diff = monitoring.get_ivt_diff() %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; border-left: 1px solid #e7e5e4; {% if ivt_diff is not none %}color: {% if ivt_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % ivt_diff) if ivt_diff > 0 else ('%.2f' % ivt_diff)) if ivt_diff is not none else '—' }}</td>
+
+                                        {% set givt_diff = monitoring.get_givt_diff() %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if givt_diff is not none %}color: {% if givt_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % givt_diff) if givt_diff > 0 else ('%.2f' % givt_diff)) if givt_diff is not none else '—' }}</td>
+
+                                        {% set sivt_diff = monitoring.get_sivt_diff() %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if sivt_diff is not none %}color: {% if sivt_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % sivt_diff) if sivt_diff > 0 else ('%.2f' % sivt_diff)) if sivt_diff is not none else '—' }}</td>
+
+                                        {% set givt_clicks_diff = monitoring.get_givt_clicks_diff() %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if givt_clicks_diff is not none %}color: {% if givt_clicks_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % givt_clicks_diff) if givt_clicks_diff > 0 else ('%.2f' % givt_clicks_diff)) if givt_clicks_diff is not none else '—' }}</td>
 
                                         {% set adr_imp_diff = monitoring.get_adriver_impressions_diff_percent() %}
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if adr_imp_diff is not none %}color: {% if adr_imp_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % adr_imp_diff) if adr_imp_diff > 0 else ('%.1f%%' % adr_imp_diff)) if adr_imp_diff is not none else '—' }}</td>

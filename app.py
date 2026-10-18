@@ -1561,7 +1561,13 @@ def edit_monitoring(monitoring_id):
         monitoring.plan_sivt = float(plan_sivt) if plan_sivt else None
         monitoring.plan_givt_clicks = float(plan_givt_clicks) if plan_givt_clicks else None
 
-        # IVT показатели (факт) - ручной ввод или Excel-выгрузка Adriver
+        # IVT показатели (факт) - ручной ввод или Excel-выгрузка Adriver.
+        # Выгрузка Adriver пишет эти поля напрямую через /upload_adriver_excel
+        # (AJAX, без перезагрузки формы редактирования) - если после этого
+        # основную форму сохранить раньше, чем её поля успеют подтянуть
+        # свежие значения, пустая отправка затирала бы их в NULL. Поэтому
+        # пустое значение теперь просто не трогает поле, а не обнуляет его -
+        # очистить значение явно отсюда больше нельзя, только новой загрузкой/вводом.
         fact_ivt = request.form.get('fact_ivt_impressions')
         fact_givt = request.form.get('fact_givt_impressions')
         fact_sivt = request.form.get('fact_sivt_impressions')
@@ -1569,12 +1575,18 @@ def edit_monitoring(monitoring_id):
         adriver_impressions = request.form.get('adriver_impressions')
         adriver_clicks = request.form.get('adriver_clicks')
 
-        monitoring.fact_ivt_impressions = float(fact_ivt) if fact_ivt else None
-        monitoring.fact_givt_impressions = float(fact_givt) if fact_givt else None
-        monitoring.fact_sivt_impressions = float(fact_sivt) if fact_sivt else None
-        monitoring.fact_givt_clicks = float(fact_givt_clicks) if fact_givt_clicks else None
-        monitoring.adriver_impressions = int(adriver_impressions) if adriver_impressions else None
-        monitoring.adriver_clicks = int(adriver_clicks) if adriver_clicks else None
+        if fact_ivt:
+            monitoring.fact_ivt_impressions = float(fact_ivt)
+        if fact_givt:
+            monitoring.fact_givt_impressions = float(fact_givt)
+        if fact_sivt:
+            monitoring.fact_sivt_impressions = float(fact_sivt)
+        if fact_givt_clicks:
+            monitoring.fact_givt_clicks = float(fact_givt_clicks)
+        if adriver_impressions:
+            monitoring.adriver_impressions = int(adriver_impressions)
+        if adriver_clicks:
+            monitoring.adriver_clicks = int(adriver_clicks)
 
         # Manager
         manager = request.form.get('manager')

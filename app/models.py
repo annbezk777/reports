@@ -434,6 +434,27 @@ class MonitoringCampaign(db.Model):
         diff = fact_pi - self.plan_pi
         return round(diff, 1)
 
+    def get_ivt_diff(self):
+        """IVT: разница факта с плановым порогом (план - это "не более X%")"""
+        if not self.fact_ivt_impressions or not self.plan_ivt_impressions:
+            return None
+        return round(self.fact_ivt_impressions - self.plan_ivt_impressions, 2)
+
+    def get_givt_diff(self):
+        if not self.fact_givt_impressions or not self.plan_givt_impressions:
+            return None
+        return round(self.fact_givt_impressions - self.plan_givt_impressions, 2)
+
+    def get_sivt_diff(self):
+        if not self.fact_sivt_impressions or not self.plan_sivt:
+            return None
+        return round(self.fact_sivt_impressions - self.plan_sivt, 2)
+
+    def get_givt_clicks_diff(self):
+        if not self.fact_givt_clicks or not self.plan_givt_clicks:
+            return None
+        return round(self.fact_givt_clicks - self.plan_givt_clicks, 2)
+
     def get_ctr_diff(self):
         """CTR: показать разницу (+0.06 или -0.06)"""
         fact_ctr = self.get_fact_ctr()
@@ -466,7 +487,10 @@ class MonitoringCampaign(db.Model):
 
     def get_adriver_impressions_diff_percent(self):
         """% = (Adriver − SAPE) / Adriver × 100 - отрицательное значение,
-        когда у нас в платформе (SAPE) показов больше, чем у верификатора."""
+        когда у нас в платформе (SAPE) показов больше, чем у верификатора.
+        Делитель (Adriver) обязан быть ненулевым - делить на 0 нельзя. А
+        вот SAPE-факт, равный ровно 0, валиден и не должен блокировать
+        расчёт (поэтому is None, а не truthy-проверка)."""
         if not self.adriver_impressions or not self.fact_impressions:
             return None
         return round((self.adriver_impressions - self.fact_impressions) / self.adriver_impressions * 100, 1)
@@ -541,7 +565,9 @@ class MonitoringCampaign(db.Model):
         """% = (Weborama − SAPE) / Weborama × 100, scoped to just the
         mapped campaigns' own SAPE fact (see get_weborama_sape_fact_impressions).
         Negative when SAPE shows more than Weborama (sign intentionally
-        flipped vs. clicks - see get_weborama_clicks_diff_percent)."""
+        flipped vs. clicks - see get_weborama_clicks_diff_percent).
+        Делитель (Weborama) обязан быть ненулевым, но SAPE-факт, равный
+        ровно 0, валиден и не должен блокировать расчёт."""
         imp = self.get_weborama_impressions()
         sape_fact = self.get_weborama_sape_fact_impressions()
         if not imp or not sape_fact:

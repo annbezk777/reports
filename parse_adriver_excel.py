@@ -170,9 +170,13 @@ class AdriverExcelParser:
         """Extract IVT data from parsed row"""
         print("📊 Extracted IVT Data:\n")
 
+        # Раздел 3.2 ТЗ по верификаторам: сравниваем SAPE с сырыми
+        # (не очищенными от IVT) показами/кликами Adriver - берём колонку
+        # "...всего с учетом IVT", а не просто "Показы"/"Клики" (которая
+        # в части выгрузок Adriver вообще не встречается под таким именем).
         ivt_data = {
-            'impressions': self._parse_number(data.get('Показы', 0)),
-            'clicks': self._parse_number(data.get('Клики', 0)),
+            'impressions': self._parse_number(data.get('Показов всего с учетом IVT', data.get('Показы', 0))),
+            'clicks': self._parse_number(data.get('Кликов всего с учетом IVT', data.get('Клики', 0))),
             'ivt_impressions': self._parse_number(data.get('Показы IVT', 0)),
             'ivt_impressions_percent': self._parse_percent(data.get('Показы %IVT', 0)),
             'givt_impressions': self._parse_number(data.get('Показы GIVT', 0)),
