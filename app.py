@@ -3775,10 +3775,18 @@ def edit_report(report_id):
 
         # Asana link lives on the report's linked monitoring, not on the
         # report itself - update it there, creating the monitoring if this
-        # older report never got one auto-created, and re-sync on change.
+        # older report never got one auto-created. Only pull from Asana
+        # when the link is newly added/changed, NOT on every report save -
+        # otherwise every edit of an unrelated field (e.g. schedule time)
+        # would silently re-overwrite the monitoring's date_from/date_to
+        # with the Asana task's own dates, clobbering values deliberately
+        # set differently for this specific monitoring. A retry after a
+        # failed sync is done explicitly via the "Обновить" button on the
+        # monitoring card (/monitoring/<id>/sync-asana), not implicitly here.
         asana_flash_shown = False
         asana_task_url = request.form.get('asana_task_url', '').strip() or None
         monitoring = MonitoringCampaign.query.filter_by(report_config_id=report.id).first()
+        previous_asana_task_url = monitoring.asana_task_url if monitoring else None
         if asana_task_url or monitoring:
             if not monitoring:
                 from datetime import timedelta
@@ -3798,14 +3806,7 @@ def edit_report(report_id):
             monitoring.asana_task_url = asana_task_url
             db.session.commit()
 
-            # Always (re-)sync when a URL is present, not just when it
-            # changed - a previous save could have saved the URL itself
-            # (this commit happens unconditionally) but failed partway
-            # through the actual Asana fetch below, leaving the
-            # monitoring with a link but no dates/plan. Gating the retry
-            # on "did the URL change" meant that failure could never be
-            # retried just by hitting save again with the same link.
-            if asana_task_url:
+            if asana_task_url and asana_task_url != previous_asana_task_url:
                 try:
                     from app.api.asana_client import AsanaClient
                     client = AsanaClient()
