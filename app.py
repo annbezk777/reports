@@ -1588,6 +1588,9 @@ def edit_monitoring(monitoring_id):
         if adriver_clicks:
             monitoring.adriver_clicks = int(adriver_clicks)
 
+        adriver_compare_date_from = request.form.get('adriver_compare_date_from', '').strip()
+        monitoring.adriver_compare_date_from = datetime.strptime(adriver_compare_date_from, '%Y-%m-%d').date() if adriver_compare_date_from else None
+
         # Manager
         manager = request.form.get('manager')
         monitoring.manager = manager if manager else None
@@ -1708,6 +1711,7 @@ def get_monitoring_data(monitoring_id):
             'fact_givt_clicks': monitoring.fact_givt_clicks,
             'adriver_impressions': monitoring.adriver_impressions,
             'adriver_clicks': monitoring.adriver_clicks,
+            'adriver_compare_date_from': monitoring.adriver_compare_date_from.strftime('%Y-%m-%d') if monitoring.adriver_compare_date_from else None,
             'metrika_counter_id': monitoring.metrika_counter_id,
             'utm_source': monitoring.utm_source,
             'google_sheet_url': monitoring.google_sheet_url,
@@ -1719,6 +1723,7 @@ def get_monitoring_data(monitoring_id):
                 'verifier_type': link.verifier_type,
                 'label': link.label,
                 'permalink_url': link.permalink_url,
+                'compare_date_from': link.compare_date_from.strftime('%Y-%m-%d') if link.compare_date_from else None,
                 'ivt_impressions_percent': link.ivt_impressions_percent,
                 'givt_impressions_percent': link.givt_impressions_percent,
                 'sivt_impressions_percent': link.sivt_impressions_percent,
@@ -1730,6 +1735,8 @@ def get_monitoring_data(monitoring_id):
                     'insertion_name': mapping.insertion_name,
                     'verifier_impressions': mapping.verifier_impressions,
                     'verifier_clicks': mapping.verifier_clicks,
+                    'sape_fact_impressions': mapping.sape_fact_impressions,
+                    'sape_fact_clicks': mapping.sape_fact_clicks,
                 } for mapping in link.mappings],
             } for link in monitoring.verifier_links]
         })
@@ -1738,7 +1745,7 @@ def get_monitoring_data(monitoring_id):
         return jsonify({'error': str(e)}), 500
 
 
-def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to):
+def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to, only_link_id=None):
     """Fetch SAPE fact показы/клики for exactly the campaigns that have a
     Weborama verifier mapping, one API call per mapping (SAPE's
     multi-campaign stats call groups by date, not by campaign, so there's
@@ -1752,9 +1759,14 @@ def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to):
     (all its campaigns) - wrong whenever a monitoring bundles more
     campaigns than the permalink actually covers. Scoped to only mapped
     campaigns, and only called from the existing refresh flows, so it
-    adds at most a handful of extra requests, not one per monitoring."""
+    adds at most a handful of extra requests, not one per monitoring.
+
+    only_link_id restricts this to one link's own mappings - used when
+    refreshing a single verifier card (so its SAPE side stays in sync
+    with its own compare_date_from, not just the whole monitoring)."""
     mappings = [
         m for link in monitoring.verifier_links if link.verifier_type == 'weborama'
+        and (only_link_id is None or link.id == only_link_id)
         for m in link.mappings if m.campaign_ids_list()
     ]
     if not mappings:
@@ -1764,10 +1776,20 @@ def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to):
         campaigns = Campaign.query.filter(Campaign.id.in_(mapping.campaign_ids_list())).all()
         if not campaigns:
             continue
+        # A pixel installed after the campaign's own start date would
+        # otherwise compare a full-period SAPE fact against a
+        # partial-period Weborama one - use the link's override if set
+        # so both sides line up on the same window. date_from/date_to
+        # here are datetimes (see callers), compare_date_from is a plain
+        # date column - normalize before comparing/passing on.
+        override = mapping.verifier_link.compare_date_from
+        mapping_date_from = datetime.combine(override, datetime.min.time()) if override else date_from
+        if mapping_date_from > date_to:
+            continue
         try:
             stats = client.get_stats(
                 campaign_ids=[int(c.campaign_id) for c in campaigns],
-                date_from=date_from,
+                date_from=mapping_date_from,
                 date_to=date_to,
                 fields=None
             )
@@ -1779,6 +1801,37 @@ def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to):
             mapping.sape_fact_updated_at = datetime.utcnow()
         except Exception as e:
             logger.error(f"⚠️ Failed to fetch SAPE fact for mapping {mapping.id} (campaigns {[c.campaign_id for c in campaigns]}): {e}")
+
+
+def _refresh_adriver_fact(monitoring, client, date_to):
+    """Same idea as _refresh_verifier_campaign_facts but for the single
+    Adriver/Target Ads total on the monitoring itself - only runs when
+    adriver_compare_date_from is set (the pixel went live after the
+    campaign's own start date), fetching SAPE's fact scoped to that same
+    shifted window so the discrepancy % isn't comparing a partial-period
+    Adriver number against a full-period SAPE one."""
+    if not monitoring.adriver_compare_date_from:
+        return
+    campaigns = monitoring.get_campaigns()
+    if not campaigns:
+        return
+    date_from = datetime.combine(monitoring.adriver_compare_date_from, datetime.min.time())
+    if date_from > date_to:
+        return
+    try:
+        stats = client.get_stats(
+            campaign_ids=[int(c.campaign_id) for c in campaigns],
+            date_from=date_from,
+            date_to=date_to,
+            fields=None
+        )
+        if not stats:
+            return
+        total = stats.get('total', {})
+        monitoring.adriver_fact_impressions = total.get('shows', 0)
+        monitoring.adriver_fact_clicks = total.get('clicks', 0)
+    except Exception as e:
+        logger.error(f"⚠️ Failed to fetch scoped Adriver SAPE fact for monitoring {monitoring.id}: {e}")
 
 
 @app.route('/monitoring/<int:monitoring_id>/refresh', methods=['POST'])
@@ -1872,6 +1925,7 @@ def refresh_monitoring_data(monitoring_id):
             logger.info(f"🎯 Banner/TGB format detected, loaded VR: {monitoring.fact_vtr}%")
 
         _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
+        _refresh_adriver_fact(monitoring, client, date_to)
 
         monitoring.last_sync = datetime.utcnow()
 
@@ -1987,6 +2041,7 @@ def refresh_all_monitorings():
                     monitoring.fact_vtr = int(round(vr_value)) if vr_value else None
 
                 _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
+                _refresh_adriver_fact(monitoring, client, date_to)
 
                 monitoring.last_sync = datetime.utcnow()
 
@@ -2153,6 +2208,9 @@ def update_verifier_link(link_id):
         link.label = (data.get('label') or '').strip() or None
     if 'permalink_url' in data:
         link.permalink_url = (data.get('permalink_url') or '').strip() or None
+    if 'compare_date_from' in data:
+        value = (data.get('compare_date_from') or '').strip()
+        link.compare_date_from = datetime.strptime(value, '%Y-%m-%d').date() if value else None
     for field in ('ivt_impressions_percent', 'givt_impressions_percent', 'sivt_impressions_percent', 'givt_clicks_percent'):
         if field in data:
             value = data.get(field)
@@ -2307,7 +2365,7 @@ def _fetch_and_apply_weborama_link(link):
 
     monitoring = link.monitoring
     yesterday = (datetime.now() - timedelta(days=1)).date()
-    date_from = monitoring.date_from
+    date_from = link.compare_date_from or monitoring.date_from
     date_to = min(monitoring.date_to, yesterday)
 
     if date_from > date_to:
@@ -2326,30 +2384,34 @@ def _fetch_and_apply_weborama_link(link):
                     'error': f'Insertion "{mapping.insertion_name}" не найден. Доступны: {", ".join(results.keys())}',
                 })
                 continue
+            mapping.verifier_impressions = matched['impressions']
+            mapping.verifier_clicks = matched['clicks']
+            mapping.insertion_name = matched['insertion_name']
+            mapping.last_fetched_at = datetime.utcnow()
+            mapping_results.append({
+                'id': mapping.id, 'success': True,
+                'insertion_name': matched['insertion_name'],
+                'verifier_impressions': matched['impressions'],
+                'verifier_clicks': matched['clicks'],
+            })
         else:
-            campaign = mapping.campaign
-            if campaign:
-                format_key = 'video' if campaign.format_type in ('V', 'CTV') else 'banner'
-            else:
-                format_key = 'video' if monitoring.is_video_format() else 'banner'
-            matched = next((r for r in results.values() if r['format_guess'] == format_key), None)
-            if not matched:
-                mapping_results.append({
-                    'id': mapping.id, 'success': False,
-                    'error': f'Insertion не задан, и не удалось угадать по формату "{format_key}". Доступны: {", ".join(results.keys())}',
-                })
-                continue
-
-        mapping.verifier_impressions = matched['impressions']
-        mapping.verifier_clicks = matched['clicks']
-        mapping.insertion_name = matched['insertion_name']
-        mapping.last_fetched_at = datetime.utcnow()
-        mapping_results.append({
-            'id': mapping.id, 'success': True,
-            'insertion_name': matched['insertion_name'],
-            'verifier_impressions': matched['impressions'],
-            'verifier_clicks': matched['clicks'],
-        })
+            # No specific Insertion picked - this mapping wants the
+            # permalink's combined total across every row it returned
+            # (simpler than requiring an exact name match when there's
+            # just one meaningful number, or the user doesn't need the
+            # split). Stays blank afterward so future refreshes keep
+            # summing everything rather than locking onto one row.
+            total_impressions = sum(r['impressions'] for r in results.values())
+            total_clicks = sum(r['clicks'] for r in results.values())
+            mapping.verifier_impressions = total_impressions
+            mapping.verifier_clicks = total_clicks
+            mapping.last_fetched_at = datetime.utcnow()
+            mapping_results.append({
+                'id': mapping.id, 'success': True,
+                'insertion_name': None,
+                'verifier_impressions': total_impressions,
+                'verifier_clicks': total_clicks,
+            })
 
     link.last_fetched_at = datetime.utcnow()
     db.session.commit()
@@ -2379,6 +2441,24 @@ def fetch_weborama_link(link_id):
         return jsonify({'success': False, 'error': f'Ошибка получения данных из Weborama: {e}'}), 502
 
     logger.info(f"✅ Fetched verifier link {link_id} from Weborama ({result['date_from']}..{result['date_to']}): {result['mappings']}")
+
+    # Keep the SAPE-fact side in sync too, scoped to this one link - its
+    # compare_date_from (if set) drives both sides, so refreshing only the
+    # Weborama half here would leave the discrepancy % comparing against a
+    # stale SAPE fact from before the date was last changed.
+    monitoring = link.monitoring
+    account = monitoring.account
+    if account and account.api_token:
+        try:
+            client = SapeAPIClient(login=account.login, token=account.api_token)
+            if client.authenticate():
+                yesterday = (datetime.now() - timedelta(days=1)).date()
+                date_from = datetime.combine(monitoring.date_from, datetime.min.time())
+                date_to = datetime.combine(min(monitoring.date_to, yesterday), datetime.min.time())
+                _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to, only_link_id=link.id)
+                db.session.commit()
+        except Exception as e:
+            logger.error(f"⚠️ Failed to refresh SAPE fact alongside Weborama fetch for link {link_id}: {e}")
 
     return jsonify({'success': True, **result})
 
@@ -2590,9 +2670,8 @@ def add_report():
                 total_frequency = float(total_freq)
                 total_variance = float(total_var)
 
-                # Validation: total_frequency <= daily_frequency
-                if total_frequency > daily_frequency:
-                    total_frequency = daily_frequency
+                # No validation - daily and total frequencies are independent parameters
+                # User can set total_frequency higher or lower than daily_frequency
 
                 campaign_settings[str(cid)] = {
                     'daily_frequency': daily_frequency,
@@ -4263,6 +4342,7 @@ def scheduled_refresh_all_monitorings():
                 monitoring.fact_robotness = total.get('avgPostclickRobot', 0.0)
 
                 _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
+                _refresh_adriver_fact(monitoring, client, date_to)
 
                 monitoring.last_sync = datetime.utcnow()
 
@@ -4459,4 +4539,11 @@ def page_not_found(e):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=False, host='0.0.0.0', port=5006, use_reloader=False)
+    # threaded=True so a slow request (e.g. the ~20-40s Weborama permalink
+    # fetch, which drives a real headless browser) doesn't block every
+    # other request on this single-process dev server - without it the
+    # whole local app appears frozen until that one request finishes.
+    # Production runs under gunicorn with multiple workers instead, which
+    # already doesn't have this problem - this line only runs for local
+    # `python app.py`, never under gunicorn's WSGI entry point.
+    app.run(debug=False, host='0.0.0.0', port=5006, use_reloader=False, threaded=True)

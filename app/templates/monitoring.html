@@ -212,7 +212,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         <th class="col-data" rowspan="2" style="vertical-align: bottom;">Глубина</th>
                                         <th class="col-data" rowspan="2" style="vertical-align: bottom;">Роботн.</th>
                                         <th class="col-data" rowspan="2" style="vertical-align: bottom;">PI</th>
-                                        <th class="col-data" colspan="6" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">ADRIVER</th>
+                                        <th class="col-data" colspan="6" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">ADRIVER/TARGET ADS</th>
                                         <th class="col-data" colspan="2" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">WEBORAMA</th>
                                     </tr>
                                     <tr>
@@ -962,6 +962,55 @@ function refreshAllMonitorings() {
                         <div id="verifierLinksContainer" style="display: flex; flex-direction: column; gap: 8px;"></div>
                         <div style="display: flex; gap: 8px; margin-top: 6px;">
                             <button type="button" onclick="addVerifierLink('weborama')" class="btn-vl-compact">+ Weborama</button>
+                            <button type="button" id="addAdriverFactBtn" onclick="showAdriverFactCard()" class="btn-vl-compact">+ Adriver/TargetADS</button>
+                        </div>
+
+                        <div class="verifier-link-card" id="adriverFactCard" style="display: none; margin-top: 8px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <strong style="font-size: 13px; color: var(--text-primary);">Adriver/TargetADS</strong>
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <button type="button" class="btn-vl-compact-ghost" onclick="openAdriverUploadFromForm();">Загрузить Excel</button>
+                                    <button type="button" class="kebab-button" onclick="toggleAdriverKebab(event)" aria-label="Действия">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin: 8px 0;">Ручной ввод или Excel-выгрузка Adriver/Target Ads</p>
+                            <div class="form-group" style="max-width: 200px; margin-bottom: 10px;">
+                                <label for="adriver_compare_date_from" title="Если пиксель Adriver/Target Ads поставили позже старта РК - сравнение с SAPE-фактом пойдёт с этой даты, а не с даты старта РК">Период с</label>
+                                <input type="date" id="adriver_compare_date_from" name="adriver_compare_date_from">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="fact_ivt_impressions">IVT показы (%)</label>
+                                    <input type="number" id="fact_ivt_impressions" name="fact_ivt_impressions" step="0.1" placeholder="5.0">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="fact_givt_impressions">GIVT показы (%)</label>
+                                    <input type="number" id="fact_givt_impressions" name="fact_givt_impressions" step="0.1" placeholder="3.0">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="fact_sivt_impressions">SIVT показы (%)</label>
+                                    <input type="number" id="fact_sivt_impressions" name="fact_sivt_impressions" step="0.1" placeholder="2.0">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="fact_givt_clicks">GIVT клики (%)</label>
+                                    <input type="number" id="fact_givt_clicks" name="fact_givt_clicks" step="0.1" placeholder="2.0">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="adriver_impressions">Показы</label>
+                                    <input type="number" id="adriver_impressions" name="adriver_impressions" placeholder="0">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="adriver_clicks">Клики</label>
+                                    <input type="number" id="adriver_clicks" name="adriver_clicks" placeholder="0">
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1097,40 +1146,6 @@ function refreshAllMonitorings() {
                     </div>
                 </div>
 
-                <h3 style="margin-top: 16px; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--text-primary);">IVT показатели (факт) <span style="font-weight: 400; color: var(--text-secondary);">— ручной ввод или Excel Adriver</span></h3>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="fact_ivt_impressions">IVT показы (%)</label>
-                        <input type="number" id="fact_ivt_impressions" name="fact_ivt_impressions" step="0.1" placeholder="5.0">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="fact_givt_impressions">GIVT показы (%)</label>
-                        <input type="number" id="fact_givt_impressions" name="fact_givt_impressions" step="0.1" placeholder="3.0">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="fact_sivt_impressions">SIVT показы (%)</label>
-                        <input type="number" id="fact_sivt_impressions" name="fact_sivt_impressions" step="0.1" placeholder="2.0">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="fact_givt_clicks">GIVT клики (%)</label>
-                        <input type="number" id="fact_givt_clicks" name="fact_givt_clicks" step="0.1" placeholder="2.0">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="adriver_impressions">Показы (Adriver)</label>
-                        <input type="number" id="adriver_impressions" name="adriver_impressions" placeholder="0">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="adriver_clicks">Клики (Adriver)</label>
-                        <input type="number" id="adriver_clicks" name="adriver_clicks" placeholder="0">
-                    </div>
-                </div>
-
             </div>
 
             <div class="modal-footer">
@@ -1243,6 +1258,35 @@ function refreshAllMonitorings() {
     z-index: 50;
 }
 .kpi-info-icon:hover .kpi-tooltip {
+    display: block;
+}
+
+/* Fast hover tooltip for non-icon elements (e.g. buttons) - same visual
+   style as .kpi-tooltip above, but without the native title attribute's
+   3-5s browser delay before it appears. */
+.fast-tooltip-wrap {
+    position: relative;
+    display: inline-flex;
+}
+.fast-tooltip-wrap .kpi-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    background: #292524;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.4;
+    white-space: pre-line;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 6px;
+    width: 220px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 50;
+}
+.fast-tooltip-wrap:hover .kpi-tooltip {
     display: block;
 }
 
@@ -1398,7 +1442,7 @@ function refreshAllMonitorings() {
     border-radius: 8px;
     padding: 10px;
     position: relative;
-    background: #fff8ef;
+    background: var(--peach-bg);
 }
 
 .verifier-link-card + .verifier-link-card {
@@ -1437,6 +1481,57 @@ function refreshAllMonitorings() {
     background: var(--bg-light);
     color: var(--text-primary);
     border-color: var(--text-secondary);
+}
+
+.vlm-campaign-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    border: 1.5px solid var(--border-color);
+    border-radius: 3px;
+    cursor: pointer;
+    position: relative;
+    background: white;
+    flex-shrink: 0;
+}
+.vlm-campaign-checkbox:checked {
+    background: var(--primary-orange);
+    border-color: var(--primary-orange);
+}
+.vlm-campaign-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 46%;
+    width: 3px;
+    height: 7px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.vl-fetch-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--peach-light);
+    color: var(--primary-orange);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.vlm-select-all-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+
+.vlm-select-all-link:hover {
+    color: var(--primary-orange);
 }
 
 .verifier-mapping-row {
@@ -1545,6 +1640,13 @@ function openMonitoringModal(monitoringId = null) {
                 document.getElementById('fact_givt_clicks').value = data.fact_givt_clicks || '';
                 document.getElementById('adriver_impressions').value = data.adriver_impressions || '';
                 document.getElementById('adriver_clicks').value = data.adriver_clicks || '';
+                document.getElementById('adriver_compare_date_from').value = data.adriver_compare_date_from || '';
+                if (data.fact_ivt_impressions || data.fact_givt_impressions || data.fact_sivt_impressions
+                    || data.fact_givt_clicks || data.adriver_impressions || data.adriver_clicks) {
+                    showAdriverFactCard();
+                } else {
+                    hideAdriverFactCard();
+                }
 
                 // Load campaigns for account
                 console.log('Monitoring data loaded:', data);
@@ -1567,6 +1669,7 @@ function openMonitoringModal(monitoringId = null) {
         document.getElementById('plan_vtr_label').textContent = 'VTR (%)';
         currentMonitoringCampaignOptions = [];
         renderVerifierLinks([]);
+        hideAdriverFactCard();
         document.getElementById('campaignsList').innerHTML = '<tr><td colspan="2" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Выберите аккаунт для загрузки кампаний</td></tr>';
     }
 
@@ -1654,26 +1757,37 @@ function renderVerifierLinks(links) {
     lastRenderedVerifierLinks = links;
     const container = document.getElementById('verifierLinksContainer');
     if (!links.length) {
-        container.innerHTML = '<p style="color: #a8a29e; font-size: 12px; margin: 0;">Пермалинков пока нет</p>';
+        container.innerHTML = '';
         return;
     }
 
-    const campaignOptionsHtml = (selectedIds) => currentMonitoringCampaignOptions.map(c =>
-        `<option value="${c.id}" ${selectedIds.includes(c.id) ? 'selected' : ''}>${c.campaign_id} — ${c.name}</option>`
-    ).join('');
+    const campaignCheckboxesHtml = (selectedIds) => currentMonitoringCampaignOptions.map(c => `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+            <td style="padding: 4px 6px; width: 26px; text-align: center;">
+                <input type="checkbox" class="vlm-campaign-checkbox" value="${c.id}" ${selectedIds.includes(c.id) ? 'checked' : ''}>
+            </td>
+            <td style="padding: 4px 6px; font-size: 11px; color: var(--text-primary);">
+                <code style="background: var(--peach-light); color: var(--primary-orange); padding: 1px 4px; border-radius: 3px; font-size: 9px; margin-right: 4px;">${c.campaign_id}</code>${c.name}
+            </td>
+        </tr>
+    `).join('');
 
     const chevron = (expanded) => `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transform: rotate(${expanded ? 90 : 0}deg); transition: transform 0.15s; flex-shrink: 0;"><path d="M9 18l6-6-6-6"/></svg>`;
 
     const mappingRowHtml = (mapping) => `
         <div class="verifier-mapping-row" data-mapping-id="${mapping.id}">
-            <div class="form-row" style="gap: 10px; margin-bottom: 0; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)) auto;">
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-                        <span>Кампании SAPE${(mapping.sape_campaign_ids || []).length > 1 ? ` (${mapping.sape_campaign_ids.length})` : ''}</span>
-                        <a href="#" onclick="selectAllVerifierMappingCampaigns(event, this)" style="font-size: 11px; font-weight: 400;">выбрать все</a>
-                    </label>
-                    <select class="vlm-campaign-select" multiple size="4">${campaignOptionsHtml(mapping.sape_campaign_ids || [])}</select>
+            <div class="form-group" style="margin-bottom: 8px;">
+                <label style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                    <span>Кампании SAPE${(mapping.sape_campaign_ids || []).length > 1 ? ` (${mapping.sape_campaign_ids.length})` : ''}</span>
+                    <a href="#" onclick="selectAllVerifierMappingCampaigns(event, this)" class="vlm-select-all-link" style="font-size: 10px; font-weight: 400;">выбрать все</a>
+                </label>
+                <div style="height: 120px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tbody class="vlm-campaign-list">${campaignCheckboxesHtml(mapping.sape_campaign_ids || [])}</tbody>
+                    </table>
                 </div>
+            </div>
+            <div class="form-row" style="gap: 10px; margin-bottom: 0; grid-template-columns: 1.4fr 1fr 1fr; align-items: end;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label>Insertion</label>
                     <input type="text" placeholder="например, Sape_Banner_X" value="${mapping.insertion_name || ''}" class="vlm-insertion">
@@ -1686,9 +1800,6 @@ function renderVerifierLinks(links) {
                     <label>Клики (WCM)</label>
                     <input type="number" placeholder="0" value="${mapping.verifier_clicks ?? ''}" class="vlm-clicks">
                 </div>
-                <div class="form-group" style="margin-bottom: 0; display: flex; align-items: flex-end;">
-                    <button type="button" class="btn-vl-compact-ghost" onclick="deleteVerifierMappingRow(${mapping.id})">Удалить</button>
-                </div>
             </div>
         </div>
     `;
@@ -1700,16 +1811,12 @@ function renderVerifierLinks(links) {
         const isExpanded = expandedVerifierLinkIds.has(link.id) || !hasData;
 
         if (!isExpanded) {
-            const summary = mappings.map(m => `
-                <span style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;">${m.insertion_name || 'без Insertion'}: <strong style="color: var(--text-primary);">${(m.verifier_impressions || 0).toLocaleString('ru-RU')}</strong> / <strong style="color: var(--text-primary);">${(m.verifier_clicks || 0).toLocaleString('ru-RU')}</strong></span>
-            `).join('');
             return `
             <div class="verifier-link-card" data-link-id="${link.id}" data-verifier-type="weborama">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <div style="display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; min-width: 0; flex-wrap: wrap;" onclick="toggleVerifierCardExpand(${link.id})">
                         ${chevron(false)}
                         <strong style="font-size: 13px; color: var(--text-primary); white-space: nowrap;">${title}</strong>
-                        ${summary}
                     </div>
                     <button type="button" class="kebab-button" onclick="toggleVerifierKebab(event, ${link.id})" aria-label="Действия">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
@@ -1731,7 +1838,7 @@ function renderVerifierLinks(links) {
                 </button>
             </div>
 
-            <div class="form-row" style="gap: 10px; margin-bottom: 10px;">
+            <div class="form-row" style="gap: 10px; margin-bottom: 10px; grid-template-columns: 1.4fr 1fr 1fr;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label>Направление</label>
                     <input type="text" placeholder="например, Левушка" value="${link.label || ''}" class="vl-label">
@@ -1745,16 +1852,108 @@ function renderVerifierLinks(links) {
                     </label>
                     <input type="text" placeholder="https://adap-interface.wbrm.ru/.../permalink/link/hash/..." value="${link.permalink_url || ''}" class="vl-url">
                 </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label title="Если пиксель поставили позже старта РК - сравнение Weborama и SAPE-факта по этому пермалинку пойдёт с этой даты, а не с даты старта РК">Пиксель активен с</label>
+                    <input type="date" value="${link.compare_date_from || ''}" class="vl-compare-date-from">
+                </div>
             </div>
 
             <div class="vl-mappings-container" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
                 ${mappings.map(mappingRowHtml).join('')}
             </div>
 
-            <button type="button" class="btn-vl-compact-ghost" onclick="addVerifierMappingRow(${link.id})">+ Ещё кампания в этом пермалинке</button>
+            ${verifierCardFactSummaryHtml(link.id, mappings, link.compare_date_from)}
         </div>
     `;
     }).join('');
+}
+
+// Карточка может содержать несколько строк-сопоставлений (разные
+// Insertion), каждая со своим набором кампаний - показы/клики WCM всегда
+// складываем по всем строкам, а SAPE-факт только по РАЗНЫМ наборам
+// кампаний (если несколько строк покрывают один и тот же набор, их факт
+// это уже одно и то же число, не нужно его дублировать - см. ту же логику
+// на сервере в MonitoringCampaign._distinct_weborama_sape_fact_mappings).
+let expandedFactSummaryLinkIds = new Set();
+
+function toggleVerifierFactSummary(linkId) {
+    if (expandedFactSummaryLinkIds.has(linkId)) {
+        expandedFactSummaryLinkIds.delete(linkId);
+    } else {
+        expandedFactSummaryLinkIds.add(linkId);
+    }
+    const box = document.getElementById(`vl-fact-summary-${linkId}`);
+    const chevron = document.getElementById(`vl-fact-summary-chevron-${linkId}`);
+    if (box) box.style.display = expandedFactSummaryLinkIds.has(linkId) ? 'block' : 'none';
+    if (chevron) chevron.style.transform = expandedFactSummaryLinkIds.has(linkId) ? 'rotate(90deg)' : 'rotate(0deg)';
+}
+
+function verifierCardFactSummaryHtml(linkId, mappings, compareDateFrom) {
+    let wcmImp = 0, wcmClk = 0, foundWcm = false;
+    mappings.forEach(m => {
+        if (m.verifier_impressions) { wcmImp += m.verifier_impressions; foundWcm = true; }
+        if (m.verifier_clicks) { wcmClk += m.verifier_clicks; foundWcm = true; }
+    });
+
+    const seenCampaignSets = new Set();
+    let sapeImp = 0, sapeClk = 0, foundSape = false;
+    mappings.forEach(m => {
+        const ids = (m.sape_campaign_ids || []).slice().sort((a, b) => a - b);
+        if (!ids.length) return;
+        const key = ids.join(',');
+        if (seenCampaignSets.has(key)) return;
+        seenCampaignSets.add(key);
+        if (m.sape_fact_impressions) { sapeImp += m.sape_fact_impressions; foundSape = true; }
+        if (m.sape_fact_clicks) { sapeClk += m.sape_fact_clicks; foundSape = true; }
+    });
+
+    if (!foundWcm && !foundSape) return '';
+
+    const fmt = (n) => n ? n.toLocaleString('ru-RU') : '—';
+    // Показы: знак инвертирован (минус = платформа показывает больше),
+    // клики - нет. Та же конвенция, что в основной KPI-таблице.
+    const impDiff = (wcmImp && sapeImp) ? Math.round((wcmImp - sapeImp) / wcmImp * 1000) / 10 : null;
+    const clkDiff = (wcmClk && sapeClk) ? Math.round((sapeClk - wcmClk) / wcmClk * 1000) / 10 : null;
+    const diffCell = (v) => v === null
+        ? '<span style="color: #a8a29e;">—</span>'
+        : `<span style="color: ${Math.abs(v) > 15 ? '#dc2626' : '#16a34a'}; font-weight: 600;">${v > 0 ? '+' : ''}${v}%</span>`;
+
+    const isExpanded = expandedFactSummaryLinkIds.has(linkId);
+    const th = 'text-align: right; padding: 4px 8px; font-weight: 500; color: var(--text-secondary); font-size: 10px; text-transform: none; letter-spacing: normal; background: #fafaf9;';
+    const td = 'padding: 4px 8px; text-align: right; font-size: 9px; font-weight: 500; color: var(--text-primary);';
+
+    return `
+        <div onclick="toggleVerifierFactSummary(${linkId})" style="display: flex; align-items: center; gap: 4px; cursor: pointer; margin-bottom: 4px;">
+            <svg id="vl-fact-summary-chevron-${linkId}" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2.5" style="transform: rotate(${isExpanded ? 90 : 0}deg); transition: transform 0.15s; flex-shrink: 0;"><path d="M9 18l6-6-6-6"/></svg>
+            <span style="font-size: 10px; color: var(--text-secondary); font-weight: 500;">Факт и выполнение</span>
+        </div>
+        <div id="vl-fact-summary-${linkId}" style="background: #fff; border: 1px solid #e7e5e4; border-radius: 6px; overflow: hidden; margin-bottom: 8px; display: ${isExpanded ? 'block' : 'none'};">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="border-bottom: 1px solid #e7e5e4;">
+                    <th style="${th} text-align: left;"></th>
+                    <th style="${th}">Показы (WCM)</th>
+                    <th style="${th}">Факт</th>
+                    <th style="${th}">Выполнение</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="border-bottom: 1px solid #f5f5f4;">
+                    <td style="${td} text-align: left; color: #78716c;">Показы</td>
+                    <td style="${td} font-weight: 600;">${fmt(wcmImp)}</td>
+                    <td style="${td}">${fmt(sapeImp)}</td>
+                    <td style="${td}">${diffCell(impDiff)}</td>
+                </tr>
+                <tr>
+                    <td style="${td} text-align: left; color: #78716c;">Клики</td>
+                    <td style="${td} font-weight: 600;">${fmt(wcmClk)}</td>
+                    <td style="${td}">${fmt(sapeClk)}</td>
+                    <td style="${td}">${diffCell(clkDiff)}</td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+    `;
 }
 
 function buildVerifierKebabItems(linkId) {
@@ -1827,8 +2026,7 @@ function addVerifierLink(verifierType) {
 function selectAllVerifierMappingCampaigns(event, linkEl) {
     event.preventDefault();
     const row = linkEl.closest('.verifier-mapping-row');
-    const select = row.querySelector('.vlm-campaign-select');
-    Array.from(select.options).forEach(o => { o.selected = true; });
+    row.querySelectorAll('.vlm-campaign-checkbox').forEach(cb => { cb.checked = true; });
 }
 
 function addVerifierMappingRow(linkId) {
@@ -1870,21 +2068,22 @@ function saveVerifierLink(linkId) {
     const promises = [];
     const labelInput = card.querySelector('.vl-label');
     const urlInput = card.querySelector('.vl-url');
-    if (labelInput || urlInput) {
+    const compareDateInput = card.querySelector('.vl-compare-date-from');
+    if (labelInput || urlInput || compareDateInput) {
         promises.push(fetch(`/verifier-links/${linkId}/update`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 label: labelInput ? labelInput.value : undefined,
                 permalink_url: urlInput ? urlInput.value : undefined,
+                compare_date_from: compareDateInput ? compareDateInput.value : undefined,
             })
         }).then(res => res.json()));
     }
 
     card.querySelectorAll('.verifier-mapping-row').forEach(row => {
         const mappingId = row.dataset.mappingId;
-        const campaignSelect = row.querySelector('.vlm-campaign-select');
-        const selectedCampaignIds = Array.from(campaignSelect.selectedOptions).map(o => o.value);
+        const selectedCampaignIds = Array.from(row.querySelectorAll('.vlm-campaign-checkbox:checked')).map(cb => cb.value);
         promises.push(fetch(`/verifier-link-mappings/${mappingId}/update`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -1921,13 +2120,28 @@ function deleteVerifierLinkRow(linkId) {
 
 function fetchWeboramaLink(linkId) {
     const card = document.querySelector(`[data-link-id="${linkId}"]`);
-    if (card) { card.style.opacity = '0.5'; card.style.pointerEvents = 'none'; }
-    fetch(`/verifier-links/${linkId}/fetch-weborama`, { method: 'POST' })
+    if (card) {
+        card.style.opacity = '0.5';
+        card.style.pointerEvents = 'none';
+        const banner = document.createElement('div');
+        banner.className = 'vl-fetch-progress';
+        banner.innerHTML = `
+            <svg width="14" height="14" style="animation: spin 1s linear infinite; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Обновляю из Weborama... обычно занимает 15-30 секунд
+        `;
+        card.prepend(banner);
+    }
+    // Сохраняем несохранённый ввод (как в addVerifierMappingRow и т.п.) -
+    // иначе фетч идёт по старым данным из базы, а не по тому, что
+    // только что отредактировано в форме (например, очищенный Insertion).
+    saveAllVerifierLinks().then(() => fetch(`/verifier-links/${linkId}/fetch-weborama`, { method: 'POST' }))
         .then(res => res.json())
         .then(data => {
             if (data.success) {
                 const lines = (data.mappings || []).map(m => m.success
-                    ? `✅ ${m.insertion_name}: показы ${m.verifier_impressions}, клики ${m.verifier_clicks}`
+                    ? `✅ ${m.insertion_name || 'Итого по пермалинку'}: показы ${m.verifier_impressions}, клики ${m.verifier_clicks}`
                     : `❌ ${m.error}`
                 );
                 alert(`Обновлено из Weborama (${data.date_from} — ${data.date_to}):\n${lines.join('\n') || 'нет сопоставлений для обновления'}`);
@@ -1942,7 +2156,11 @@ function fetchWeboramaLink(linkId) {
             alert('Ошибка при обращении к серверу');
         })
         .finally(() => {
-            if (card) { card.style.opacity = ''; card.style.pointerEvents = ''; }
+            if (card) {
+                card.style.opacity = '';
+                card.style.pointerEvents = '';
+                card.querySelector('.vl-fetch-progress')?.remove();
+            }
         });
 }
 
@@ -1986,6 +2204,51 @@ function closeMonitoringModal() {
 }
 
 // Upload Modal Functions
+function toggleAdriverKebab(event) {
+    event.stopPropagation();
+    const existing = document.getElementById('vl-kebab-adriver');
+    const wasOpen = !!existing;
+    closeAllVerifierKebabs();
+    if (wasOpen) return;
+
+    const btn = event.currentTarget;
+    const rect = btn.getBoundingClientRect();
+    const dropdown = document.createElement('div');
+    dropdown.id = 'vl-kebab-adriver';
+    dropdown.className = 'vl-kebab-dropdown';
+    dropdown.style.cssText = `position: fixed; top: ${rect.bottom + 4}px; right: ${window.innerWidth - rect.right}px; background: white; border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); min-width: 180px; z-index: 10000;`;
+    const btnStyle = 'width: 100%; text-align: left; border: none; background: none; cursor: pointer;';
+    dropdown.innerHTML = `<button type="button" class="kebab-item kebab-item-danger" style="${btnStyle}" onclick="deleteAdriverFactCard(); closeAllVerifierKebabs();">Удалить</button>`;
+    document.body.appendChild(dropdown);
+}
+
+function deleteAdriverFactCard() {
+    if (!confirm('Удалить данные Adriver/Target Ads для этого мониторинга?')) return;
+    ['fact_ivt_impressions', 'fact_givt_impressions', 'fact_sivt_impressions', 'fact_givt_clicks', 'adriver_impressions', 'adriver_clicks', 'adriver_compare_date_from'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    hideAdriverFactCard();
+}
+
+function showAdriverFactCard() {
+    document.getElementById('adriverFactCard').style.display = 'block';
+    document.getElementById('addAdriverFactBtn').style.display = 'none';
+}
+
+function hideAdriverFactCard() {
+    document.getElementById('adriverFactCard').style.display = 'none';
+    document.getElementById('addAdriverFactBtn').style.display = '';
+}
+
+function openAdriverUploadFromForm() {
+    const monitoringId = document.getElementById('monitoringId').value;
+    if (!monitoringId) {
+        alert('Сначала сохраните мониторинг, потом можно будет загрузить файл Adriver');
+        return;
+    }
+    openUploadModal(monitoringId, document.getElementById('name').value);
+}
+
 function openUploadModal(monitoringId, monitoringName) {
     const modal = document.getElementById('uploadModal');
     const form = document.getElementById('uploadForm');

@@ -35,7 +35,7 @@ def fetch_insertions(permalink_url, date_from, date_to):
         browser = p.chromium.launch()
         page = browser.new_page(viewport={'width': 1600, 'height': 1000})
         try:
-            page.goto(permalink_url, wait_until='networkidle', timeout=30000)
+            page.goto(permalink_url, wait_until='networkidle', timeout=60000)
             page.wait_for_timeout(1200)
 
             # Most permalinks need a click into "Insertions" to reach the
@@ -80,12 +80,18 @@ def _set_date_range(page, date_from, date_to):
     start_cal = page.locator('text=Start Date').locator('xpath=following::table[1]')
     end_cal = page.locator('text=End Date').locator('xpath=following::table[1]')
 
-    _navigate_calendar_to_month(page, headers.nth(0), next_arrows.nth(0), prev_arrows.nth(0), date_from)
-    _click_calendar_day(start_cal, date_from.day)
-    page.wait_for_timeout(300)
-
+    # End MUST be set before Start: the Start picker disables every day
+    # after whatever End is currently set to, so moving Start forward to
+    # a month past the permalink's old default End date silently fails
+    # (every day in the target month shows as disabled, the click is a
+    # no-op, and Start is left wherever it happened to be) - Apply would
+    # then submit a much narrower, wrong range with no visible error.
     _navigate_calendar_to_month(page, headers.nth(1), next_arrows.nth(1), prev_arrows.nth(1), date_to)
     _click_calendar_day(end_cal, date_to.day)
+    page.wait_for_timeout(300)
+
+    _navigate_calendar_to_month(page, headers.nth(0), next_arrows.nth(0), prev_arrows.nth(0), date_from)
+    _click_calendar_day(start_cal, date_from.day)
     page.wait_for_timeout(300)
 
     apply_buttons = page.locator('button:visible, a:visible').filter(has_text=re.compile(r'^Apply$'))
@@ -130,7 +136,14 @@ def _click_calendar_day(calendar_locator, day):
         'td:not(.x-datepicker-prevday):not(.x-datepicker-nextday)',
         has_text=re.compile(rf'^{day}$')
     )
-    cell.first.click()
+    first = cell.first
+    # A disabled cell (e.g. Start > current End, or vice versa) silently
+    # ignores clicks instead of erroring - catching it here turns a wrong,
+    # unnoticed date range into a loud failure instead.
+    class_attr = first.get_attribute('class') or ''
+    if 'disabled' in class_attr:
+        raise WeboramaFetchError(f'День {day} недоступен для выбора в календаре пермалинка (disabled)')
+    first.click()
 
 
 def _read_grid_rows(page):

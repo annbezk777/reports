@@ -243,6 +243,14 @@ class MonitoringCampaign(db.Model):
     adriver_impressions = db.Column(db.Integer, nullable=True)
     adriver_clicks = db.Column(db.Integer, nullable=True)
 
+    # Пиксель Adriver/Target Ads тоже иногда ставят позже старта РК - если
+    # задано, вместо monitoring.date_from для SAPE-факта (на этой паре
+    # adriver_fact_*) используется эта дата, по той же логике что и
+    # VerifierLink.compare_date_from для Weborama.
+    adriver_compare_date_from = db.Column(db.Date, nullable=True)
+    adriver_fact_impressions = db.Column(db.Integer, nullable=True)
+    adriver_fact_clicks = db.Column(db.Integer, nullable=True)
+
     # Yandex Metrika settings
     metrika_counter_id = db.Column(db.String(50), nullable=True)  # Номер счетчика Метрики
     metrika_goal_id = db.Column(db.String(50), nullable=True)  # ID цели для конверсий
@@ -497,22 +505,33 @@ class MonitoringCampaign(db.Model):
             return int(self.plan_clicks / days)
         return 0
 
+    def _adriver_sape_facts(self):
+        """SAPE-факт для сравнения с Adriver - если задан
+        adriver_compare_date_from, используем факт за тот же сдвинутый
+        период (adriver_fact_*, см. _refresh_adriver_fact); иначе
+        откатываемся на факт по всему мониторингу."""
+        if self.adriver_fact_impressions is not None or self.adriver_fact_clicks is not None:
+            return self.adriver_fact_impressions, self.adriver_fact_clicks
+        return self.fact_impressions, self.fact_clicks
+
     def get_adriver_impressions_diff_percent(self):
         """% = (Adriver − SAPE) / Adriver × 100 - отрицательное значение,
         когда у нас в платформе (SAPE) показов больше, чем у верификатора.
         Делитель (Adriver) обязан быть ненулевым - делить на 0 нельзя. А
         вот SAPE-факт, равный ровно 0, валиден и не должен блокировать
         расчёт (поэтому is None, а не truthy-проверка)."""
-        if not self.adriver_impressions or not self.fact_impressions:
+        sape_impressions, _ = self._adriver_sape_facts()
+        if not self.adriver_impressions or not sape_impressions:
             return None
-        return round((self.adriver_impressions - self.fact_impressions) / self.adriver_impressions * 100, 1)
+        return round((self.adriver_impressions - sape_impressions) / self.adriver_impressions * 100, 1)
 
     def get_adriver_clicks_diff_percent(self):
         """% = (SAPE − Adriver) / Adriver × 100 - для кликов знак не
         инвертируется, в отличие от показов (см. get_adriver_impressions_diff_percent)."""
-        if not self.adriver_clicks or not self.fact_clicks:
+        _, sape_clicks = self._adriver_sape_facts()
+        if not self.adriver_clicks or not sape_clicks:
             return None
-        return round((self.fact_clicks - self.adriver_clicks) / self.adriver_clicks * 100, 1)
+        return round((sape_clicks - self.adriver_clicks) / self.adriver_clicks * 100, 1)
 
     def get_weborama_impressions(self):
         """Sum of показы across every Weborama mapping on this monitoring -
@@ -632,6 +651,13 @@ class VerifierLink(db.Model):
     verifier_type = db.Column(db.String(20), nullable=False)  # 'weborama' | 'adriver'
     label = db.Column(db.String(100), nullable=True)  # Направление, например "Особый"
     permalink_url = db.Column(db.String(1000), nullable=True)
+
+    # Пиксель верификатора иногда ставят позже старта РК - если задано,
+    # используется вместо monitoring.date_from как начало периода для ОБЕИХ
+    # сторон сравнения (и Weborama WCM, и SAPE-факт по кампаниям этого
+    # пермалинка), чтобы не сравнивать полный период РК с частичным
+    # периодом пикселя. Конец периода всегда "вчера" (как и без оверрайда).
+    compare_date_from = db.Column(db.Date, nullable=True)
 
     # Устаревшие поля одиночного сопоставления (до перехода на
     # VerifierLinkMapping) - оставлены в схеме для совместимости со старыми
