@@ -657,6 +657,11 @@ class VerifierLinkMapping(db.Model):
     verifier_link_id = db.Column(db.Integer, db.ForeignKey('verifier_links.id'), nullable=False)
 
     sape_campaign_id = db.Column(db.Integer, db.ForeignKey('campaigns.id'), nullable=True)
+    # Когда один Weborama-пиксель/Insertion покрывает сразу НЕСКОЛЬКО SAPE-кампаний
+    # (одна общая цифра у верификатора на всех) - список Campaign.id, SAPE-факт
+    # суммируется по всем сразу. Если задан, имеет приоритет над sape_campaign_id
+    # (который остаётся для старых однокампанийных маппингов).
+    sape_campaign_ids = db.Column(db.JSON, nullable=True)
     insertion_name = db.Column(db.String(200), nullable=True)  # Точное название Insertion в Weborama (напр. "Sape_Banner_Lyovushka")
 
     verifier_impressions = db.Column(db.Integer, nullable=True)
@@ -678,6 +683,15 @@ class VerifierLinkMapping(db.Model):
 
     def __repr__(self):
         return f'<VerifierLinkMapping {self.insertion_name or self.id}>'
+
+    def campaign_ids_list(self):
+        """Effective list of SAPE campaign (Campaign.id) PKs covered by
+        this mapping's one verifier number."""
+        if self.sape_campaign_ids:
+            return list(self.sape_campaign_ids)
+        if self.sape_campaign_id:
+            return [self.sape_campaign_id]
+        return []
 
     def _sape_facts(self):
         """Показы/клики SAPE для сравнения - предпочитаем факт по самой

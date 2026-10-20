@@ -1658,12 +1658,9 @@ function renderVerifierLinks(links) {
         return;
     }
 
-    const campaignOptionsHtml = (selectedId) => {
-        const options = currentMonitoringCampaignOptions.map(c =>
-            `<option value="${c.id}" ${selectedId === c.id ? 'selected' : ''}>${c.campaign_id} — ${c.name}</option>`
-        ).join('');
-        return `<option value="">— не выбрано —</option>${options}`;
-    };
+    const campaignOptionsHtml = (selectedIds) => currentMonitoringCampaignOptions.map(c =>
+        `<option value="${c.id}" ${selectedIds.includes(c.id) ? 'selected' : ''}>${c.campaign_id} — ${c.name}</option>`
+    ).join('');
 
     const chevron = (expanded) => `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transform: rotate(${expanded ? 90 : 0}deg); transition: transform 0.15s; flex-shrink: 0;"><path d="M9 18l6-6-6-6"/></svg>`;
 
@@ -1671,8 +1668,11 @@ function renderVerifierLinks(links) {
         <div class="verifier-mapping-row" data-mapping-id="${mapping.id}">
             <div class="form-row" style="gap: 10px; margin-bottom: 0; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)) auto;">
                 <div class="form-group" style="margin-bottom: 0;">
-                    <label>ID кампании SAPE</label>
-                    <select class="vlm-campaign-select">${campaignOptionsHtml(mapping.sape_campaign_id)}</select>
+                    <label style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                        <span>Кампании SAPE${(mapping.sape_campaign_ids || []).length > 1 ? ` (${mapping.sape_campaign_ids.length})` : ''}</span>
+                        <a href="#" onclick="selectAllVerifierMappingCampaigns(event, this)" style="font-size: 11px; font-weight: 400;">выбрать все</a>
+                    </label>
+                    <select class="vlm-campaign-select" multiple size="4">${campaignOptionsHtml(mapping.sape_campaign_ids || [])}</select>
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label>Insertion</label>
@@ -1824,6 +1824,13 @@ function addVerifierLink(verifierType) {
     });
 }
 
+function selectAllVerifierMappingCampaigns(event, linkEl) {
+    event.preventDefault();
+    const row = linkEl.closest('.verifier-mapping-row');
+    const select = row.querySelector('.vlm-campaign-select');
+    Array.from(select.options).forEach(o => { o.selected = true; });
+}
+
 function addVerifierMappingRow(linkId) {
     // Та же защита, что и в addVerifierLink - сохраняем несохранённый ввод
     // во всех карточках перед перезагрузкой с сервера.
@@ -1877,11 +1884,12 @@ function saveVerifierLink(linkId) {
     card.querySelectorAll('.verifier-mapping-row').forEach(row => {
         const mappingId = row.dataset.mappingId;
         const campaignSelect = row.querySelector('.vlm-campaign-select');
+        const selectedCampaignIds = Array.from(campaignSelect.selectedOptions).map(o => o.value);
         promises.push(fetch(`/verifier-link-mappings/${mappingId}/update`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                sape_campaign_id: campaignSelect.value || '',
+                sape_campaign_ids: selectedCampaignIds,
                 insertion_name: row.querySelector('.vlm-insertion').value,
                 verifier_impressions: row.querySelector('.vlm-impressions').value,
                 verifier_clicks: row.querySelector('.vlm-clicks').value,

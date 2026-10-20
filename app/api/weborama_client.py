@@ -24,9 +24,9 @@ class WeboramaFetchError(Exception):
 def fetch_insertions(permalink_url, date_from, date_to):
     """
     permalink_url: a https://adap-interface.wbrm.ru/.../permalink/link/hash/<hash> URL
-    date_from, date_to: datetime.date objects, must fall within a month
-        currently reachable without cross-month calendar navigation
-        (the permalink's own default range's month is used as the anchor).
+    date_from, date_to: datetime.date objects - any month, the calendar is
+        navigated forward/backward from whatever month the permalink
+        defaults to.
 
     Returns a dict keyed by the exact insertion name as shown in Weborama
     -> {'impressions': int, 'clicks': int, 'insertion_name': str, 'format_guess': 'banner'|'video'|None}
@@ -38,20 +38,28 @@ def fetch_insertions(permalink_url, date_from, date_to):
             page.goto(permalink_url, wait_until='networkidle', timeout=30000)
             page.wait_for_timeout(1200)
 
+            # Most permalinks need a click into "Insertions" to reach the
+            # per-insertion table. Some (e.g. ones scoped to a single
+            # Site/Offer) land directly on the Sites/Offers table instead,
+            # with no "Insertions" tab at all - _parse_insertions_table
+            # already has a fallback for that shape, so just skip the
+            # click rather than failing outright.
             insertions_link = page.locator('text=Insertions').first
-            if insertions_link.count() == 0:
-                raise WeboramaFetchError('Не найден раздел "Insertions" в пермалинке - возможно, другая структура отчёта')
-            insertions_link.click()
-            page.wait_for_timeout(1500)
+            if insertions_link.count() > 0:
+                insertions_link.click()
+                page.wait_for_timeout(1500)
 
             _set_date_range(page, date_from, date_to)
 
             page.wait_for_timeout(1500)
-            body_text = page.inner_text('body')
-
-            return _parse_insertions_table(body_text)
+            return _read_grid_rows(page)
         finally:
             browser.close()
+
+
+_MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December']
+_MONTH_LABEL_RE = re.compile(r'^([A-Za-z]+) (\d{4})$')
 
 
 def _set_date_range(page, date_from, date_to):
@@ -61,12 +69,23 @@ def _set_date_range(page, date_from, date_to):
     calendar_toggle.click()
     page.wait_for_timeout(800)
 
+    # Each calendar (Start/End) is its own little ExtJS widget with its
+    # own month header and its own prev/next arrows - ".x-datepicker-next"
+    # etc. match both widgets at once, in DOM order (Start first, End
+    # second), so nth(0)/nth(1) picks out the right one for each side.
+    headers = page.locator('.x-btn-inner').filter(has_text=_MONTH_LABEL_RE)
+    next_arrows = page.locator('.x-datepicker-next')
+    prev_arrows = page.locator('.x-datepicker-prev')
+
     start_cal = page.locator('text=Start Date').locator('xpath=following::table[1]')
-    start_cal.locator(f'td:has-text("{date_from.day}")').first.click()
+    end_cal = page.locator('text=End Date').locator('xpath=following::table[1]')
+
+    _navigate_calendar_to_month(page, headers.nth(0), next_arrows.nth(0), prev_arrows.nth(0), date_from)
+    _click_calendar_day(start_cal, date_from.day)
     page.wait_for_timeout(300)
 
-    end_cal = page.locator('text=End Date').locator('xpath=following::table[1]')
-    end_cal.locator(f'td:has-text("{date_to.day}")').first.click()
+    _navigate_calendar_to_month(page, headers.nth(1), next_arrows.nth(1), prev_arrows.nth(1), date_to)
+    _click_calendar_day(end_cal, date_to.day)
     page.wait_for_timeout(300)
 
     apply_buttons = page.locator('button:visible, a:visible').filter(has_text=re.compile(r'^Apply$'))
@@ -80,54 +99,68 @@ def _set_date_range(page, date_from, date_to):
     page.wait_for_timeout(6000)
 
 
-def _parse_insertions_table(body_text):
-    """Parse lines like:
-        Sape_Banner_Lyovushka
-        1,062,146
-        201,325
-        18.95%
-        ...
-    into {'Sape_Banner_Lyovushka': {...}, 'Sape_Video_Lyovushka': {...}} - keyed
-    by the exact insertion name, so callers match on an explicitly chosen
-    name rather than a guessed banner/video category (which breaks once
-    there's more than one insertion of the same format, or naming that
-    doesn't contain "banner"/"video" at all).
+def _navigate_calendar_to_month(page, header_locator, next_arrow, prev_arrow, target_date):
+    """Click a calendar's prev/next month arrow until its header shows
+    the target month - permalinks can default to a different month than
+    the monitoring's own period, and a day-of-month cell only exists in
+    whatever month the calendar currently has displayed."""
+    target_label = f"{_MONTH_NAMES[target_date.month - 1]} {target_date.year}"
+    for _ in range(36):  # hard cap so a parsing miss can't loop forever
+        current_label = header_locator.inner_text().strip()
+        if current_label == target_label:
+            return
+        match = _MONTH_LABEL_RE.match(current_label)
+        if not match:
+            raise WeboramaFetchError(f'Не удалось распознать заголовок календаря: "{current_label}"')
+        current_month = _MONTH_NAMES.index(match.group(1)) + 1
+        current_year = int(match.group(2))
+        if (target_date.year, target_date.month) > (current_year, current_month):
+            next_arrow.click()
+        else:
+            prev_arrow.click()
+        page.wait_for_timeout(300)
+    raise WeboramaFetchError(f'Не удалось долистать календарь до {target_label}')
 
-    Not every Weborama campaign is split into separate Insertions per
-    format - some (e.g. a campaign that only ever ran one format) only
-    go one level up, to a "Sites/Offers" table with a single combined
-    row (commonly named "SAPE"). _parse_sites_offers_table handles that
-    shape as a fallback, so a mapping can still be pointed at it by name.
+
+def _click_calendar_day(calendar_locator, day):
+    # Exact match on day number, excluding the grayed-out cells that
+    # belong to the previous/next month's preview days in the same grid -
+    # a plain has-text("1") would also match "31", "21", etc. as substrings.
+    cell = calendar_locator.locator(
+        'td:not(.x-datepicker-prevday):not(.x-datepicker-nextday)',
+        has_text=re.compile(rf'^{day}$')
+    )
+    cell.first.click()
+
+
+def _read_grid_rows(page):
+    """Read the per-row table (Insertions, or Sites/Offers for permalinks
+    with no separate Insertions tab) straight from the ExtJS grid's DOM
+    instead of scraping flattened page text. The grid always lists the
+    row name first, then Impressions, then Clicks, as the first three
+    cells after the row-checkbox column - true for both the Insertions
+    shape and every Sites/Offers variant seen so far (they differ only
+    in how many extra metric columns follow), so reading by fixed
+    position avoids having to guess a per-shape column count.
+
+    Returns a dict keyed by the exact row name as shown in Weborama
+    -> {'impressions': int, 'clicks': int, 'insertion_name': str, 'format_guess': 'banner'|'video'|None}
     """
-    idx = body_text.find('Insertions\nImp.')
-    if idx != -1:
-        return _parse_rows(body_text, idx, header_count=9)
-
-    idx = body_text.find('Sites/Offers\nImp.')
-    if idx != -1:
-        return _parse_rows(body_text, idx, header_count=5)
-
-    raise WeboramaFetchError('Не нашлась таблица Insertions или Sites/Offers на странице - возможно, нет данных за этот период')
-
-
-def _parse_rows(body_text, idx, header_count):
-    """Generic "name, Imp, Clicks, ...(fixed extra columns)" table parser
-    shared by the Insertions (9 columns) and Sites/Offers (5 columns)
-    table shapes - both list Imp. and Clicks right after the row name."""
-    lines = [l.strip() for l in body_text[idx:].split('\n') if l.strip()]
-    rows = lines[header_count:]
-    row_width = header_count  # name + the same number of data columns as the header
+    rows = page.locator('.x-grid-data-row')
+    row_count = rows.count()
+    if row_count == 0:
+        raise WeboramaFetchError('Не нашлась таблица Insertions или Sites/Offers на странице - возможно, нет данных за этот период')
 
     results = {}
-    i = 0
-    while i < len(rows):
-        name = rows[i]
-        if name in ('Total', 'Plot selected rows') or name.startswith('Page'):
-            break
-        if i + 2 >= len(rows):
-            break
-        impressions = _parse_number(rows[i + 1])
-        clicks = _parse_number(rows[i + 2])
+    for i in range(row_count):
+        cells = rows.nth(i).locator('.x-grid-cell')
+        if cells.count() < 4:
+            continue
+        name = cells.nth(1).inner_text().strip()
+        if not name or name in ('Total', 'Plot selected rows'):
+            continue
+        impressions = _parse_number(cells.nth(2).inner_text())
+        clicks = _parse_number(cells.nth(3).inner_text())
 
         name_lower = name.lower()
         if 'banner' in name_lower:
@@ -143,7 +176,6 @@ def _parse_rows(body_text, idx, header_count):
             'insertion_name': name,
             'format_guess': format_guess,
         }
-        i += row_width
 
     if not results:
         raise WeboramaFetchError('Не удалось распознать строки с данными в таблице')

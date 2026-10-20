@@ -1726,6 +1726,7 @@ def get_monitoring_data(monitoring_id):
                 'mappings': [{
                     'id': mapping.id,
                     'sape_campaign_id': mapping.sape_campaign_id,
+                    'sape_campaign_ids': mapping.campaign_ids_list(),
                     'insertion_name': mapping.insertion_name,
                     'verifier_impressions': mapping.verifier_impressions,
                     'verifier_clicks': mapping.verifier_clicks,
@@ -1739,9 +1740,12 @@ def get_monitoring_data(monitoring_id):
 
 def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to):
     """Fetch SAPE fact показы/клики for exactly the campaigns that have a
-    Weborama verifier mapping, one API call per campaign (SAPE's
+    Weborama verifier mapping, one API call per mapping (SAPE's
     multi-campaign stats call groups by date, not by campaign, so there's
-    no way to get a per-campaign breakdown from a single combined call).
+    no way to get a per-mapping breakdown from a single combined call
+    across ALL mappings at once - but a mapping covering several
+    campaigns that share one verifier number can still be summed in one
+    call, via SAPE's own campaignId "in" filter).
 
     Without this, the verifier discrepancy % would compare WCM's показы
     for one campaign against the whole monitoring's combined SAPE fact
@@ -1751,18 +1755,18 @@ def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to):
     adds at most a handful of extra requests, not one per monitoring."""
     mappings = [
         m for link in monitoring.verifier_links if link.verifier_type == 'weborama'
-        for m in link.mappings if m.sape_campaign_id
+        for m in link.mappings if m.campaign_ids_list()
     ]
     if not mappings:
         return
 
     for mapping in mappings:
-        campaign = mapping.campaign
-        if not campaign:
+        campaigns = Campaign.query.filter(Campaign.id.in_(mapping.campaign_ids_list())).all()
+        if not campaigns:
             continue
         try:
             stats = client.get_stats(
-                campaign_ids=[int(campaign.campaign_id)],
+                campaign_ids=[int(c.campaign_id) for c in campaigns],
                 date_from=date_from,
                 date_to=date_to,
                 fields=None
@@ -1774,7 +1778,7 @@ def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to):
             mapping.sape_fact_clicks = total.get('clicks', 0)
             mapping.sape_fact_updated_at = datetime.utcnow()
         except Exception as e:
-            logger.error(f"⚠️ Failed to fetch per-campaign SAPE fact for mapping {mapping.id} (campaign {campaign.campaign_id}): {e}")
+            logger.error(f"⚠️ Failed to fetch SAPE fact for mapping {mapping.id} (campaigns {[c.campaign_id for c in campaigns]}): {e}")
 
 
 @app.route('/monitoring/<int:monitoring_id>/refresh', methods=['POST'])
@@ -2177,15 +2181,23 @@ def add_verifier_mapping(link_id):
     return jsonify({'success': True, 'id': mapping.id})
 
 
+
+
 @app.route('/verifier-link-mappings/<int:mapping_id>/update', methods=['POST'])
 @login_required
 def update_verifier_mapping(mapping_id):
     mapping = VerifierLinkMapping.query.get_or_404(mapping_id)
     data = request.get_json(silent=True) or {}
 
-    if 'sape_campaign_id' in data:
+    if 'sape_campaign_ids' in data:
+        values = data.get('sape_campaign_ids') or []
+        ids = [int(v) for v in values if v not in (None, '')]
+        mapping.sape_campaign_ids = ids or None
+        mapping.sape_campaign_id = ids[0] if ids else None
+    elif 'sape_campaign_id' in data:
         value = data.get('sape_campaign_id')
         mapping.sape_campaign_id = int(value) if value not in (None, '') else None
+        mapping.sape_campaign_ids = None
     if 'insertion_name' in data:
         mapping.insertion_name = (data.get('insertion_name') or '').strip() or None
     if 'verifier_impressions' in data:
