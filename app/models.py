@@ -548,15 +548,36 @@ class MonitoringCampaign(db.Model):
             for m in link.mappings
         ]
 
+    def _distinct_weborama_sape_fact_mappings(self):
+        """Weborama mappings, de-duplicated by their exact campaign set -
+        when several mappings cover the SAME group of campaigns (one
+        Weborama pixel split into multiple Insertion rows that all share
+        the same underlying SAPE campaigns, e.g. two ad creatives running
+        across the same 7 campaigns), each mapping's sape_fact_* is
+        already the FULL total for that whole group, not a per-row
+        slice of it - summing every mapping would double/triple-count
+        the SAPE side. Keep only one representative mapping per distinct
+        campaign set so each group's fact is counted exactly once."""
+        seen = set()
+        result = []
+        for m in self._weborama_mappings():
+            key = frozenset(m.campaign_ids_list())
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            result.append(m)
+        return result
+
     def get_weborama_sape_fact_impressions(self):
-        """Sum of the per-campaign SAPE fact for exactly the campaigns that
-        have a Weborama mapping - NOT the whole monitoring's combined fact,
-        which may include other campaigns the permalink doesn't cover.
-        Falls back to the mapping's own fallback (monitoring total) for any
-        mapping that hasn't been refreshed with per-campaign data yet."""
+        """Sum of the per-campaign-group SAPE fact for exactly the
+        campaigns that have a Weborama mapping - NOT the whole
+        monitoring's combined fact, which may include other campaigns
+        the permalink doesn't cover. Falls back to the mapping's own
+        fallback (monitoring total) for any mapping that hasn't been
+        refreshed with per-campaign data yet."""
         total = 0
         found = False
-        for m in self._weborama_mappings():
+        for m in self._distinct_weborama_sape_fact_mappings():
             sape_imp, _ = m._sape_facts()
             if sape_imp:
                 total += sape_imp
@@ -566,7 +587,7 @@ class MonitoringCampaign(db.Model):
     def get_weborama_sape_fact_clicks(self):
         total = 0
         found = False
-        for m in self._weborama_mappings():
+        for m in self._distinct_weborama_sape_fact_mappings():
             _, sape_clk = m._sape_facts()
             if sape_clk:
                 total += sape_clk
