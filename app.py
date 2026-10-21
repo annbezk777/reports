@@ -4483,10 +4483,13 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
             max_instances=1  # Don't run multiple instances simultaneously
         )
 
-        # Add daily monitoring refresh at 03:00 (every day)
+        # Add daily monitoring refresh at 08:00 - pushed later than the
+        # original 03:00 because SAPE's own report data for "yesterday"
+        # isn't fully settled that early; running at 03:00 risked pulling
+        # a partial fact.
         scheduler.add_job(
             func=scheduled_refresh_all_monitorings,
-            trigger=CronTrigger(hour=3, minute=0),  # Run daily at 03:00
+            trigger=CronTrigger(hour=8, minute=0),
             id='daily_monitoring_refresh',
             name='Автообновление данных мониторинга',
             replace_existing=True,
@@ -4495,11 +4498,11 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
             max_instances=1  # Don't run multiple instances simultaneously
         )
 
-        # Add daily Weborama verifier refresh at 03:30 - after the SAPE
+        # Add daily Weborama verifier refresh at 08:30 - after the SAPE
         # fact refresh above, so discrepancy % compares against fresh data
         scheduler.add_job(
             func=scheduled_refresh_weborama_verifiers,
-            trigger=CronTrigger(hour=3, minute=30),
+            trigger=CronTrigger(hour=8, minute=30),
             id='daily_weborama_verifier_refresh',
             name='Автообновление верификаторов Weborama',
             replace_existing=True,
@@ -4513,8 +4516,8 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
         logging.info("✅ Scheduler started:")
         logging.info("   - Weekday account sync at 09:00 Moscow time (Mon-Fri)")
         logging.info("   - Hourly report schedule check (every hour at :00)")
-        logging.info("   - Daily monitoring refresh at 03:00 Moscow time (every day)")
-        logging.info("   - Daily Weborama verifier refresh at 03:30 Moscow time (every day)")
+        logging.info("   - Daily monitoring refresh at 08:00 Moscow time (every day)")
+        logging.info("   - Daily Weborama verifier refresh at 08:30 Moscow time (every day)")
 
         # Check if we need to sync on startup (if last sync was >24h ago)
         if should_sync_on_startup():

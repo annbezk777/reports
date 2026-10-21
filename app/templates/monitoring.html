@@ -163,6 +163,25 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     <strong style="color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums;">{{ monitoring.date_from.strftime('%d.%m.%Y') }} — {{ monitoring.date_to.strftime('%d.%m.%Y') }}</strong>
                                 </div>
 
+                                <span style="color: #D1D5DB;">•</span>
+
+                                <!-- Sync status -->
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    {% if monitoring.last_sync %}
+                                    <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10b981; flex-shrink: 0;"></span>
+                                    <span style="color: var(--text-secondary);">Данные обновлены: <strong style="color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums;">{{ (monitoring.last_sync|to_moscow).strftime('%d.%m.%Y в %H:%M') }}</strong></span>
+                                    {% else %}
+                                    <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #d6d3d1; flex-shrink: 0;"></span>
+                                    <span style="color: var(--text-secondary);">Данные пока не подгружены по API</span>
+                                    {% endif %}
+                                    <button onclick="refreshMonitoring({{ monitoring.id }})"
+                                            class="btn btn-secondary"
+                                            title="Обновить сейчас"
+                                            style="flex-shrink: 0; padding: 0; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center;">
+                                        <svg width="9" height="9" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                    </button>
+                                </div>
+
                                 <!-- Timeline Progress (Right-aligned) -->
                                 {% set days_passed = monitoring.get_days_passed_until_yesterday() %}
                                 {% set progress_percent = (days_passed / monitoring.get_total_days() * 100)|int if monitoring.get_total_days() > 0 else 0 %}
@@ -385,24 +404,6 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                             </table>
                         </div>
 
-                        <!-- Footer: Sync Status -->
-                        <div style="padding: 8px 16px; background: rgba(245, 245, 244, 0.5); border-top: 1px solid rgba(231, 229, 228, 0.6); display: grid; grid-template-columns: 1fr auto; align-items: center; font-size: 9px; color: #78716c;">
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                {% if monitoring.last_sync %}
-                                <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10b981; flex-shrink: 0;"></span>
-                                <span>Данные обновлены: <strong style="color: #1c1917;">{{ (monitoring.last_sync|to_moscow).strftime('%d.%m.%Y в %H:%M') }}</strong></span>
-                                {% else %}
-                                <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #d6d3d1; flex-shrink: 0;"></span>
-                                <span>Данные пока не подгружены по API</span>
-                                {% endif %}
-                            </div>
-                            <button onclick="refreshMonitoring({{ monitoring.id }})"
-                                    style="background: none; border: none; font-size: 9px; font-weight: 600; color: #78716c; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; padding: 0; transition: color 0.2s;"
-                                    onmouseover="this.style.color='#1c1917';"
-                                    onmouseout="this.style.color='#78716c';">
-                                Обновить сейчас
-                            </button>
-                        </div>
                     </div>
 
                     <!-- Right: Actions -->
