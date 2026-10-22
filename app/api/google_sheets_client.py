@@ -354,7 +354,8 @@ class GoogleSheetsClient:
         sheet_url: str,
         sheet_name: Optional[str],
         campaign_id: str,
-        cached_data: Optional[List[List]] = None
+        cached_data: Optional[List[List]] = None,
+        known_ad_ids: Optional[set] = None
     ) -> List[Dict]:
         """
         Find ALL table sections that contain this campaign ID
@@ -364,6 +365,11 @@ class GoogleSheetsClient:
             sheet_name: Worksheet name
             campaign_id: Campaign ID to search for
             cached_data: Optional cached worksheet data
+            known_ad_ids: Optional set of this campaign's real adId strings -
+                a header that doesn't contain the campaign_id itself but DOES
+                contain one or more of these (e.g. "крео 1 1546990 1546991 ...")
+                still counts as a section for this campaign, scoped to just
+                those creatives (see structure['matched_ad_ids'])
 
         Returns:
             List of structure dicts (one for each section found)
@@ -371,7 +377,7 @@ class GoogleSheetsClient:
         all_sections = []
 
         # First detect all sections using the standard method, but collect ALL matches
-        structures = self.auto_detect_all_structures(sheet_url, sheet_name, campaign_id, cached_data)
+        structures = self.auto_detect_all_structures(sheet_url, sheet_name, campaign_id, cached_data, known_ad_ids)
 
         return structures
 
@@ -380,10 +386,15 @@ class GoogleSheetsClient:
         sheet_url: str,
         sheet_name: Optional[str],
         campaign_id: str,
-        cached_data: Optional[List[List]] = None
+        cached_data: Optional[List[List]] = None,
+        known_ad_ids: Optional[set] = None
     ) -> List[Dict]:
         """
-        Find ALL structures (sections) containing this campaign ID
+        Find ALL structures (sections) containing this campaign ID, OR
+        containing any of known_ad_ids (used to split one campaign's data
+        across several sections by creative, e.g. two sections headed
+        "крео 1 <adIds...>" / "крео 2 <adIds...>" with no campaign_id of
+        their own in the header text).
 
         Returns:
             List of structure dicts
@@ -437,15 +448,23 @@ class GoogleSheetsClient:
                     # Check if cell contains campaign IDs (6-digit numbers)
                     found_ids = re.findall(r'(?:ID\s*)?(\d{6})\b', cell_str)
 
-                    # Skip if no IDs found
-                    if not found_ids:
+                    # Broader pass (5-9 digit tokens) used only to detect
+                    # adId references - e.g. a header like "крео 1 1546990
+                    # 1546991 ..." has no 6-digit campaign_id of its own,
+                    # only 7-digit adIds, so it'd never match via found_ids.
+                    header_numbers = re.findall(r'\d{5,9}', cell_str)
+                    matched_ad_ids = (set(header_numbers) & known_ad_ids) if known_ad_ids else set()
+
+                    # Skip if no IDs found at all (neither campaign-id-shaped nor adId matches)
+                    if not found_ids and not matched_ad_ids:
                         continue
 
                     # This is a potential header with campaign IDs
                     # Accept if: contains "Показатели кампании" OR contains multiple 6-digit IDs
                     is_campaign_header = (
                         'Показатели кампании' in cell_str or  # Old format
-                        len(found_ids) >= 1  # New format: just IDs (accept even single ID)
+                        len(found_ids) >= 1 or  # New format: just IDs (accept even single ID)
+                        bool(matched_ad_ids)
                     )
 
                     if is_campaign_header:
@@ -457,12 +476,13 @@ class GoogleSheetsClient:
                             'ids': found_ids
                         })
 
+                        is_match = campaign_id in found_ids or bool(matched_ad_ids)
                         print(f"   📋 Found header at row {row_idx + 1}, col {col_idx + 1}:")
                         print(f"      Text: '{cell_str}'")
-                        print(f"      Extracted IDs: {found_ids}")
-                        print(f"      Match with '{campaign_id}'? {campaign_id in found_ids}")
+                        print(f"      Extracted IDs: {found_ids}, matched adIds: {sorted(matched_ad_ids)}")
+                        print(f"      Match with '{campaign_id}'? {is_match}")
 
-                        if campaign_id in found_ids:
+                        if is_match:
                             print(f"      ✅ MATCH! Processing section...")
                             # Found a section! Parse it
                             section_structure = self._parse_section_structure(
@@ -474,6 +494,22 @@ class GoogleSheetsClient:
                             )
 
                             if section_structure:
+                                if campaign_id not in found_ids:
+                                    # Matched purely via adId overlap, not a
+                                    # real campaign_id in the header - found_ids
+                                    # here is just 6-digit-regex noise left over
+                                    # from truncating 7+ digit adIds (e.g. "крео 1
+                                    # 1546990 ..." -> "546990"), not genuine
+                                    # campaign IDs. Don't let that noise get
+                                    # treated as a multi-campaign COMBINED
+                                    # section downstream - this section
+                                    # unambiguously belongs to just this one
+                                    # campaign, scoped to the matched creatives.
+                                    section_structure['campaign_ids'] = [campaign_id]
+                                # Only non-empty when this section is scoped to
+                                # specific creatives (see known_ad_ids above) -
+                                # empty means "whole campaign", unchanged behavior.
+                                section_structure['matched_ad_ids'] = sorted(matched_ad_ids)
                                 found_sections.append(section_structure)
                                 print(f"      ✅ Section parsed successfully")
                             else:

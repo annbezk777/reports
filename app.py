@@ -1321,16 +1321,37 @@ def _sync_monitoring_from_asana(monitoring):
         logger.error(f"Error fetching Asana task {task_gid}: {e}")
         raise AsanaSyncError(f'Ошибка запроса к Asana: {e}')
 
-    # Use THIS monitoring's own format (from its SAPE campaigns) to pick
-    # which показы/клики slot to read, rather than the task's own
+    # Use THIS monitoring's own format(s) (from its SAPE campaigns) to pick
+    # which показы/клики slot(s) to read, rather than the task's own
     # "Формат" field - that field can have multiple formats selected
     # (one task covering several monitorings) or simply be filled in
     # wrong, since it's manual.
     monitoring_campaigns = monitoring.get_campaigns()
-    format_type = monitoring_campaigns[0].format_type if monitoring_campaigns else None
-    format_idx = AsanaClient.format_index_for_campaign_type(format_type)
+    format_indices = sorted(set(
+        AsanaClient.format_index_for_campaign_type(c.format_type) for c in monitoring_campaigns
+    )) if monitoring_campaigns else []
 
-    parsed = client.parse_monitoring_fields(task, format_idx=format_idx)
+    if len(format_indices) > 1:
+        # This one monitoring bundles campaigns of several different
+        # formats (e.g. video + banner) - показы/клики each live in their
+        # own semicolon slot in Asana, so reading just one slot (e.g. the
+        # format of whichever campaign happens to be first) silently
+        # drops the rest, down to 0 if that one slot is empty. Sum across
+        # every format this monitoring actually has campaigns in instead.
+        parsed = None
+        total_impressions = 0
+        total_clicks = 0
+        for idx in format_indices:
+            parsed_for_idx = client.parse_monitoring_fields(task, format_idx=idx)
+            if parsed is None:
+                parsed = parsed_for_idx  # non-format-specific fields (dates, PI, VTR, KPI...) are the same regardless of idx
+            total_impressions += parsed_for_idx.get('impressions', 0) or 0
+            total_clicks += parsed_for_idx.get('clicks', 0) or 0
+        parsed['impressions'] = total_impressions
+        parsed['clicks'] = total_clicks
+    else:
+        format_idx = format_indices[0] if format_indices else None
+        parsed = client.parse_monitoring_fields(task, format_idx=format_idx)
 
     # A single Asana task can cover a media plan that spans several
     # months while a monitoring only tracks one of them (e.g. task is
@@ -1492,10 +1513,24 @@ def create_monitoring():
             manager=manager if manager else None
         )
 
+        asana_task_url = request.form.get('asana_task_url')
+        monitoring.asana_task_url = asana_task_url if asana_task_url else None
+
         db.session.add(monitoring)
         db.session.commit()
 
-        flash('Мониторинг успешно создан', 'success')
+        asana_warning = None
+        if monitoring.asana_task_url:
+            try:
+                _sync_monitoring_from_asana(monitoring)
+                db.session.commit()
+            except AsanaSyncError as e:
+                asana_warning = str(e)
+
+        if asana_warning:
+            flash(f'Мониторинг создан, но не удалось подтянуть план из Asana: {asana_warning}', 'error')
+        else:
+            flash('Мониторинг успешно создан', 'success')
         return redirect(url_for('monitoring'))
 
     except Exception as e:
@@ -1636,10 +1671,15 @@ def get_account_campaigns(account_id):
 
     Query params:
         include_ids: comma-separated list of campaign IDs to include even if inactive
+        client_id: filter to campaigns belonging to this client only
     """
     try:
         # Get active campaigns
-        campaigns = Campaign.query.filter_by(account_id=account_id, active=True).all()
+        query = Campaign.query.filter_by(account_id=account_id, active=True)
+        client_id = request.args.get('client_id', type=int)
+        if client_id:
+            query = query.filter_by(client_id=client_id)
+        campaigns = query.all()
 
         # Get include_ids from query params
         include_ids_param = request.args.get('include_ids', '')
@@ -1670,7 +1710,9 @@ def get_account_campaigns(account_id):
             'campaign_id': c.campaign_id,
             'name': c.name,
             'format_type': c.format_type,
-            'active': c.active
+            'active': c.active,
+            'client_id': c.client_id,
+            'client_name': c.client.name if c.client else None
         } for c in campaigns])
     except Exception as e:
         logging.error(f"Error loading campaigns for account {account_id}: {e}")
@@ -2840,7 +2882,8 @@ def add_report():
             print(f"⚠️ Brand extraction failed (will try on first update): {e}")
 
         campaign_names = ', '.join([c.name for c in campaigns])
-        flash(f'Отчет успешно создан для кампаний: {campaign_names}. Режим: {"Раздельно" if campaign_mode == "separate" else "Едино"}', 'success')
+        mode_labels = {'separate': 'Раздельно', 'total': 'Едино', 'by_creative': 'По креативам'}
+        flash(f'Отчет успешно создан для кампаний: {campaign_names}. Режим: {mode_labels.get(campaign_mode, campaign_mode)}', 'success')
         return redirect(url_for('reports'))
 
     # Get all accounts for dropdown
@@ -2923,6 +2966,33 @@ def execute_run_report(report_id):
                 yield f"data: {json.dumps({'type': 'complete', 'success': False, 'error': str(e)})}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
+
+
+def _build_ad_scoped_daily_data(ad_stats, matched_ad_ids):
+    """Sum per-creative daily SAPE stats (from get_daily_stats_by_ad) across
+    just matched_ad_ids, into the same [{date, date_iso, impressions,
+    clicks, ctr}] shape write_daily_data() expects."""
+    daily_by_ad = ad_stats.get('daily_by_ad', {})
+    totals_by_date = {}
+    for ad_id in matched_ad_ids:
+        for date_iso, vals in daily_by_ad.get(ad_id, {}).items():
+            entry = totals_by_date.setdefault(date_iso, {'impressions': 0, 'clicks': 0})
+            entry['impressions'] += vals['impressions']
+            entry['clicks'] += vals['clicks']
+
+    result = []
+    for date_iso in sorted(totals_by_date.keys()):
+        imp = totals_by_date[date_iso]['impressions']
+        clk = totals_by_date[date_iso]['clicks']
+        date_obj = datetime.strptime(date_iso, '%Y-%m-%d')
+        result.append({
+            'date': date_obj.strftime('%d.%m.%Y'),
+            'date_iso': date_iso,
+            'impressions': imp,
+            'clicks': clk,
+            'ctr': round(clk / imp * 100, 2) if imp > 0 else 0.0
+        })
+    return result
 
 
 @app.route('/reports/<int:report_id>/run-old')
@@ -3201,6 +3271,139 @@ def run_report_old(report_id):
             db.session.commit()
 
             flash(f'Сводный отчёт успешно обновлен для {len(campaigns_data)} кампаний. Всего показов: {total_impressions:,}, кликов: {total_clicks:,}', 'success')
+            return redirect(url_for('reports'))
+
+        # ==================== BY-CREATIVE REPORT MODE ====================
+        # One campaign can have several sections in the sheet, each scoped to
+        # a subset of its creatives (e.g. "Показатели кампании крео 1 <adIds>" /
+        # "...крео 2 <adIds>") - the adIds literally in the header text tell us
+        # which creatives belong to which section. No manual ID/name field
+        # needed in the report form: we fetch the campaign's real adId list
+        # from SAPE and match it against numbers found in the sheet headers.
+        if report.campaign_mode == 'by_creative':
+            print(f"\n{'='*60}")
+            print(f"🎨 BY-CREATIVE REPORT MODE: Processing {len(campaigns)} campaigns")
+            print(f"   Period: {date_from.strftime('%Y-%m-%d')} to {date_to.strftime('%Y-%m-%d')}")
+            print(f"{'='*60}\n")
+
+            cached_worksheet_object = gs_client.get_worksheet_object(
+                sheet_url=report.google_sheet_url,
+                sheet_name=report.worksheet_name
+            )
+            cached_worksheet_data = cached_worksheet_object.get('A1:DZ300') if cached_worksheet_object else None
+
+            total_impressions = 0
+            total_clicks = 0
+            sections_written = 0
+
+            for campaign in campaigns:
+                print(f"\n🔍 Fetching per-creative stats for campaign {campaign.campaign_id} ({campaign.name})")
+                ad_stats = sape_client.get_daily_stats_by_ad(
+                    campaign_ids=[int(campaign.campaign_id)],
+                    date_from=date_from,
+                    date_to=date_to
+                )
+                known_ad_ids = set(ad_stats.get('daily_by_ad', {}).keys())
+                print(f"   Found {len(known_ad_ids)} creatives with data: {sorted(ad_stats.get('ad_names', {}).values())}")
+
+                all_structures = gs_client.auto_detect_all_structures(
+                    sheet_url=report.google_sheet_url,
+                    sheet_name=report.worksheet_name,
+                    campaign_id=str(campaign.campaign_id),
+                    cached_data=cached_worksheet_data,
+                    known_ad_ids=known_ad_ids
+                )
+
+                if not all_structures:
+                    print(f"❌ No sections found in sheet for campaign {campaign.campaign_id}")
+                    continue
+
+                cid_str = str(campaign.id)
+                if report.campaign_settings and cid_str in report.campaign_settings:
+                    settings = report.campaign_settings[cid_str]
+                    daily_frequency = settings.get('daily_frequency', 3.0)
+                    daily_variance = settings.get('daily_variance', 0.1)
+                    total_frequency = settings.get('total_frequency', 3.0)
+                    total_variance = settings.get('total_variance', 0.1)
+                else:
+                    daily_frequency, daily_variance, total_frequency, total_variance = 3.0, 0.1, 3.0, 0.1
+
+                for structure in all_structures:
+                    matched_ad_ids = structure.get('matched_ad_ids') or []
+
+                    if matched_ad_ids:
+                        ad_labels = [ad_stats['ad_names'].get(a, a) for a in matched_ad_ids]
+                        print(f"   📍 Section at row {structure['header_row']}, col {structure['header_col']}: creatives {ad_labels}")
+                        daily_data_to_write = _build_ad_scoped_daily_data(ad_stats, matched_ad_ids)
+                    else:
+                        # Plain section matched on the campaign's own ID (no
+                        # creative IDs in its header) - full campaign totals.
+                        print(f"   📍 Section at row {structure['header_row']}, col {structure['header_col']}: whole campaign")
+                        daily_data_to_write = sape_client.get_daily_stats(
+                            campaign_ids=[int(campaign.campaign_id)],
+                            date_from=date_from,
+                            date_to=date_to,
+                            include_video_metrics=(campaign.format_type in ['V', 'CTV'])
+                        )
+
+                    if not daily_data_to_write:
+                        print(f"   ⚠️ No data for this section")
+                        continue
+
+                    column_mapping = {
+                        'date_column': structure['date_column'],
+                        'impressions_column': structure['impressions_column'],
+                        'reach_column': structure['reach_column'],
+                        'clicks_column': structure['clicks_column'],
+                        'ctr_column': structure['ctr_column'],
+                        'vast25_column': None,
+                        'vast50_column': None,
+                        'vast75_column': None,
+                        'completes_column': None
+                    }
+
+                    success = gs_client.write_daily_data(
+                        sheet_url=report.google_sheet_url,
+                        sheet_name=report.worksheet_name,
+                        daily_data=daily_data_to_write,
+                        column_mapping=column_mapping,
+                        data_start_row=structure['data_start_row'],
+                        daily_frequency=daily_frequency,
+                        daily_variance=daily_variance,
+                        total_frequency=total_frequency,
+                        total_variance=total_variance,
+                        frequency=daily_frequency,
+                        frequency_variance=report.frequency_variance or 0.1,
+                        total_reach_coefficient=report.total_reach_coefficient or 0.96,
+                        cached_worksheet=cached_worksheet_object
+                    )
+
+                    if not success:
+                        print(f"   ❌ Failed to write section")
+                        continue
+
+                    total_impressions += sum(d['impressions'] for d in daily_data_to_write)
+                    total_clicks += sum(d['clicks'] for d in daily_data_to_write)
+                    sections_written += 1
+
+            if sections_written == 0:
+                raise Exception("Не удалось найти/заполнить ни одной секции по креативам в Google таблице")
+
+            log = ReportLog(
+                report_config_id=report.id,
+                status='success',
+                metrics={
+                    'total_impressions': total_impressions,
+                    'total_clicks': total_clicks,
+                    'sections_written': sections_written
+                }
+            )
+            db.session.add(log)
+
+            report.last_update = datetime.utcnow()
+            db.session.commit()
+
+            flash(f'Отчёт по креативам обновлён: {sections_written} секций. Всего показов: {total_impressions:,}, кликов: {total_clicks:,}', 'success')
             return redirect(url_for('reports'))
 
         # ==================== DAILY REPORT MODE (separate/combined) ====================

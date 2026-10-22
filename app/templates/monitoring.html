@@ -931,7 +931,7 @@ function refreshAllMonitorings() {
                 <div class="form-row">
                     <div class="form-group">
                         <label for="account_id">Аккаунт SAPE <span class="required">*</span></label>
-                        <select id="account_id" name="account_id" required onchange="loadCampaigns()">
+                        <select id="account_id" name="account_id" required onchange="onMonitoringAccountChange()">
                             <option value="">Выберите аккаунт</option>
                             {% for account in accounts %}
                             <option value="{{ account.id }}">{{ account.login }}</option>
@@ -942,6 +942,15 @@ function refreshAllMonitorings() {
                     <div class="form-group">
                         <label for="manager">Менеджер</label>
                         <input type="text" id="manager" name="manager" placeholder="Имя менеджера">
+                    </div>
+                </div>
+
+                <div class="form-row" id="monitoringClientSection" style="display: none;">
+                    <div class="form-group">
+                        <label for="monitoring_client_id">Фильтр по клиенту</label>
+                        <select id="monitoring_client_id" name="monitoring_client_id" onchange="filterMonitoringCampaignsByClient()">
+                            <option value="">Все клиенты</option>
+                        </select>
                     </div>
                 </div>
 
@@ -1054,11 +1063,12 @@ function refreshAllMonitorings() {
                                 <tr>
                                     <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 40px;"></th>
                                     <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary);">КАМПАНИЯ</th>
+                                    <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary);">КЛИЕНТ</th>
                                 </tr>
                             </thead>
                             <tbody id="campaignsList">
                                 <tr>
-                                    <td colspan="2" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+                                    <td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">
                                         Выберите аккаунт для загрузки кампаний
                                     </td>
                                 </tr>
@@ -1602,6 +1612,13 @@ function openMonitoringModal(monitoringId = null) {
         form.action = `/monitoring/${monitoringId}/edit`;
         document.getElementById('monitoringId').value = monitoringId;
 
+        // The modal becomes visible right away (below) but this fetch is
+        // async - if fields stayed enabled, typing into them before the
+        // response lands would get silently clobbered the moment .then()
+        // populates them with the OLD saved values. Lock the form until
+        // data actually arrives.
+        form.querySelectorAll('input, select, textarea, button[type="submit"]').forEach(el => el.disabled = true);
+
         // Load monitoring data via AJAX
         fetch(`/api/monitoring/${monitoringId}`)
             .then(response => response.json())
@@ -1653,12 +1670,16 @@ function openMonitoringModal(monitoringId = null) {
                 console.log('Monitoring data loaded:', data);
                 console.log('Campaign IDs to select:', data.campaign_ids);
                 if (data.account_id) {
+                    loadMonitoringClients();
                     loadCampaigns(data.campaign_ids || []);
                 }
+
+                form.querySelectorAll('input, select, textarea, button[type="submit"]').forEach(el => el.disabled = false);
             })
             .catch(error => {
                 console.error('Error loading monitoring:', error);
                 alert('Ошибка загрузки данных мониторинга');
+                form.querySelectorAll('input, select, textarea, button[type="submit"]').forEach(el => el.disabled = false);
             });
     } else {
         // Create mode
@@ -1671,7 +1692,9 @@ function openMonitoringModal(monitoringId = null) {
         currentMonitoringCampaignOptions = [];
         renderVerifierLinks([]);
         hideAdriverFactCard();
-        document.getElementById('campaignsList').innerHTML = '<tr><td colspan="2" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Выберите аккаунт для загрузки кампаний</td></tr>';
+        document.getElementById('campaignsList').innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Выберите аккаунт для загрузки кампаний</td></tr>';
+        document.getElementById('monitoringClientSection').style.display = 'none';
+        document.getElementById('monitoring_client_id').innerHTML = '<option value="">Все клиенты</option>';
     }
 
     modal.style.display = 'flex';
@@ -2316,8 +2339,54 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+function onMonitoringAccountChange() {
+    loadMonitoringClients();
+    loadCampaigns();
+}
+
+function loadMonitoringClients() {
+    const accountId = document.getElementById('account_id').value;
+    const clientSection = document.getElementById('monitoringClientSection');
+    const clientSelect = document.getElementById('monitoring_client_id');
+
+    clientSelect.innerHTML = '<option value="">Все клиенты</option>';
+
+    if (!accountId) {
+        clientSection.style.display = 'none';
+        return;
+    }
+
+    fetch(`/api/clients/${accountId}`)
+        .then(response => response.json())
+        .then(clients => {
+            if (clients.length > 0) {
+                clients.forEach(client => {
+                    const option = document.createElement('option');
+                    option.value = client.id;
+                    option.textContent = client.name;
+                    clientSelect.appendChild(option);
+                });
+                clientSection.style.display = 'block';
+            } else {
+                clientSection.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading clients:', error);
+            clientSection.style.display = 'none';
+        });
+}
+
+function filterMonitoringCampaignsByClient() {
+    // Keep whatever's currently checked selected across the filter change
+    const checkedIds = Array.from(document.querySelectorAll('#campaignsList input[type="checkbox"]:checked'))
+        .map(cb => parseInt(cb.value));
+    loadCampaigns(checkedIds);
+}
+
 function loadCampaigns(selectedIds = []) {
     const accountId = document.getElementById('account_id').value;
+    const clientId = document.getElementById('monitoring_client_id') ? document.getElementById('monitoring_client_id').value : '';
     const campaignsList = document.getElementById('campaignsList');
     const loadingDiv = document.getElementById('campaignsLoading');
 
@@ -2335,8 +2404,15 @@ function loadCampaigns(selectedIds = []) {
 
     // Build API URL with include_ids parameter to show inactive campaigns that are already selected
     let apiUrl = `/api/accounts/${accountId}/campaigns`;
+    const params = [];
     if (selectedIdsArray.length > 0) {
-        apiUrl += `?include_ids=${selectedIdsArray.join(',')}`;
+        params.push(`include_ids=${selectedIdsArray.join(',')}`);
+    }
+    if (clientId) {
+        params.push(`client_id=${clientId}`);
+    }
+    if (params.length > 0) {
+        apiUrl += `?${params.join('&')}`;
     }
     console.log('API URL:', apiUrl);
 
@@ -2346,7 +2422,7 @@ function loadCampaigns(selectedIds = []) {
             loadingDiv.style.display = 'none';
 
             if (campaigns.length === 0) {
-                campaignsList.innerHTML = '<tr><td colspan="2" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Нет доступных кампаний</td></tr>';
+                campaignsList.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Нет доступных кампаний</td></tr>';
                 return;
             }
 
@@ -2382,6 +2458,7 @@ function loadCampaigns(selectedIds = []) {
                                 ${campaign.name}${inactiveLabel}
                             </div>
                         </td>
+                        <td style="padding: 8px; font-size: 12px; color: var(--text-secondary);">${campaign.client_name || '—'}</td>
                     </tr>
                 `;
             });
@@ -2390,7 +2467,7 @@ function loadCampaigns(selectedIds = []) {
         })
         .catch(error => {
             loadingDiv.style.display = 'none';
-            campaignsList.innerHTML = '<tr><td colspan="2" style="padding: 20px; text-align: center; color: #dc2626; font-size: 13px;">Ошибка загрузки кампаний</td></tr>';
+            campaignsList.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: #dc2626; font-size: 13px;">Ошибка загрузки кампаний</td></tr>';
             console.error('Error loading campaigns:', error);
         });
 }
@@ -2496,59 +2573,11 @@ function handleCampaignCheckboxChange(checkbox) {
 
 // Reload campaigns maintaining selection
 function reloadCampaignsWithSelection(accountId, selectedIds) {
-    const campaignsList = document.getElementById('campaignsList');
-
-    // Build API URL
-    let apiUrl = `/api/accounts/${accountId}/campaigns`;
-    if (selectedIds && selectedIds.length > 0) {
-        apiUrl += `?include_ids=${selectedIds.join(',')}`;
-    }
-
-    fetch(apiUrl)
-        .then(response => response.json())
-        .then(campaigns => {
-            if (campaigns.length === 0) {
-                return;
-            }
-
-            // Sort: selected first, then by campaign_id descending
-            campaigns.sort((a, b) => {
-                const aChecked = selectedIds.includes(parseInt(a.id));
-                const bChecked = selectedIds.includes(parseInt(b.id));
-
-                if (aChecked && !bChecked) return -1;
-                if (!aChecked && bChecked) return 1;
-
-                return parseInt(b.campaign_id) - parseInt(a.campaign_id);
-            });
-
-            // Generate HTML
-            let html = '';
-            campaigns.forEach(campaign => {
-                const isChecked = selectedIds.includes(parseInt(campaign.id)) ? 'checked' : '';
-                const isInactive = campaign.active === false;
-                const inactiveLabel = isInactive ? ' <span style="color: #dc2626; font-size: 11px; font-weight: 600;">(НЕАКТИВНА)</span>' : '';
-
-                html += `
-                    <tr style="border-bottom: 1px solid var(--border-color);" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='white'">
-                        <td style="padding: 8px; text-align: center;">
-                            <input type="checkbox" name="campaign_ids" value="${campaign.id}" data-sape-id="${campaign.campaign_id}" ${isChecked} onchange="handleCampaignCheckboxChange(this)">
-                        </td>
-                        <td style="padding: 8px;">
-                            <div style="font-size: 13px; color: var(--text-primary); margin-bottom: 2px;">
-                                <code style="background: var(--peach-light); color: var(--primary-orange); padding: 2px 5px; border-radius: 3px; font-size: 10px; margin-right: 6px;">${campaign.campaign_id}</code>
-                                ${campaign.name}${inactiveLabel}
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            campaignsList.innerHTML = html;
-        })
-        .catch(error => {
-            console.error('Error reloading campaigns:', error);
-        });
+    // accountId is always document.getElementById('account_id').value at every
+    // call site - loadCampaigns() already reads it (and the client filter)
+    // straight from the DOM, so just delegate instead of duplicating the
+    // whole fetch/render/client-column logic a second time.
+    loadCampaigns(selectedIds);
 }
 
 

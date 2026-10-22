@@ -439,3 +439,97 @@ class SapeAPIClient:
                 daily_data.append(data_point)
 
         return daily_data
+
+    def get_daily_stats_by_ad(
+        self,
+        campaign_ids: List[int],
+        date_from: datetime,
+        date_to: datetime
+    ) -> Dict:
+        """
+        Get per-creative (adId), per-day statistics - used to split a
+        campaign's totals by creative/package when a report needs separate
+        columns for different creatives within the same SAPE campaign.
+
+        Returns:
+            dict: {
+                'ad_names': {adId_str: adName},
+                'daily_by_ad': {adId_str: {date_iso: {'impressions': int, 'clicks': int}}}
+            }
+        """
+        if not self.access_token:
+            if not self.authenticate():
+                return {'ad_names': {}, 'daily_by_ad': {}}
+
+        try:
+            # Grouping by adId+eventDate multiplies rows (N creatives x M
+            # days) and routinely exceeds SAPE's 100-row page size (e.g. 18
+            # creatives x 20 days = 360 rows / 4 pages) - the API returns
+            # most-recent-date-first, so reading only page 1 silently drops
+            # the OLDER days rather than erroring, which looks like "it just
+            # didn't pull the full period". Page through until pageNum
+            # reaches pageMax (or no statistics come back) to get everything.
+            all_statistics = []
+            all_ad_dict = {}
+            page_num = 1
+            while True:
+                request_body = {
+                    "dateViewFrom": date_from.strftime('%Y-%m-%d 00:00:00'),
+                    "dateViewTo": date_to.strftime('%Y-%m-%d 23:59:59'),
+                    "filters": [
+                        {
+                            "field": "campaignId",
+                            "action": "in",
+                            "values": campaign_ids
+                        }
+                    ],
+                    "fields": ["shows", "clicks"],
+                    "groupBy": ["adId", "eventDate"],
+                    "pageNum": page_num
+                }
+
+                response = requests.post(
+                    f"{self.api_url}/statistics/extended",
+                    headers=self._get_headers(),
+                    json=request_body,
+                    timeout=30
+                )
+
+                if response.status_code != 200:
+                    print(f"❌ Error getting ad-level stats (page {page_num}): {response.status_code} - {response.text}")
+                    break
+
+                data = response.json()
+                page_statistics = data.get('statistics', [])
+                all_statistics.extend(page_statistics)
+                for entry in data.get('dictionary', {}).get('adId', []):
+                    ad_id = entry.get('id')
+                    if ad_id is not None:
+                        all_ad_dict[str(ad_id)] = entry.get('name')
+
+                pager = data.get('pager') or {}
+                page_max = pager.get('pageMax', 1)
+                if not page_statistics or page_num >= page_max:
+                    break
+                page_num += 1
+
+            daily_by_ad = {}
+            for stat in all_statistics:
+                ad_id = stat.get('adId')
+                date_str = stat.get('eventDate', '')
+                if ad_id is None or not date_str:
+                    continue
+                date_iso = date_str.split()[0] if ' ' in date_str else date_str
+                ad_key = str(ad_id)
+                daily_by_ad.setdefault(ad_key, {})[date_iso] = {
+                    'impressions': stat.get('shows', 0),
+                    'clicks': stat.get('clicks', 0)
+                }
+
+            return {'ad_names': all_ad_dict, 'daily_by_ad': daily_by_ad}
+
+        except Exception as e:
+            print(f"❌ Error getting ad-level stats: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'ad_names': {}, 'daily_by_ad': {}}
