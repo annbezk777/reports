@@ -62,6 +62,14 @@
             <option value="unassigned">Без менеджера</option>
         </select>
 
+        <!-- Sort -->
+        <select id="sortFilter" title="Сортировка" onchange="filterReports()"
+                style="width: 170px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
+            <option value="newest">Сначала новые</option>
+            <option value="oldest">Сначала старые</option>
+            <option value="name">По названию (А-Я)</option>
+        </select>
+
         <!-- Add Report Button -->
         <button onclick="openReportFormModal()" class="btn btn-secondary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px; color: var(--text-secondary);">
             <svg class="btn-icon" style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -90,7 +98,8 @@
                  data-name="{{ (report.name if report.name else report.campaign.name)|lower }}"
                  data-brand="{{ report.brand|lower if report.brand else '' }}"
                  data-manager="{{ report.manager|lower if report.manager else 'unassigned' }}"
-                 data-created-month="{{ report.created_at.strftime('%Y-%m') }}">
+                 data-created-month="{{ report.created_at.strftime('%Y-%m') }}"
+                 data-created-at="{{ report.created_at.isoformat() if report.created_at else '' }}">
 
                 <div style="display: flex; gap: 16px; align-items: start;">
                     <!-- Select -->
@@ -900,7 +909,8 @@ function saveReportsFilterState() {
     sessionStorage.setItem(REPORTS_FILTER_STORAGE_KEY, JSON.stringify({
         search: document.getElementById('searchInput').value,
         month: document.getElementById('monthFilter').value,
-        manager: document.getElementById('managerFilter').value
+        manager: document.getElementById('managerFilter').value,
+        sort: document.getElementById('sortFilter').value
     }));
 }
 
@@ -912,6 +922,7 @@ function restoreReportsFilterState() {
         if (state.search) document.getElementById('searchInput').value = state.search;
         if (state.month) document.getElementById('monthFilter').value = state.month;
         if (state.manager) document.getElementById('managerFilter').value = state.manager;
+        if (state.sort) document.getElementById('sortFilter').value = state.sort;
     } catch (e) {
         console.error('Error restoring filter state:', e);
     }
@@ -925,6 +936,7 @@ function filterReports() {
     const searchValue = document.getElementById('searchInput').value.toLowerCase();
     const monthValue = document.getElementById('monthFilter').value;
     const managerValue = document.getElementById('managerFilter').value.toLowerCase();
+    const sortValue = document.getElementById('sortFilter').value;
     const cards = document.querySelectorAll('.report-card');
 
     cards.forEach(card => {
@@ -939,6 +951,18 @@ function filterReports() {
 
         card.style.display = (matchesSearch && matchesMonth && matchesManager) ? '' : 'none';
     });
+
+    // Reorder - appendChild moves existing nodes rather than recreating
+    // them, so checkbox selection/scroll position etc. aren't disturbed.
+    const grid = document.getElementById('reportsGrid');
+    const sorted = Array.from(cards).sort((a, b) => {
+        if (sortValue === 'name') {
+            return a.dataset.name.localeCompare(b.dataset.name, 'ru');
+        }
+        const diff = new Date(a.dataset.createdAt) - new Date(b.dataset.createdAt);
+        return sortValue === 'oldest' ? diff : -diff;
+    });
+    sorted.forEach(card => grid.appendChild(card));
 
     saveReportsFilterState();
 }

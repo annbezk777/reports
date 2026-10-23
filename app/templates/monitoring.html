@@ -65,6 +65,14 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
             <option value="unassigned" {% if manager_filter == 'unassigned' %}selected{% endif %}>Не назначен</option>
         </select>
 
+        <!-- Sort -->
+        <select id="sortFilter" title="Сортировка" onchange="filterMonitoring()"
+                style="width: 170px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
+            <option value="newest">Сначала новые</option>
+            <option value="oldest">Сначала старые</option>
+            <option value="name">По названию (А-Я)</option>
+        </select>
+
         <!-- Action Buttons -->
         {% if monitorings %}
         <button onclick="refreshAllMonitorings()" class="btn btn-primary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px;">
@@ -99,7 +107,8 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
             {% for monitoring in monitorings %}
             <div class="report-card monitoring-card"
                  data-name="{{ monitoring.name|lower }}"
-                 data-manager="{{ monitoring.manager|lower if monitoring.manager else 'unassigned' }}">
+                 data-manager="{{ monitoring.manager|lower if monitoring.manager else 'unassigned' }}"
+                 data-created-at="{{ monitoring.created_at.isoformat() if monitoring.created_at else '' }}">
 
                 <div style="display: flex; gap: 16px; align-items: start;">
                     <!-- Select -->
@@ -660,7 +669,8 @@ const MONITORING_FILTER_STORAGE_KEY = 'monitoringFilterState';
 function saveMonitoringFilterState() {
     sessionStorage.setItem(MONITORING_FILTER_STORAGE_KEY, JSON.stringify({
         search: document.getElementById('searchInput').value,
-        manager: document.getElementById('managerFilter').value
+        manager: document.getElementById('managerFilter').value,
+        sort: document.getElementById('sortFilter').value
     }));
 }
 
@@ -671,6 +681,7 @@ function restoreMonitoringFilterState() {
         const state = JSON.parse(raw);
         if (state.search) document.getElementById('searchInput').value = state.search;
         if (state.manager) document.getElementById('managerFilter').value = state.manager;
+        if (state.sort) document.getElementById('sortFilter').value = state.sort;
     } catch (e) {
         console.error('Error restoring filter state:', e);
     }
@@ -679,6 +690,7 @@ function restoreMonitoringFilterState() {
 function filterMonitoring() {
     const searchValue = document.getElementById('searchInput').value.toLowerCase();
     const managerValue = document.getElementById('managerFilter').value.toLowerCase();
+    const sortValue = document.getElementById('sortFilter').value;
     const cards = document.querySelectorAll('.monitoring-card');
 
     cards.forEach(card => {
@@ -690,6 +702,18 @@ function filterMonitoring() {
 
         card.style.display = (matchesSearch && matchesManager) ? '' : 'none';
     });
+
+    // Reorder - appendChild moves existing nodes rather than recreating
+    // them, so checkbox selection/scroll position etc. aren't disturbed.
+    const grid = document.getElementById('monitoringGrid');
+    const sorted = Array.from(cards).sort((a, b) => {
+        if (sortValue === 'name') {
+            return a.dataset.name.localeCompare(b.dataset.name, 'ru');
+        }
+        const diff = new Date(a.dataset.createdAt) - new Date(b.dataset.createdAt);
+        return sortValue === 'oldest' ? diff : -diff;
+    });
+    sorted.forEach(card => grid.appendChild(card));
 
     saveMonitoringFilterState();
 }
