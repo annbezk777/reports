@@ -809,14 +809,22 @@ function toggleCampaignsList(monitoringId) {
 
 // Refresh monitoring data via API
 function refreshMonitoring(monitoringId) {
-    const button = event.target;
-    const originalText = button.innerHTML;
+    const button = event.currentTarget;
+    const icon = button.querySelector('svg');
 
-    // Show loading state
-    button.innerHTML = '⟳ Обновляю...';
+    // Show loading state - just dim + spin the existing icon, don't
+    // replace it with text (the button is only 18x18px, text overflows it)
     button.disabled = true;
-    button.style.opacity = '0.6';
+    button.style.opacity = '0.4';
     button.style.cursor = 'not-allowed';
+    if (icon) icon.style.animation = 'spin 1s linear infinite';
+
+    const reset = () => {
+        button.disabled = false;
+        button.style.opacity = '1';
+        button.style.cursor = 'pointer';
+        if (icon) icon.style.animation = '';
+    };
 
     // Make API request to refresh data
     fetch(`/monitoring/${monitoringId}/refresh`, {
@@ -832,19 +840,13 @@ function refreshMonitoring(monitoringId) {
             location.reload();
         } else {
             alert('Ошибка обновления: ' + (data.error || 'Неизвестная ошибка'));
-            button.innerHTML = originalText;
-            button.disabled = false;
-            button.style.opacity = '1';
-            button.style.cursor = 'pointer';
+            reset();
         }
     })
     .catch(error => {
         console.error('Error refreshing monitoring:', error);
         alert('Ошибка обновления данных. Попробуйте позже.');
-        button.innerHTML = originalText;
-        button.disabled = false;
-        button.style.opacity = '1';
-        button.style.cursor = 'pointer';
+        reset();
     });
 }
 
