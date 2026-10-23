@@ -471,6 +471,33 @@ def dashboard():
         'data': chart_values
     }
 
+    # Daily breakdown within the current month - gives real signal when most
+    # history is concentrated in one month (the by-month view is flat/empty
+    # until activity spans several months).
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    reports_by_day = db.session.query(
+        db.func.strftime('%Y-%m-%d', ReportConfig.created_at).label('day'),
+        db.func.count(ReportConfig.id).label('count')
+    ).filter(
+        ReportConfig.created_at >= month_start,
+        ReportConfig.active == True,
+        ReportConfig.archived == False
+    ).group_by('day').all()
+    counts_by_day = dict(reports_by_day)
+
+    daily_labels = []
+    daily_values = []
+    for day_num in range(1, now.day + 1):
+        day_date = month_start.replace(day=day_num)
+        daily_labels.append(str(day_num))
+        daily_values.append(counts_by_day.get(day_date.strftime('%Y-%m-%d'), 0))
+
+    daily_chart_data = {
+        'labels': daily_labels,
+        'data': daily_values,
+        'month_label': f"{month_names[now.month - 1]} {now.year}"
+    }
+
     # Recent activity
     recent_activity = []
     recent_logs = ReportLog.query.order_by(ReportLog.executed_at.desc()).limit(10).all()
@@ -483,10 +510,168 @@ def dashboard():
                 'status': log.status
             })
 
+    # ==================== Monitoring/verifier widgets ====================
+    active_monitorings = MonitoringCampaign.query.filter_by(archived=False).all()
+
+    # 1. Plan fulfillment overview (показы, same 100/80 thresholds as the
+    # monitoring table's own "Выполнение" row) - keep both the counts (for
+    # the donut) and the actual monitoring names per bucket (for drill-down)
+    performance_buckets = {'green': 0, 'yellow': 0, 'red': 0, 'none': 0}
+    performance_details = {'green': [], 'yellow': [], 'red': []}
+    for mo in active_monitorings:
+        perf = mo.get_uniform_performance_percent(mo.fact_impressions, mo.plan_impressions)
+        if perf is None:
+            performance_buckets['none'] += 1
+            continue
+        entry = {'id': mo.id, 'name': mo.name, 'percent': perf}
+        if perf >= 100:
+            performance_buckets['green'] += 1
+            performance_details['green'].append(entry)
+        elif perf >= 80:
+            performance_buckets['yellow'] += 1
+            performance_details['yellow'].append(entry)
+        else:
+            performance_buckets['red'] += 1
+            performance_details['red'].append(entry)
+
+    for bucket in performance_details.values():
+        bucket.sort(key=lambda e: e['percent'])
+
+    # 2. Verifier discrepancies (показы) across every monitoring that has
+    # Weborama and/or Adriver/TargetADS data to compare against SAPE fact.
+    # A big diff can just mean the verifier side hasn't been refreshed in
+    # a while (SAPE fact keeps growing, the verifier number sits frozen) -
+    # that's not a real discrepancy, it's stale data, so staleness itself
+    # needs to be the visible signal, not folded silently into the diff.
+    STALE_DAYS_THRESHOLD = 3
+    verifier_diffs = []
+    for mo in active_monitorings:
+        wcm_diff = mo.get_weborama_impressions_diff_percent()
+        if wcm_diff is not None:
+            fetch_times = [
+                m.last_fetched_at for link in mo.verifier_links if link.verifier_type == 'weborama'
+                for m in link.mappings if m.last_fetched_at
+            ]
+            oldest_fetch = min(fetch_times) if fetch_times else None
+            days_stale = (now - oldest_fetch).days if oldest_fetch else None
+            # No timestamp at all means we have no idea when this was last
+            # refreshed - treat that as stale too, not as fresh. Silently
+            # trusting unknown-age data let frozen numbers (e.g. adriver
+            # facts entered before we tracked update time) leak into the
+            # "fresh" average as if they were current.
+            verifier_diffs.append({
+                'id': mo.id, 'name': mo.name, 'type': 'Weborama', 'diff': wcm_diff,
+                'days_stale': days_stale, 'is_stale': days_stale is None or days_stale >= STALE_DAYS_THRESHOLD
+            })
+        adr_diff = mo.get_adriver_impressions_diff_percent()
+        if adr_diff is not None:
+            days_stale = (now - mo.adriver_data_updated_at).days if mo.adriver_data_updated_at else None
+            verifier_diffs.append({
+                'id': mo.id, 'name': mo.name, 'type': 'Adriver/TargetADS', 'diff': adr_diff,
+                'days_stale': days_stale, 'is_stale': days_stale is None or days_stale >= STALE_DAYS_THRESHOLD
+            })
+
+    # Fresh-data discrepancies are the real signal - rank those first, stale
+    # ones (likely just "forgot to refresh") trail behind regardless of how
+    # big their nominal diff looks.
+    fresh_diffs = [v for v in verifier_diffs if not v['is_stale']]
+    verifier_avg_abs_diff = (
+        round(sum(abs(v['diff']) for v in fresh_diffs) / len(fresh_diffs), 1)
+        if fresh_diffs else None
+    )
+    verifier_top_diffs = (
+        sorted(fresh_diffs, key=lambda v: abs(v['diff']), reverse=True)[:5]
+        + sorted([v for v in verifier_diffs if v['is_stale']], key=lambda v: abs(v['diff']), reverse=True)[:3]
+    )
+
+    # 3. IVT/GIVT/SIVT quality overview, broken down by which verifier the
+    # number came from - TargetAds (automated fetch) vs Adriver Excel
+    # (manual upload) write the same fact_ivt_impressions field, so the
+    # only way to tell them apart is whether a TargetAds link is set.
+    ivt_by_source = {'targetads': [], 'adriver': []}
+    ivt_details = {'targetads': [], 'adriver': []}
+    for mo in active_monitorings:
+        if mo.fact_ivt_impressions is None:
+            continue
+        source = 'targetads' if mo.targetads_report_url else 'adriver'
+        ivt_by_source[source].append(mo.fact_ivt_impressions)
+        ivt_details[source].append({'id': mo.id, 'name': mo.name, 'percent': mo.fact_ivt_impressions})
+
+    for bucket in ivt_details.values():
+        bucket.sort(key=lambda e: e['percent'], reverse=True)
+
+    avg_ivt_by_source = {
+        source: (round(sum(values) / len(values), 1) if values else None)
+        for source, values in ivt_by_source.items()
+    }
+
+    # 4. Reports needing attention - misconfigured schedule (enabled but
+    # no days picked), never successfully run despite being scheduled, or
+    # most recent run ended in error
+    problem_reports = []
+    active_reports = ReportConfig.query.filter_by(active=True, archived=False).all()
+    for r in active_reports:
+        issues = []
+        if r.schedule_enabled and not r.schedule_days:
+            issues.append('Расписание включено, но дни не выбраны')
+        if r.schedule_enabled and not r.last_update:
+            issues.append('Ни разу не запускался')
+        last_log = ReportLog.query.filter_by(report_config_id=r.id).order_by(ReportLog.executed_at.desc()).first()
+        if last_log and last_log.status == 'error':
+            err = (last_log.error_message or '').strip().split('\n')[0][:120]
+            issues.append(f'Последний запуск с ошибкой: {err}' if err else 'Последний запуск с ошибкой')
+        if issues:
+            problem_reports.append({
+                'id': r.id,
+                'name': r.name or (r.campaign.name if r.campaign else f'Отчёт #{r.id}'),
+                'issues': issues
+            })
+
+    # 5. Monthly показы/клики volume - grouped by each monitoring's own
+    # date_from month (proxy for "when the campaign ran", since fact_*
+    # is a single cumulative total, not broken down by day)
+    monthly_volume_raw = defaultdict(lambda: {'impressions': 0, 'clicks': 0})
+    for mo in MonitoringCampaign.query.all():
+        if not mo.date_from:
+            continue
+        month_key = mo.date_from.strftime('%Y-%m')
+        monthly_volume_raw[month_key]['impressions'] += mo.fact_impressions or 0
+        monthly_volume_raw[month_key]['clicks'] += mo.fact_clicks or 0
+
+    volume_months = sorted(monthly_volume_raw.keys())[-6:]
+    volume_chart = {
+        'labels': [f"{month_names[int(m.split('-')[1]) - 1]} {m.split('-')[0]}" for m in volume_months],
+        'impressions': [monthly_volume_raw[m]['impressions'] for m in volume_months],
+        'clicks': [monthly_volume_raw[m]['clicks'] for m in volume_months]
+    }
+
+    # 6. Campaigns ending within the next 5 days
+    today = now.date()
+    ending_soon = MonitoringCampaign.query.filter(
+        MonitoringCampaign.archived == False,
+        MonitoringCampaign.date_to >= today,
+        MonitoringCampaign.date_to <= today + timedelta(days=5)
+    ).order_by(MonitoringCampaign.date_to).all()
+    ending_soon_data = [
+        {'id': mo.id, 'name': mo.name, 'date_to': mo.date_to, 'days_left': (mo.date_to - today).days}
+        for mo in ending_soon
+    ]
+
     return render_template('dashboard.html',
                          stats=stats,
                          chart_data=chart_data,
-                         recent_activity=recent_activity)
+                         daily_chart_data=daily_chart_data,
+                         recent_activity=recent_activity,
+                         performance_buckets=performance_buckets,
+                         performance_details=performance_details,
+                         verifier_avg_abs_diff=verifier_avg_abs_diff,
+                         verifier_top_diffs=verifier_top_diffs,
+                         avg_ivt_by_source=avg_ivt_by_source,
+                         ivt_counts={k: len(v) for k, v in ivt_by_source.items()},
+                         ivt_details=ivt_details,
+                         problem_reports=problem_reports,
+                         volume_chart=volume_chart,
+                         ending_soon_data=ending_soon_data)
 
 
 @app.route('/accounts')
@@ -1623,8 +1808,10 @@ def edit_monitoring(monitoring_id):
             monitoring.fact_givt_clicks = float(fact_givt_clicks)
         if adriver_impressions:
             monitoring.adriver_impressions = int(adriver_impressions)
+            monitoring.adriver_data_updated_at = datetime.utcnow()
         if adriver_clicks:
             monitoring.adriver_clicks = int(adriver_clicks)
+            monitoring.adriver_data_updated_at = datetime.utcnow()
 
         adriver_compare_date_from = request.form.get('adriver_compare_date_from', '').strip()
         monitoring.adriver_compare_date_from = datetime.strptime(adriver_compare_date_from, '%Y-%m-%d').date() if adriver_compare_date_from else None
@@ -1759,6 +1946,7 @@ def get_monitoring_data(monitoring_id):
             'fact_givt_clicks': monitoring.fact_givt_clicks,
             'adriver_impressions': monitoring.adriver_impressions,
             'adriver_clicks': monitoring.adriver_clicks,
+            'adriver_data_updated_at': to_moscow(monitoring.adriver_data_updated_at).strftime('%d.%m.%Y %H:%M') if monitoring.adriver_data_updated_at else None,
             'adriver_compare_date_from': monitoring.adriver_compare_date_from.strftime('%Y-%m-%d') if monitoring.adriver_compare_date_from else None,
             'targetads_report_url': monitoring.targetads_report_url,
             'metrika_counter_id': monitoring.metrika_counter_id,
@@ -1921,6 +2109,7 @@ def _refresh_targetads_fact(monitoring):
 
     monitoring.adriver_impressions = result['total_impressions']
     monitoring.adriver_clicks = result['total_clicks']
+    monitoring.adriver_data_updated_at = datetime.utcnow()
     if result.get('ivt_share') is not None:
         monitoring.fact_ivt_impressions = result['ivt_share']
     if result.get('givt_share') is not None:
@@ -2255,6 +2444,7 @@ def upload_adriver_excel(monitoring_id):
             monitoring.fact_givt_clicks = ivt_data.get('givt_clicks_percent', 0)
             monitoring.adriver_impressions = ivt_data.get('impressions')
             monitoring.adriver_clicks = ivt_data.get('clicks')
+            monitoring.adriver_data_updated_at = datetime.utcnow()
 
             # Update last sync time
             monitoring.last_sync = datetime.utcnow()

@@ -243,6 +243,12 @@ class MonitoringCampaign(db.Model):
     adriver_impressions = db.Column(db.Integer, nullable=True)
     adriver_clicks = db.Column(db.Integer, nullable=True)
 
+    # Когда показы/клики Adriver/TargetADS реально обновлялись в последний
+    # раз (ручной ввод, Excel-выгрузка, или автофетч TargetAds) - без этого
+    # нет способа отличить "кабинет честно разошёлся с SAPE" от "просто
+    # забыли обновить данные, а SAPE-факт тем временем вырос".
+    adriver_data_updated_at = db.Column(db.DateTime, nullable=True)
+
     # Пиксель Adriver/Target Ads тоже иногда ставят позже старта РК - если
     # задано, вместо monitoring.date_from для SAPE-факта (на этой паре
     # adriver_fact_*) используется эта дата, по той же логике что и

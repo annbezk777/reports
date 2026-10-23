@@ -79,13 +79,19 @@
     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 32px;">
         <!-- Active Reports by Month -->
         <div class="metric-card">
-            <div style="margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">
-                    Активные отчеты по месяцам
-                </h3>
-                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
-                    Динамика создания отчетов за последние 6 месяцев
-                </p>
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; gap: 12px;">
+                <div>
+                    <h3 id="reportsChartTitle" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">
+                        Активные отчеты по дням
+                    </h3>
+                    <p id="reportsChartSubtitle" style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                        Создание отчетов в {{ daily_chart_data.month_label }}
+                    </p>
+                </div>
+                <div style="display: flex; gap: 4px; background: var(--bg-light); border-radius: 8px; padding: 3px; flex-shrink: 0;">
+                    <button id="reportsChartBtnDaily" onclick="setReportsChartMode('daily')" style="border: none; background: #fff; color: var(--text-primary); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 6px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">По дням</button>
+                    <button id="reportsChartBtnMonthly" onclick="setReportsChartMode('monthly')" style="border: none; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 6px; cursor: pointer;">По месяцам</button>
+                </div>
             </div>
             <div style="height: 250px; position: relative;">
                 <canvas id="reportsChart"></canvas>
@@ -122,6 +128,246 @@
             </div>
         </div>
     </div>
+
+    <!-- Monitoring Performance Row -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
+        <!-- Plan Fulfillment -->
+        <div class="metric-card">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                <div style="width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--peach-light) 0%, var(--peach-bg) 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg width="16" height="16" fill="none" stroke="var(--primary-orange)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                </div>
+                <div>
+                    <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                        Выполнение плана по показам
+                    </h3>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+                        Активные мониторинги, равномерное распределение по дням
+                    </p>
+                </div>
+            </div>
+            {% set perf_total = performance_buckets.green + performance_buckets.yellow + performance_buckets.red %}
+            {% if perf_total > 0 %}
+            {% set perf_on_plan_pct = (performance_buckets.green / perf_total * 100) | round | int %}
+            <!-- Proportional strip - instant at-a-glance read of the split -->
+            <div style="display: flex; height: 7px; border-radius: 4px; overflow: hidden; margin: 18px 0 20px 0; background: var(--bg-light);">
+                {% for bucket, color in [('green', 'var(--green-accent)'), ('yellow', 'var(--primary-orange)'), ('red', 'var(--purple-accent)')] %}
+                {% if performance_buckets[bucket] > 0 %}
+                <div style="width: {{ (performance_buckets[bucket] / perf_total * 100) }}%; background: {{ color }};"></div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            <div style="display: flex; align-items: center; gap: 24px;">
+                <div style="height: 172px; width: 172px; position: relative; flex-shrink: 0;">
+                    <canvas id="performanceChart"></canvas>
+                    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;">
+                        <div style="font-size: 26px; font-weight: 700; color: var(--text-primary); line-height: 1;">{{ perf_on_plan_pct }}%</div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; text-align: center; line-height: 1.3;">кампаний<br>по плану</div>
+                    </div>
+                </div>
+                <div style="flex: 1;">
+                    {% for bucket, color, tint, label, range_label in [
+                        ('green', 'var(--green-accent)', 'rgba(16,185,129,0.08)', 'По плану', '≥100%'),
+                        ('yellow', 'var(--primary-orange)', 'rgba(255,138,91,0.08)', 'Отстаёт', '80-99%'),
+                        ('red', 'var(--purple-accent)', 'rgba(155,89,182,0.08)', 'Сильно отстаёт', '<80%')
+                    ] %}
+                    <div style="margin-bottom: 6px; border-radius: 10px; background: {{ tint }}; overflow: hidden;">
+                        <div onclick="togglePerfBucket('{{ bucket }}')"
+                             style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 8px 12px; border-left: 3px solid {{ color }}; cursor: {{ 'pointer' if performance_buckets[bucket] > 0 else 'default' }};">
+                            <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary);">
+                                {{ label }} <span style="color: var(--text-secondary); font-weight: 400;">({{ range_label }})</span>
+                                {% if performance_buckets[bucket] > 0 %}
+                                <svg id="perf-chevron-{{ bucket }}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2.5" style="transition: transform 0.15s;"><path d="M9 18l6-6-6-6"/></svg>
+                                {% endif %}
+                            </span>
+                            <strong style="font-size: 14px; color: {{ color }};">{{ performance_buckets[bucket] }}</strong>
+                        </div>
+                        <div id="perf-detail-{{ bucket }}" style="display: none; padding: 0 10px 8px 15px;">
+                            {% for mo in performance_details[bucket] %}
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 0;">
+                                <a href="{{ url_for('monitoring', open=mo.id) }}" style="font-size: 12px; color: var(--text-secondary); text-decoration: none;" onmouseover="this.style.color='var(--primary-orange)';" onmouseout="this.style.color='var(--text-secondary)';">{{ mo.name }}</a>
+                                <span style="font-size: 12px; font-weight: 600; color: {{ color }}; white-space: nowrap; margin-left: 8px;">{{ '%.0f'|format(mo.percent) }}%</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if performance_buckets.none > 0 %}
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 0 0 12px; color: var(--text-secondary);">
+                        <span style="font-size: 12px;">Без плана/факта</span>
+                        <span style="font-size: 12px;">{{ performance_buckets.none }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+                <p style="text-align: center; color: var(--text-secondary); padding: 40px 0;">Нет данных для расчёта</p>
+            {% endif %}
+        </div>
+
+        <!-- Verifier Discrepancies -->
+        <div class="metric-card">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                <div style="width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--peach-light) 0%, var(--peach-bg) 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg width="16" height="16" fill="none" stroke="var(--primary-orange)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4"/></svg>
+                </div>
+                <div>
+                    <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                        Расхождения с верификаторами
+                    </h3>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+                        Weborama и Adriver/TargetADS vs SAPE-факт, показы
+                    </p>
+                </div>
+            </div>
+            {% if verifier_avg_abs_diff is not none or verifier_top_diffs %}
+                {% if verifier_avg_abs_diff is not none %}
+                <div style="display: inline-flex; align-items: baseline; gap: 8px; background: var(--peach-bg); border-radius: 12px; padding: 10px 16px; margin: 18px 0 16px 0;">
+                    <span style="font-size: 26px; font-weight: 700; color: var(--text-primary);">{{ verifier_avg_abs_diff }}%</span>
+                    <span style="font-size: 12px; color: var(--text-secondary);">среднее расхождение по модулю (без устаревших)</span>
+                </div>
+                {% endif %}
+                <div style="max-height: 190px; overflow-y: auto;">
+                    {% for v in verifier_top_diffs %}
+                    {% set row_color = ('var(--text-light)' if v.is_stale else ('var(--purple-accent)' if v.diff|abs > 15 else 'var(--green-accent)')) %}
+                    {% set row_tint = ('var(--bg-light)' if v.is_stale else ('rgba(155,89,182,0.07)' if v.diff|abs > 15 else 'rgba(16,185,129,0.07)')) %}
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 9px 10px 9px 12px; margin-bottom: 6px; border-radius: 10px; background: {{ row_tint }}; border-left: 3px {{ 'dashed' if v.is_stale else 'solid' }} {{ row_color }};">
+                        <div>
+                            <a href="{{ url_for('monitoring', open=v.id) }}" style="font-size: 13px; color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color='var(--primary-orange)';" onmouseout="this.style.color='var(--text-primary)';">{{ v.name }}</a>
+                            <div style="font-size: 11px; color: var(--text-secondary);">
+                                {{ v.type }}
+                                {% if v.is_stale %}
+                                · <span style="color: var(--primary-orange); font-weight: 600;">{{ 'не обновлялось ' ~ v.days_stale ~ ' дн.' if v.days_stale is not none else 'дата обновления неизвестна' }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if v.is_stale %}
+                        <span title="Расхождение не показательно, пока данные верификатора не обновлены" style="font-size: 16px; flex-shrink: 0; margin-left: 8px;">⚠️</span>
+                        {% else %}
+                        <strong style="font-size: 13px; color: {{ row_color }}; flex-shrink: 0; margin-left: 8px;">{{ '+' if v.diff > 0 else '' }}{{ v.diff }}%</strong>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p style="text-align: center; color: var(--text-secondary); padding: 40px 0;">Нет подключённых верификаторов с данными</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Volume + Quality + Ending Soon Row -->
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 32px;">
+        <!-- Monthly Volume -->
+        <div class="metric-card">
+            <div style="margin-bottom: 20px;">
+                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">
+                    Объём показов и кликов по месяцам
+                </h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                    Сумма факта по мониторингам, сгруппировано по месяцу старта кампании
+                </p>
+            </div>
+            {% if volume_chart.labels %}
+            <div style="height: 220px; position: relative;">
+                <canvas id="volumeChart"></canvas>
+            </div>
+            {% else %}
+                <p style="text-align: center; color: var(--text-secondary); padding: 40px 0;">Нет данных</p>
+            {% endif %}
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+            <!-- Traffic Quality, by verifier source -->
+            <div class="metric-card" style="flex: 1;">
+                <div class="metric-label">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    Качество трафика (IVT)
+                </div>
+                {% if avg_ivt_by_source.targetads is none and avg_ivt_by_source.adriver is none %}
+                    <div class="metric-value" style="color: var(--text-secondary); font-size: 14px;">Нет данных</div>
+                {% else %}
+                    <div style="display: flex; gap: 24px; margin-bottom: 4px;">
+                        {% for source, label in [('targetads', 'TargetAds'), ('adriver', 'Adriver, ручной ввод')] %}
+                        {% if ivt_counts[source] > 0 %}
+                        <div onclick="toggleIvtBucket('{{ source }}')" style="cursor: pointer;">
+                            <div class="metric-value" style="font-size: 22px;">{{ avg_ivt_by_source[source] }}%</div>
+                            <div class="metric-change" style="color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                                {{ label }} ({{ ivt_counts[source] }})
+                                <svg id="ivt-chevron-{{ source }}" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2.5" style="transition: transform 0.15s;"><path d="M9 18l6-6-6-6"/></svg>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div>
+                            <div class="metric-value" style="font-size: 22px; color: var(--text-light);">—</div>
+                            <div class="metric-change" style="color: var(--text-secondary);">{{ label }} (0)</div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% for source in ['targetads', 'adriver'] %}
+                    {% if ivt_counts[source] > 0 %}
+                    <div id="ivt-detail-{{ source }}" style="display: none; max-height: 120px; overflow-y: auto; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color);">
+                        {% for mo in ivt_details[source] %}
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;">
+                            <a href="{{ url_for('monitoring', open=mo.id) }}" style="font-size: 12px; color: var(--text-secondary); text-decoration: none;" onmouseover="this.style.color='var(--primary-orange)';" onmouseout="this.style.color='var(--text-secondary)';">{{ mo.name }}</a>
+                            <span style="font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; margin-left: 8px;">{{ mo.percent }}%</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            <!-- Ending Soon -->
+            <div class="metric-card" style="flex: 1;">
+                <div style="margin-bottom: 12px;">
+                    <h3 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0;">Скоро закончатся</h3>
+                </div>
+                {% if ending_soon_data %}
+                    <div style="max-height: 140px; overflow-y: auto;">
+                        {% for e in ending_soon_data %}
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-color);">
+                            <a href="{{ url_for('monitoring', open=e.id) }}" style="font-size: 12px; color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color='var(--primary-orange)';" onmouseout="this.style.color='var(--text-primary)';">{{ e.name }}</a>
+                            <span style="font-size: 11px; font-weight: 600; color: {{ '#dc2626' if e.days_left <= 1 else '#f59e0b' }}; white-space: nowrap; margin-left: 8px;">{{ e.days_left }} дн.</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">В ближайшие 5 дней ничего не заканчивается</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Reports Needing Attention -->
+    {% if problem_reports %}
+    <div class="metric-card" style="margin-bottom: 32px;">
+        <div style="margin-bottom: 20px;">
+            <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">
+                Отчёты, требующие внимания
+            </h3>
+            <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                Не запускались, расписание не настроено, или последний запуск с ошибкой
+            </p>
+        </div>
+        <div style="max-height: 300px; overflow-y: auto;">
+            {% for r in problem_reports %}
+            <div style="padding: 12px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+                <div>
+                    <div style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">{{ r.name }}</div>
+                    {% for issue in r.issues %}
+                    <div style="font-size: 12px; color: #dc2626;">{{ issue }}</div>
+                    {% endfor %}
+                </div>
+                <a href="{{ url_for('reports') }}" class="btn btn-secondary" style="flex-shrink: 0; padding: 6px 12px; font-size: 11px;">Открыть</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Recent Activity (Collapsible) -->
     <div class="metric-card">
@@ -213,15 +459,41 @@ function toggleActivity() {
     }
 }
 
+// Toggle the monitoring list under each plan-fulfillment bucket
+function togglePerfBucket(bucket) {
+    const detail = document.getElementById('perf-detail-' + bucket);
+    const chevron = document.getElementById('perf-chevron-' + bucket);
+    if (!detail) return;
+
+    const isOpen = detail.style.display === 'block';
+    detail.style.display = isOpen ? 'none' : 'block';
+    if (chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
+// Toggle the monitoring list under each IVT source
+function toggleIvtBucket(source) {
+    const detail = document.getElementById('ivt-detail-' + source);
+    const chevron = document.getElementById('ivt-chevron-' + source);
+    if (!detail) return;
+
+    const isOpen = detail.style.display === 'block';
+    detail.style.display = isOpen ? 'none' : 'block';
+    if (chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
 // Reports Chart
+const reportsChartData = {
+    daily: {{ daily_chart_data | tojson }},
+    monthly: {{ chart_data | tojson }}
+};
 const ctx = document.getElementById('reportsChart').getContext('2d');
 const reportsChart = new Chart(ctx, {
     type: 'line',
     data: {
-        labels: {{ chart_data.labels | tojson }},
+        labels: reportsChartData.daily.labels,
         datasets: [{
             label: 'Новых отчетов',
-            data: {{ chart_data.data | tojson }},
+            data: reportsChartData.daily.data,
             borderColor: '#FF8A5B',
             backgroundColor: 'rgba(255, 138, 91, 0.1)',
             tension: 0.4,
@@ -288,5 +560,118 @@ const reportsChart = new Chart(ctx, {
         }
     }
 });
+
+function setReportsChartMode(mode) {
+    const d = reportsChartData[mode];
+    reportsChart.data.labels = d.labels;
+    reportsChart.data.datasets[0].data = d.data;
+    reportsChart.update();
+
+    const dailyBtn = document.getElementById('reportsChartBtnDaily');
+    const monthlyBtn = document.getElementById('reportsChartBtnMonthly');
+    const activeStyle = {background: '#fff', color: 'var(--text-primary)', boxShadow: '0 1px 2px rgba(0,0,0,0.08)'};
+    const inactiveStyle = {background: 'transparent', color: 'var(--text-secondary)', boxShadow: 'none'};
+    const active = mode === 'daily' ? dailyBtn : monthlyBtn;
+    const inactive = mode === 'daily' ? monthlyBtn : dailyBtn;
+    Object.assign(active.style, activeStyle);
+    Object.assign(inactive.style, inactiveStyle);
+
+    document.getElementById('reportsChartTitle').textContent = mode === 'daily' ? 'Активные отчеты по дням' : 'Активные отчеты по месяцам';
+    document.getElementById('reportsChartSubtitle').textContent = mode === 'daily'
+        ? 'Создание отчетов в ' + reportsChartData.daily.month_label
+        : 'Динамика создания отчетов за последние 6 месяцев';
+}
+
+// Performance (plan fulfillment) donut chart
+{% set perf_total = performance_buckets.green + performance_buckets.yellow + performance_buckets.red %}
+{% if perf_total > 0 %}
+const perfCtx = document.getElementById('performanceChart').getContext('2d');
+new Chart(perfCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['По плану', 'Отстаёт', 'Сильно отстаёт'],
+        datasets: [{
+            data: [{{ performance_buckets.green }}, {{ performance_buckets.yellow }}, {{ performance_buckets.red }}],
+            backgroundColor: ['#10B981', '#FF8A5B', '#9B59B6'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '70%',
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: '#1A1A1A',
+                padding: 10,
+                borderColor: '#FF8A5B',
+                borderWidth: 1,
+                displayColors: false
+            }
+        }
+    }
+});
+{% endif %}
+
+// Monthly показы/клики volume chart
+{% if volume_chart.labels %}
+const volumeCtx = document.getElementById('volumeChart').getContext('2d');
+new Chart(volumeCtx, {
+    type: 'bar',
+    data: {
+        labels: {{ volume_chart.labels | tojson }},
+        datasets: [
+            {
+                label: 'Показы',
+                data: {{ volume_chart.impressions | tojson }},
+                backgroundColor: 'rgba(255, 138, 91, 0.7)',
+                yAxisID: 'y',
+                borderRadius: 4
+            },
+            {
+                label: 'Клики',
+                data: {{ volume_chart.clicks | tojson }},
+                backgroundColor: '#9B59B6',
+                yAxisID: 'y1',
+                borderRadius: 4
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'top', labels: { boxWidth: 10, font: { size: 11 } } },
+            tooltip: {
+                backgroundColor: '#1A1A1A',
+                padding: 12,
+                borderColor: '#FF8A5B',
+                borderWidth: 1
+            }
+        },
+        scales: {
+            y: {
+                type: 'linear',
+                position: 'left',
+                beginAtZero: true,
+                ticks: { color: '#9CA3AF', font: { size: 11 } },
+                grid: { color: '#E5E7EB', drawBorder: false }
+            },
+            y1: {
+                type: 'linear',
+                position: 'right',
+                beginAtZero: true,
+                ticks: { color: '#9CA3AF', font: { size: 11 } },
+                grid: { display: false }
+            },
+            x: {
+                ticks: { color: '#9CA3AF', font: { size: 11 } },
+                grid: { display: false }
+            }
+        }
+    }
+});
+{% endif %}
 </script>
 {% endblock %}

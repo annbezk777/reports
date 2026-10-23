@@ -114,7 +114,17 @@
                         </td>
                         <td>
                             <div style="font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">{{ account.name }}</div>
+                            {% if account.sape_user_id %}
+                            <a href="https://cp.sapient.ru/users/sudo?uid={{ account.sape_user_id }}&sid=15"
+                               target="_blank"
+                               style="font-size: 13px; color: var(--text-secondary); text-decoration: none; transition: color 0.2s;"
+                               onmouseover="this.style.color='var(--primary-orange)';"
+                               onmouseout="this.style.color='var(--text-secondary)';">
+                                {{ account.login }}
+                            </a>
+                            {% else %}
                             <div style="font-size: 13px; color: var(--text-secondary);">{{ account.login }}</div>
+                            {% endif %}
                         </td>
                         <td style="text-align: center; font-weight: 500; color: var(--text-primary); font-variant-numeric: tabular-nums;">{{ account.campaigns|length }}</td>
                         <td>

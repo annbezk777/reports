@@ -790,6 +790,13 @@ function bulkDeleteMonitoringsSelected() {
 document.addEventListener('DOMContentLoaded', function() {
     restoreMonitoringFilterState();
     filterMonitoring();
+
+    // Deep link from Главная (e.g. "Выполнение плана" drill-down) -
+    // ?open=<id> auto-opens that monitoring's edit modal straight away.
+    const openId = new URLSearchParams(window.location.search).get('open');
+    if (openId) {
+        openMonitoringModal(parseInt(openId));
+    }
 });
 
 // Kebab menu toggle
@@ -1004,7 +1011,8 @@ function refreshAllMonitorings() {
                         <div class="verifier-link-card" id="adriverFactCard" style="display: none; margin-top: 8px;">
                             <div style="display: flex; align-items: center; justify-content: space-between;">
                                 <strong style="font-size: 13px; color: var(--text-primary);">Adriver/TargetADS</strong>
-                                <div style="display: flex; align-items: center; gap: 4px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span id="adriverLastUpdated" style="font-size: 11px; color: var(--text-secondary);"></span>
                                     <button type="button" class="kebab-button" onclick="toggleAdriverKebab(event)" aria-label="Действия">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
                                     </button>
@@ -1713,6 +1721,7 @@ function openMonitoringModal(monitoringId = null) {
                 document.getElementById('adriver_clicks').value = data.adriver_clicks || '';
                 document.getElementById('adriver_compare_date_from').value = data.adriver_compare_date_from || '';
                 document.getElementById('targetads_report_url').value = data.targetads_report_url || '';
+                document.getElementById('adriverLastUpdated').textContent = data.adriver_data_updated_at ? ('Обновлено ' + data.adriver_data_updated_at) : '';
                 if (data.fact_ivt_impressions || data.fact_givt_impressions || data.fact_sivt_impressions
                     || data.fact_givt_clicks || data.adriver_impressions || data.adriver_clicks || data.targetads_report_url) {
                     showAdriverFactCard();
@@ -1746,6 +1755,7 @@ function openMonitoringModal(monitoringId = null) {
         currentMonitoringCampaignOptions = [];
         renderVerifierLinks([]);
         hideAdriverFactCard();
+        document.getElementById('adriverLastUpdated').textContent = '';
         document.getElementById('campaignsList').innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Выберите аккаунт для загрузки кампаний</td></tr>';
         document.getElementById('monitoringClientSection').style.display = 'none';
         document.getElementById('monitoring_client_id').innerHTML = '<option value="">Все клиенты</option>';
@@ -2356,6 +2366,7 @@ function fetchTargetAds() {
                 if (data.sivt_share !== null && data.sivt_share !== undefined) {
                     document.getElementById('fact_sivt_impressions').value = data.sivt_share;
                 }
+                document.getElementById('adriverLastUpdated').textContent = 'Обновлено ' + new Date().toLocaleString('ru-RU', {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
                 alert(`Обновлено из TargetAds (${data.date_from} — ${data.date_to}): показы ${data.impressions.toLocaleString()}, клики ${data.clicks.toLocaleString()}, IVT ${data.ivt_share ?? '—'}%`);
             } else {
                 alert('Ошибка: ' + (data.error || 'неизвестная ошибка'));
