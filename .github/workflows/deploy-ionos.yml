@@ -48,9 +48,11 @@ jobs:
           echo "📦 Installing dependencies..."
           pip install -r requirements.txt
 
-          # Restart the service
-          echo "🔄 Restarting service..."
-          sudo systemctl restart sape-reports
+          # Reload the service (graceful - SIGHUP restarts workers one at a
+          # time so in-flight requests finish first, unlike restart's SIGTERM
+          # which kills them mid-request)
+          echo "🔄 Reloading service..."
+          sudo systemctl reload sape-reports
 
           # Check service status
           echo "✅ Checking service status..."
