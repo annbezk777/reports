@@ -638,8 +638,11 @@ class GoogleSheetsClient:
                     # Column for video completions (100% views)
                     structure['completes_column'] = col_idx_to_letter(i)
 
-            # Verify required columns found
-            if not all([structure['date_column'], structure['impressions_column'], structure['reach_column']]):
+            # Verify required columns found - "Охват" isn't always present
+            # (e.g. some reports only track показы/клики), so reach_column
+            # is optional; write_daily_data already skips writing it when
+            # it's None.
+            if not all([structure['date_column'], structure['impressions_column']]):
                 return None
 
             return structure
