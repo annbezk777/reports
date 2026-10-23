@@ -979,16 +979,24 @@ function refreshAllMonitorings() {
                             <div style="display: flex; align-items: center; justify-content: space-between;">
                                 <strong style="font-size: 13px; color: var(--text-primary);">Adriver/TargetADS</strong>
                                 <div style="display: flex; align-items: center; gap: 4px;">
-                                    <button type="button" class="btn-vl-compact-ghost" onclick="openAdriverUploadFromForm();">Загрузить Excel</button>
                                     <button type="button" class="kebab-button" onclick="toggleAdriverKebab(event)" aria-label="Действия">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
                                     </button>
                                 </div>
                             </div>
-                            <p style="font-size: 11px; color: var(--text-secondary); margin: 8px 0;">Ручной ввод или Excel-выгрузка Adriver/Target Ads</p>
-                            <div class="form-group" style="max-width: 200px; margin-bottom: 10px;">
-                                <label for="adriver_compare_date_from" title="Если пиксель Adriver/Target Ads поставили позже старта РК - сравнение с SAPE-фактом пойдёт с этой даты, а не с даты старта РК">Период с</label>
-                                <input type="date" id="adriver_compare_date_from" name="adriver_compare_date_from">
+                            <p style="font-size: 11px; color: var(--text-secondary); margin: 8px 0;">Ручной ввод, автоматическая подтяжка из TargetAds, либо загрузка Excel-выгрузки Adriver через меню «⋮» в карточке мониторинга</p>
+                            <div style="display: grid; grid-template-columns: 1fr 110px auto; gap: 8px; align-items: flex-end; margin-bottom: 10px;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="targetads_report_url" title="Ссылка на дашборд TargetAds (app.targetads.io/#/projects/...) - показы/клики подтянутся по источнику Sape (FS)">Ссылка на отчёт TargetAds</label>
+                                    <input type="text" id="targetads_report_url" name="targetads_report_url" placeholder="https://app.targetads.io/#/projects/...">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="adriver_compare_date_from" title="Если пиксель Adriver/Target Ads поставили позже старта РК - сравнение с SAPE-фактом пойдёт с этой даты, а не с даты старта РК">Период с</label>
+                                    <input type="date" id="adriver_compare_date_from" name="adriver_compare_date_from">
+                                </div>
+                                <button type="button" class="btn-icon-ghost" title="Обновить из TargetAds" onclick="fetchTargetAds();">
+                                    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                </button>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
@@ -1494,6 +1502,25 @@ function refreshAllMonitorings() {
     border-color: var(--text-secondary);
 }
 
+.btn-icon-ghost {
+    background: none;
+    border: none;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.btn-icon-ghost:hover {
+    color: var(--primary-orange);
+}
+
 .vlm-campaign-checkbox {
     appearance: none;
     -webkit-appearance: none;
@@ -1659,8 +1686,9 @@ function openMonitoringModal(monitoringId = null) {
                 document.getElementById('adriver_impressions').value = data.adriver_impressions || '';
                 document.getElementById('adriver_clicks').value = data.adriver_clicks || '';
                 document.getElementById('adriver_compare_date_from').value = data.adriver_compare_date_from || '';
+                document.getElementById('targetads_report_url').value = data.targetads_report_url || '';
                 if (data.fact_ivt_impressions || data.fact_givt_impressions || data.fact_sivt_impressions
-                    || data.fact_givt_clicks || data.adriver_impressions || data.adriver_clicks) {
+                    || data.fact_givt_clicks || data.adriver_impressions || data.adriver_clicks || data.targetads_report_url) {
                     showAdriverFactCard();
                 } else {
                     hideAdriverFactCard();
@@ -1934,10 +1962,10 @@ function verifierCardFactSummaryHtml(linkId, mappings, compareDateFrom) {
     if (!foundWcm && !foundSape) return '';
 
     const fmt = (n) => n ? n.toLocaleString('ru-RU') : '—';
-    // Показы: знак инвертирован (минус = платформа показывает больше),
-    // клики - нет. Та же конвенция, что в основной KPI-таблице.
+    // Положительный % = верификатор (кабинет) показывает больше, чем SAPE.
+    // Одна и та же конвенция для показов и кликов, как в основной KPI-таблице.
     const impDiff = (wcmImp && sapeImp) ? Math.round((wcmImp - sapeImp) / wcmImp * 1000) / 10 : null;
-    const clkDiff = (wcmClk && sapeClk) ? Math.round((sapeClk - wcmClk) / wcmClk * 1000) / 10 : null;
+    const clkDiff = (wcmClk && sapeClk) ? Math.round((wcmClk - sapeClk) / wcmClk * 1000) / 10 : null;
     const diffCell = (v) => v === null
         ? '<span style="color: #a8a29e;">—</span>'
         : `<span style="color: ${Math.abs(v) > 15 ? '#dc2626' : '#16a34a'}; font-weight: 600;">${v > 0 ? '+' : ''}${v}%</span>`;
@@ -2248,7 +2276,7 @@ function toggleAdriverKebab(event) {
 
 function deleteAdriverFactCard() {
     if (!confirm('Удалить данные Adriver/Target Ads для этого мониторинга?')) return;
-    ['fact_ivt_impressions', 'fact_givt_impressions', 'fact_sivt_impressions', 'fact_givt_clicks', 'adriver_impressions', 'adriver_clicks', 'adriver_compare_date_from'].forEach(id => {
+    ['fact_ivt_impressions', 'fact_givt_impressions', 'fact_sivt_impressions', 'fact_givt_clicks', 'adriver_impressions', 'adriver_clicks', 'adriver_compare_date_from', 'targetads_report_url'].forEach(id => {
         document.getElementById(id).value = '';
     });
     hideAdriverFactCard();
@@ -2264,13 +2292,57 @@ function hideAdriverFactCard() {
     document.getElementById('addAdriverFactBtn').style.display = '';
 }
 
-function openAdriverUploadFromForm() {
+function fetchTargetAds() {
     const monitoringId = document.getElementById('monitoringId').value;
     if (!monitoringId) {
-        alert('Сначала сохраните мониторинг, потом можно будет загрузить файл Adriver');
+        alert('Сначала сохраните мониторинг, потом можно будет подтянуть данные из TargetAds');
         return;
     }
-    openUploadModal(monitoringId, document.getElementById('name').value);
+    const reportUrl = document.getElementById('targetads_report_url').value.trim();
+    if (!reportUrl) {
+        alert('Укажите ссылку на отчёт TargetAds');
+        return;
+    }
+
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    btn.style.opacity = '0.4';
+
+    fetch(`/monitoring/${monitoringId}/fetch-targetads`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            targetads_report_url: reportUrl,
+            adriver_compare_date_from: document.getElementById('adriver_compare_date_from').value
+        })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('adriver_impressions').value = data.impressions;
+                document.getElementById('adriver_clicks').value = data.clicks;
+                if (data.ivt_share !== null && data.ivt_share !== undefined) {
+                    document.getElementById('fact_ivt_impressions').value = data.ivt_share;
+                }
+                if (data.givt_share !== null && data.givt_share !== undefined) {
+                    document.getElementById('fact_givt_impressions').value = data.givt_share;
+                }
+                if (data.sivt_share !== null && data.sivt_share !== undefined) {
+                    document.getElementById('fact_sivt_impressions').value = data.sivt_share;
+                }
+                alert(`Обновлено из TargetAds (${data.date_from} — ${data.date_to}): показы ${data.impressions.toLocaleString()}, клики ${data.clicks.toLocaleString()}, IVT ${data.ivt_share ?? '—'}%`);
+            } else {
+                alert('Ошибка: ' + (data.error || 'неизвестная ошибка'));
+            }
+        })
+        .catch(err => {
+            console.error('TargetAds fetch error:', err);
+            alert('Ошибка при обращении к серверу');
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.style.opacity = '';
+        });
 }
 
 function openUploadModal(monitoringId, monitoringName) {

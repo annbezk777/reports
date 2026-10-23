@@ -251,6 +251,12 @@ class MonitoringCampaign(db.Model):
     adriver_fact_impressions = db.Column(db.Integer, nullable=True)
     adriver_fact_clicks = db.Column(db.Integer, nullable=True)
 
+    # Same card as Adriver (one "либо/либо" card, not a separate verifier
+    # type) - when a TargetAds dashboard link is set, "Обновить из TargetAds"
+    # pulls adriver_impressions/adriver_clicks straight from TargetAds
+    # instead of manual entry/Excel upload.
+    targetads_report_url = db.Column(db.String(500), nullable=True)
+
     # Yandex Metrika settings
     metrika_counter_id = db.Column(db.String(50), nullable=True)  # Номер счетчика Метрики
     metrika_goal_id = db.Column(db.String(50), nullable=True)  # ID цели для конверсий
@@ -526,12 +532,13 @@ class MonitoringCampaign(db.Model):
         return round((self.adriver_impressions - sape_impressions) / self.adriver_impressions * 100, 1)
 
     def get_adriver_clicks_diff_percent(self):
-        """% = (SAPE − Adriver) / Adriver × 100 - для кликов знак не
-        инвертируется, в отличие от показов (см. get_adriver_impressions_diff_percent)."""
+        """% = (Adriver − SAPE) / Adriver × 100 - same sign convention as
+        impressions (see get_adriver_impressions_diff_percent): positive
+        when the verifier (кабинет) shows more than SAPE."""
         _, sape_clicks = self._adriver_sape_facts()
         if not self.adriver_clicks or not sape_clicks:
             return None
-        return round((sape_clicks - self.adriver_clicks) / self.adriver_clicks * 100, 1)
+        return round((self.adriver_clicks - sape_clicks) / self.adriver_clicks * 100, 1)
 
     def get_weborama_impressions(self):
         """Sum of показы across every Weborama mapping on this monitoring -
@@ -616,8 +623,8 @@ class MonitoringCampaign(db.Model):
     def get_weborama_impressions_diff_percent(self):
         """% = (Weborama − SAPE) / Weborama × 100, scoped to just the
         mapped campaigns' own SAPE fact (see get_weborama_sape_fact_impressions).
-        Negative when SAPE shows more than Weborama (sign intentionally
-        flipped vs. clicks - see get_weborama_clicks_diff_percent).
+        Positive when the verifier (кабинет) shows more than SAPE - same
+        sign convention as clicks (see get_weborama_clicks_diff_percent).
         Делитель (Weborama) обязан быть ненулевым, но SAPE-факт, равный
         ровно 0, валиден и не должен блокировать расчёт."""
         imp = self.get_weborama_impressions()
@@ -627,13 +634,14 @@ class MonitoringCampaign(db.Model):
         return round((imp - sape_fact) / imp * 100, 1)
 
     def get_weborama_clicks_diff_percent(self):
-        """% = (SAPE − Weborama) / Weborama × 100 - sign NOT flipped here,
-        unlike impressions (see get_weborama_impressions_diff_percent)."""
+        """% = (Weborama − SAPE) / Weborama × 100 - same sign convention as
+        impressions (see get_weborama_impressions_diff_percent): positive
+        when the verifier (кабинет) shows more than SAPE."""
         clk = self.get_weborama_clicks()
         sape_fact = self.get_weborama_sape_fact_clicks()
         if not clk or not sape_fact:
             return None
-        return round((sape_fact - clk) / clk * 100, 1)
+        return round((clk - sape_fact) / clk * 100, 1)
 
 
 class VerifierLink(db.Model):

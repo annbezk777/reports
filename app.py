@@ -1516,6 +1516,9 @@ def create_monitoring():
         asana_task_url = request.form.get('asana_task_url')
         monitoring.asana_task_url = asana_task_url if asana_task_url else None
 
+        targetads_report_url = request.form.get('targetads_report_url', '').strip()
+        monitoring.targetads_report_url = targetads_report_url if targetads_report_url else None
+
         db.session.add(monitoring)
         db.session.commit()
 
@@ -1625,6 +1628,9 @@ def edit_monitoring(monitoring_id):
 
         adriver_compare_date_from = request.form.get('adriver_compare_date_from', '').strip()
         monitoring.adriver_compare_date_from = datetime.strptime(adriver_compare_date_from, '%Y-%m-%d').date() if adriver_compare_date_from else None
+
+        targetads_report_url = request.form.get('targetads_report_url', '').strip()
+        monitoring.targetads_report_url = targetads_report_url if targetads_report_url else None
 
         # Manager
         manager = request.form.get('manager')
@@ -1754,6 +1760,7 @@ def get_monitoring_data(monitoring_id):
             'adriver_impressions': monitoring.adriver_impressions,
             'adriver_clicks': monitoring.adriver_clicks,
             'adriver_compare_date_from': monitoring.adriver_compare_date_from.strftime('%Y-%m-%d') if monitoring.adriver_compare_date_from else None,
+            'targetads_report_url': monitoring.targetads_report_url,
             'metrika_counter_id': monitoring.metrika_counter_id,
             'utm_source': monitoring.utm_source,
             'google_sheet_url': monitoring.google_sheet_url,
@@ -1876,6 +1883,66 @@ def _refresh_adriver_fact(monitoring, client, date_to):
         logger.error(f"⚠️ Failed to fetch scoped Adriver SAPE fact for monitoring {monitoring.id}: {e}")
 
 
+class TargetAdsRefreshError(Exception):
+    pass
+
+
+def _refresh_targetads_fact(monitoring):
+    """Pull показы/клики (+ IVT/GIVT/SIVT share) from TargetAds, scoped to
+    the Sape (FS) source, for [adriver_compare_date_from or date_from .. yesterday].
+    No-op if no targetads_report_url is set. Raises TargetAdsRefreshError
+    on a real failure (bad link, auth, API error) so callers can decide
+    whether to surface it or just log and move on."""
+    if not monitoring.targetads_report_url:
+        return None
+
+    from app.api.targetads_client import TargetAdsClient, TargetAdsFetchError
+
+    project_id = TargetAdsClient.extract_project_id(monitoring.targetads_report_url)
+    if not project_id:
+        raise TargetAdsRefreshError('Не удалось распознать project_id в ссылке TargetAds')
+
+    yesterday = (datetime.now() - timedelta(days=1)).date()
+    date_from = monitoring.adriver_compare_date_from or monitoring.date_from
+    date_to = min(monitoring.date_to, yesterday)
+    if date_from > date_to:
+        raise TargetAdsRefreshError(f'Период ({date_from} — {date_to}) пуст - дата начала позже конца')
+
+    try:
+        client = TargetAdsClient()
+        client.authenticate()
+        result = client.get_daily_stats(
+            project_id,
+            datetime.combine(date_from, datetime.min.time()),
+            datetime.combine(date_to, datetime.min.time())
+        )
+    except TargetAdsFetchError as e:
+        raise TargetAdsRefreshError(str(e))
+
+    monitoring.adriver_impressions = result['total_impressions']
+    monitoring.adriver_clicks = result['total_clicks']
+    if result.get('ivt_share') is not None:
+        monitoring.fact_ivt_impressions = result['ivt_share']
+    if result.get('givt_share') is not None:
+        monitoring.fact_givt_impressions = result['givt_share']
+    if result.get('sivt_share') is not None:
+        monitoring.fact_sivt_impressions = result['sivt_share']
+
+    logger.info(f"✅ Fetched TargetAds for monitoring {monitoring.id} ({date_from}..{date_to}): "
+                f"{result['total_impressions']} показов, {result['total_clicks']} кликов, "
+                f"IVT {result.get('ivt_share')}%")
+
+    return {
+        'date_from': str(date_from),
+        'date_to': str(date_to),
+        'impressions': result['total_impressions'],
+        'clicks': result['total_clicks'],
+        'ivt_share': result.get('ivt_share'),
+        'givt_share': result.get('givt_share'),
+        'sivt_share': result.get('sivt_share')
+    }
+
+
 @app.route('/monitoring/<int:monitoring_id>/refresh', methods=['POST'])
 @login_required
 def refresh_monitoring_data(monitoring_id):
@@ -1968,6 +2035,28 @@ def refresh_monitoring_data(monitoring_id):
 
         _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
         _refresh_adriver_fact(monitoring, client, date_to)
+
+        # "Обновить сейчас" must refresh the verifier side too, not just the
+        # SAPE fact - re-scrape every Weborama permalink on this monitoring
+        # (one at a time, a broken/slow permalink shouldn't block the rest
+        # or the SAPE numbers already refreshed above) and re-pull TargetAds
+        # if a report link is set.
+        weborama_links = VerifierLink.query.filter_by(monitoring_id=monitoring.id, verifier_type='weborama').all()
+        for link in weborama_links:
+            try:
+                _fetch_and_apply_weborama_link(link)
+            except WeboramaLinkFetchError as e:
+                logger.error(f"⚠️ Weborama refresh failed for link {link.id} on monitoring {monitoring_id}: {e}")
+            except Exception as e:
+                logger.error(f"⚠️ Unexpected error refreshing Weborama link {link.id} on monitoring {monitoring_id}: {e}")
+
+        if monitoring.targetads_report_url:
+            try:
+                _refresh_targetads_fact(monitoring)
+            except TargetAdsRefreshError as e:
+                logger.error(f"⚠️ TargetAds refresh failed for monitoring {monitoring_id}: {e}")
+            except Exception as e:
+                logger.error(f"⚠️ Unexpected error refreshing TargetAds for monitoring {monitoring_id}: {e}")
 
         monitoring.last_sync = datetime.utcnow()
 
@@ -2501,6 +2590,38 @@ def fetch_weborama_link(link_id):
                 db.session.commit()
         except Exception as e:
             logger.error(f"⚠️ Failed to refresh SAPE fact alongside Weborama fetch for link {link_id}: {e}")
+
+    return jsonify({'success': True, **result})
+
+
+@app.route('/monitoring/<int:monitoring_id>/fetch-targetads', methods=['POST'])
+@login_required
+def fetch_targetads(monitoring_id):
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+    # Accept the link/date straight from the open form (not yet saved) so
+    # "Обновить из TargetAds" works on a value the user just typed, the
+    # same way the Weborama card saves itself right before fetching.
+    body = request.get_json(silent=True) or {}
+    report_url = (body.get('targetads_report_url') or monitoring.targetads_report_url or '').strip()
+    if report_url:
+        monitoring.targetads_report_url = report_url
+    compare_date_from_str = (body.get('adriver_compare_date_from') or '').strip()
+    if compare_date_from_str:
+        monitoring.adriver_compare_date_from = datetime.strptime(compare_date_from_str, '%Y-%m-%d').date()
+
+    if not monitoring.targetads_report_url:
+        return jsonify({'success': False, 'error': 'Не указана ссылка на отчёт TargetAds'}), 400
+
+    try:
+        result = _refresh_targetads_fact(monitoring)
+    except TargetAdsRefreshError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error fetching TargetAds for monitoring {monitoring_id}: {e}")
+        return jsonify({'success': False, 'error': f'Ошибка получения данных из TargetAds: {e}'}), 502
+
+    db.session.commit()
 
     return jsonify({'success': True, **result})
 
