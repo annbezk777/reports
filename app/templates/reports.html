@@ -56,7 +56,7 @@
         <!-- Manager Filter -->
         <select id="managerFilter" onchange="filterReports()"
                 style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="">Все менеджеры</option>
+            <option value="">Все ADOPS</option>
             <option value="Даня">Даня</option>
             <option value="Саша">Саша</option>
             <option value="Аня">Аня</option>
@@ -67,7 +67,7 @@
         <!-- Account Manager Filter -->
         <select id="accountManagerFilter" onchange="filterReports()"
                 style="width: 150px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="">Все аккаунт-менеджеры</option>
+            <option value="">Все Account</option>
             {% set all_account_managers = reports | map(attribute='account_manager') | select | unique | list %}
             {% for am in all_account_managers %}
                 <option value="{{ am|lower }}">{{ am|am_label }}</option>
@@ -169,7 +169,7 @@
 
                                 <!-- Manager -->
                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="color: var(--text-secondary);">Менеджер:</span>
+                                    <span style="color: var(--text-secondary);">ADOPS:</span>
                                     <strong style="color: var(--text-primary); font-weight: 500;">{{ report.manager }}</strong>
                                 </div>
                                 {% endif %}
@@ -179,7 +179,7 @@
 
                                 <!-- Account Manager -->
                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="color: var(--text-secondary);">АМ:</span>
+                                    <span style="color: var(--text-secondary);">Account:</span>
                                     <strong style="color: var(--text-primary); font-weight: 500;" title="{{ report.account_manager }}">{{ report.account_manager|am_label }}</strong>
                                 </div>
                                 {% endif %}
@@ -1907,7 +1907,7 @@ function fetchAsanaTaskInfo(urlFieldId, sheetFieldId, amDisplayId) {
             }
             if (amDisplay) {
                 if (data.account_manager_label) {
-                    amDisplay.textContent = `Аккаунт-менеджер (из Asana): ${data.account_manager_label}`;
+                    amDisplay.textContent = `Account (из Asana): ${data.account_manager_label}`;
                     amDisplay.style.display = 'block';
                 } else {
                     amDisplay.style.display = 'none';

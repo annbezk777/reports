@@ -592,17 +592,26 @@ def dashboard():
     # ==================== Monitoring/verifier widgets ====================
     active_monitorings = MonitoringCampaign.query.filter_by(archived=False).all()
 
-    # 1. Plan fulfillment overview (показы, same 100/80 thresholds as the
+    # 1. Plan fulfillment overview (same 100/80 thresholds as the
     # monitoring table's own "Выполнение" row) - keep both the counts (for
-    # the donut) and the actual monitoring names per bucket (for drill-down)
+    # the donut) and the actual monitoring names per bucket (for drill-down).
+    # Показы is the metric when a plan for it is set; CPC-type campaigns
+    # often only have a clicks plan (показы plan intentionally left blank),
+    # so fall back to клики rather than dropping them into "без плана"
+    # entirely - interim until campaigns carry an explicit МП format
+    # (task #20) that says which metric is the binding one.
     performance_buckets = {'green': 0, 'yellow': 0, 'red': 0, 'none': 0}
     performance_details = {'green': [], 'yellow': [], 'red': []}
     for mo in active_monitorings:
+        metric = 'показы'
         perf = mo.get_uniform_performance_percent(mo.fact_impressions, mo.plan_impressions)
+        if perf is None:
+            metric = 'клики'
+            perf = mo.get_uniform_performance_percent(mo.fact_clicks, mo.plan_clicks)
         if perf is None:
             performance_buckets['none'] += 1
             continue
-        entry = {'id': mo.id, 'name': mo.name, 'percent': perf}
+        entry = {'id': mo.id, 'name': mo.name, 'percent': perf, 'metric': metric}
         if perf >= 100:
             performance_buckets['green'] += 1
             performance_details['green'].append(entry)
@@ -706,24 +715,6 @@ def dashboard():
                 'issues': issues
             })
 
-    # 5. Monthly показы/клики volume - grouped by each monitoring's own
-    # date_from month (proxy for "when the campaign ran", since fact_*
-    # is a single cumulative total, not broken down by day)
-    monthly_volume_raw = defaultdict(lambda: {'impressions': 0, 'clicks': 0})
-    for mo in MonitoringCampaign.query.all():
-        if not mo.date_from:
-            continue
-        month_key = mo.date_from.strftime('%Y-%m')
-        monthly_volume_raw[month_key]['impressions'] += mo.fact_impressions or 0
-        monthly_volume_raw[month_key]['clicks'] += mo.fact_clicks or 0
-
-    volume_months = sorted(monthly_volume_raw.keys())[-6:]
-    volume_chart = {
-        'labels': [f"{month_names[int(m.split('-')[1]) - 1]} {m.split('-')[0]}" for m in volume_months],
-        'impressions': [monthly_volume_raw[m]['impressions'] for m in volume_months],
-        'clicks': [monthly_volume_raw[m]['clicks'] for m in volume_months]
-    }
-
     # 6. Campaigns ending within the next 5 days
     today = now.date()
     ending_soon = MonitoringCampaign.query.filter(
@@ -749,7 +740,6 @@ def dashboard():
                          ivt_counts={k: len(v) for k, v in ivt_by_source.items()},
                          ivt_details=ivt_details,
                          problem_reports=problem_reports,
-                         volume_chart=volume_chart,
                          ending_soon_data=ending_soon_data)
 
 
