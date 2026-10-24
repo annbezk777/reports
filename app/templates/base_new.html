@@ -81,6 +81,7 @@
                 <span class="sidebar-nav-text">Главная</span>
             </a>
 
+            {% if session.get('user_role') != 'account_manager' %}
             <a href="{{ url_for('accounts') }}"
                class="sidebar-nav-item {% if request.endpoint in ['accounts', 'add_account', 'edit_account'] %}active{% endif %}">
                 <svg class="sidebar-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,6 +97,7 @@
                 </svg>
                 <span class="sidebar-nav-text">Отчеты</span>
             </a>
+            {% endif %}
 
             <a href="{{ url_for('monitoring') }}"
                class="sidebar-nav-item {% if request.endpoint in ['monitoring', 'monitoring_detail'] %}active{% endif %}">

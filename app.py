@@ -11,6 +11,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from werkzeug.utils import secure_filename
 import pytz
 import logging
 import sys
@@ -167,6 +168,13 @@ def login_required(f):
 
 ADMIN_EMAIL = 'a.bereznyak@sape.ru'
 
+ROLE_TRAFFIC_MANAGER = 'traffic_manager'
+ROLE_ACCOUNT_MANAGER = 'account_manager'
+ROLES = {
+    ROLE_TRAFFIC_MANAGER: 'Трафик-менеджер',
+    ROLE_ACCOUNT_MANAGER: 'Аккаунт-менеджер (просмотр мониторинга)',
+}
+
 
 def admin_required(f):
     """Restricts a route to ADMIN_EMAIL only. Everyone else (including
@@ -177,6 +185,19 @@ def admin_required(f):
         if not session.get('logged_in'):
             return redirect(url_for('login', next=request.url))
         if session.get('user_email') != ADMIN_EMAIL:
+            abort(404)
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def block_account_manager(f):
+    """Account-manager is a view-only role, scoped to Главная + Мониторинг
+    (read-only there too). Blocks Отчёты/Аккаунты entirely and every
+    monitoring write action - 404, not 403, same "pretend it doesn't
+    exist" pattern as admin_required."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('user_role') == ROLE_ACCOUNT_MANAGER:
             abort(404)
         return f(*args, **kwargs)
     return decorated_function
@@ -212,12 +233,16 @@ def login():
                 session['logged_in'] = True
                 session['user_email'] = email
                 session['user_id'] = user['id']
+                session['user_role'] = user['role'] or ROLE_TRAFFIC_MANAGER
                 session.permanent = True
 
                 flash(f'Добро пожаловать, {email}!', 'success')
 
                 next_page = request.args.get('next')
-                if next_page:
+                # Only follow same-site relative paths - an unchecked next=
+                # lets an attacker craft a login link that redirects to an
+                # external phishing site after a real login.
+                if next_page and next_page.startswith('/') and not next_page.startswith('//'):
                     return redirect(next_page)
                 return redirect(url_for('index'))
             else:
@@ -239,6 +264,7 @@ def register():
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '').strip()
         password_confirm = request.form.get('password_confirm', '').strip()
+        role = request.form.get('role', ROLE_TRAFFIC_MANAGER).strip()
 
         # Validation
         if not email.endswith('@sape.ru'):
@@ -251,6 +277,10 @@ def register():
 
         if password != password_confirm:
             flash('Пароли не совпадают', 'error')
+            return redirect(url_for('register'))
+
+        if role not in ROLES:
+            flash('Неизвестная роль', 'error')
             return redirect(url_for('register'))
 
         # Check if user exists
@@ -269,22 +299,41 @@ def register():
         # Create user - active and verified immediately, since the
         # password is handed to them directly by an already-trusted admin
         cursor.execute('''
-INSERT INTO users (email, password_hash, verification_code, email_verified, active)
-VALUES (?, ?, NULL, 1, 1)
-''', (email, password_hash))
+INSERT INTO users (email, password_hash, verification_code, email_verified, active, role)
+VALUES (?, ?, NULL, 1, 1, ?)
+''', (email, password_hash, role))
         conn.commit()
         conn.close()
 
-        flash(f'Пользователь {email} создан. Сообщите ему пароль лично.', 'success')
+        flash(f'Пользователь {email} создан ({ROLES[role]}). Сообщите ему пароль лично.', 'success')
         return redirect(url_for('register'))
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT id, email, active FROM users ORDER BY email')
+    cursor.execute('SELECT id, email, active, role FROM users ORDER BY email')
     users = cursor.fetchall()
     conn.close()
 
-    return render_template('register.html', users=users)
+    return render_template('register.html', users=users, roles=ROLES)
+
+
+@app.route('/users/<int:user_id>/set-role', methods=['POST'])
+@admin_required
+def admin_set_role(user_id):
+    """Change an existing user's role."""
+    role = request.form.get('role', '').strip()
+    if role not in ROLES:
+        flash('Неизвестная роль', 'error')
+        return redirect(url_for('register'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET role = ? WHERE id = ?', (role, user_id))
+    conn.commit()
+    conn.close()
+
+    flash('Роль обновлена', 'success')
+    return redirect(url_for('register'))
 
 
 @app.route('/verify-email', methods=['GET', 'POST'])
@@ -676,6 +725,7 @@ def dashboard():
 
 @app.route('/accounts')
 @login_required
+@block_account_manager
 def accounts():
     """List of SAPE accounts"""
     search_query = request.args.get('search', '').strip()
@@ -697,6 +747,8 @@ def accounts():
 
 
 @app.route('/accounts/add', methods=['GET', 'POST'])
+@login_required
+@block_account_manager
 def add_account():
     """Add new SAPE account"""
     if request.method == 'POST':
@@ -728,6 +780,8 @@ def add_account():
 
 
 @app.route('/accounts/<int:account_id>/edit', methods=['GET', 'POST'])
+@login_required
+@block_account_manager
 def edit_account(account_id):
     """Edit SAPE account"""
     account = SapeAccount.query.get_or_404(account_id)
@@ -804,6 +858,8 @@ def detect_campaign_format(campaign_name, sape_type=None):
 
 
 @app.route('/accounts/<int:account_id>/sync')
+@login_required
+@block_account_manager
 def sync_campaigns(account_id):
     """Show progress page for single account sync"""
     account = SapeAccount.query.get_or_404(account_id)
@@ -811,6 +867,8 @@ def sync_campaigns(account_id):
 
 
 @app.route('/accounts/<int:account_id>/sync/execute')
+@login_required
+@block_account_manager
 def execute_sync_single(account_id):
     """Execute sync for single account and return progress as JSON"""
     from flask import Response
@@ -834,6 +892,8 @@ def execute_sync_single(account_id):
 
 
 @app.route('/accounts/<int:account_id>/sync-old')
+@login_required
+@block_account_manager
 def sync_campaigns_old(account_id):
     """Sync campaigns from SAPE (old synchronous version)"""
     account = SapeAccount.query.get_or_404(account_id)
@@ -946,6 +1006,8 @@ def sync_campaigns_old(account_id):
 
 
 @app.route('/accounts/<int:account_id>/toggle', methods=['POST'])
+@login_required
+@block_account_manager
 def toggle_account_status(account_id):
     """Toggle account active/inactive status"""
     account = SapeAccount.query.get_or_404(account_id)
@@ -1086,6 +1148,8 @@ def sync_single_account(account):
 
 
 @app.route('/accounts/sync-all')
+@login_required
+@block_account_manager
 def sync_all_accounts():
     """Sync all active accounts - show progress page"""
     accounts = SapeAccount.query.filter_by(active=True).all()
@@ -1101,6 +1165,8 @@ def sync_all_accounts():
 
 
 @app.route('/accounts/sync-all/execute')
+@login_required
+@block_account_manager
 def execute_sync_all():
     """Execute sync and return progress as JSON"""
     from flask import Response
@@ -1141,6 +1207,8 @@ def execute_sync_all():
 
 
 @app.route('/accounts/sync-all-simple')
+@login_required
+@block_account_manager
 def sync_all_accounts_simple():
     """Sync all active accounts - simple version without progress"""
     accounts = SapeAccount.query.filter_by(active=True).all()
@@ -1263,6 +1331,7 @@ def scheduled_sync_all_accounts():
 
 @app.route('/reports')
 @login_required
+@block_account_manager
 def reports():
     """List of report configurations"""
     # Check if user wants to see archived reports
@@ -1370,6 +1439,7 @@ def monitoring_detail(monitoring_id):
 
 @app.route('/monitoring/<int:monitoring_id>/archive', methods=['POST'])
 @login_required
+@block_account_manager
 def archive_monitoring(monitoring_id):
     """Archive monitoring campaign"""
     monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
@@ -1381,6 +1451,7 @@ def archive_monitoring(monitoring_id):
 
 @app.route('/monitoring/<int:monitoring_id>/unarchive', methods=['POST'])
 @login_required
+@block_account_manager
 def unarchive_monitoring(monitoring_id):
     """Unarchive monitoring campaign"""
     monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
@@ -1392,6 +1463,7 @@ def unarchive_monitoring(monitoring_id):
 
 @app.route('/monitoring/<int:monitoring_id>/copy')
 @login_required
+@block_account_manager
 def copy_monitoring(monitoring_id):
     """Copy monitoring campaign with all settings"""
     original = MonitoringCampaign.query.get_or_404(monitoring_id)
@@ -1450,6 +1522,7 @@ def copy_monitoring(monitoring_id):
 
 @app.route('/monitoring/<int:monitoring_id>/delete', methods=['POST'])
 @login_required
+@block_account_manager
 def delete_monitoring(monitoring_id):
     """Delete monitoring campaign"""
     monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
@@ -1462,6 +1535,7 @@ def delete_monitoring(monitoring_id):
 
 @app.route('/monitoring/bulk-archive', methods=['POST'])
 @login_required
+@block_account_manager
 def bulk_archive_monitorings():
     """Archive multiple monitoring campaigns at once"""
     monitoring_ids = (request.get_json(silent=True) or {}).get('monitoring_ids', [])
@@ -1475,6 +1549,7 @@ def bulk_archive_monitorings():
 
 @app.route('/monitoring/bulk-delete', methods=['POST'])
 @login_required
+@block_account_manager
 def bulk_delete_monitorings():
     """Permanently delete multiple monitoring campaigns at once"""
     monitoring_ids = (request.get_json(silent=True) or {}).get('monitoring_ids', [])
@@ -1607,6 +1682,7 @@ def _sync_monitoring_from_asana(monitoring):
 
 @app.route('/monitoring/<int:monitoring_id>/sync-asana', methods=['POST'])
 @login_required
+@block_account_manager
 def sync_monitoring_from_asana(monitoring_id):
     """Explicit manual re-pull of the media plan from the linked Asana
     task. This is the ONLY way to re-sync besides changing the link
@@ -1637,6 +1713,7 @@ def sync_monitoring_from_asana(monitoring_id):
 
 @app.route('/monitoring/create', methods=['POST'])
 @login_required
+@block_account_manager
 def create_monitoring():
     """Create new monitoring campaign"""
     try:
@@ -1729,6 +1806,7 @@ def create_monitoring():
 
 @app.route('/monitoring/<int:monitoring_id>/edit', methods=['POST'])
 @login_required
+@block_account_manager
 def edit_monitoring(monitoring_id):
     """Update monitoring campaign"""
     try:
@@ -1859,6 +1937,8 @@ def edit_monitoring(monitoring_id):
 
 @app.route('/api/accounts/<int:account_id>/campaigns')
 @login_required
+# Not @block_account_manager - the monitoring view modal uses this to show
+# which campaigns a verifier link covers, not just the accounts page.
 def get_account_campaigns(account_id):
     """API endpoint to get campaigns for an account
 
@@ -2134,6 +2214,7 @@ def _refresh_targetads_fact(monitoring):
 
 @app.route('/monitoring/<int:monitoring_id>/refresh', methods=['POST'])
 @login_required
+@block_account_manager
 def refresh_monitoring_data(monitoring_id):
     """Refresh actual data for monitoring from SAPE API"""
     try:
@@ -2277,6 +2358,7 @@ def refresh_monitoring_data(monitoring_id):
 
 @app.route('/monitoring/refresh_all', methods=['POST'])
 @login_required
+@block_account_manager
 def refresh_all_monitorings():
     """Refresh actual data for all active monitorings from SAPE API"""
     try:
@@ -2399,6 +2481,7 @@ def refresh_all_monitorings():
 
 @app.route('/upload_adriver_excel/<int:monitoring_id>', methods=['POST'])
 @login_required
+@block_account_manager
 def upload_adriver_excel(monitoring_id):
     """Upload and parse Adriver Excel file to update monitoring IVT data"""
     try:
@@ -2421,7 +2504,7 @@ def upload_adriver_excel(monitoring_id):
         # Save file temporarily
         import tempfile
         temp_dir = tempfile.mkdtemp()
-        temp_file_path = os.path.join(temp_dir, file.filename)
+        temp_file_path = os.path.join(temp_dir, secure_filename(file.filename))
         file.save(temp_file_path)
 
         logger.info(f"📤 Uploaded Adriver Excel for monitoring {monitoring_id}: {file.filename}")
@@ -2491,6 +2574,7 @@ def upload_adriver_excel(monitoring_id):
 
 @app.route('/monitoring/<int:monitoring_id>/verifier-links/add', methods=['POST'])
 @login_required
+@block_account_manager
 def add_verifier_link(monitoring_id):
     MonitoringCampaign.query.get_or_404(monitoring_id)
     data = request.get_json(silent=True) or {}
@@ -2521,6 +2605,7 @@ def add_verifier_link(monitoring_id):
 
 @app.route('/verifier-links/<int:link_id>/update', methods=['POST'])
 @login_required
+@block_account_manager
 def update_verifier_link(link_id):
     link = VerifierLink.query.get_or_404(link_id)
     data = request.get_json(silent=True) or {}
@@ -2543,6 +2628,7 @@ def update_verifier_link(link_id):
 
 @app.route('/verifier-links/<int:link_id>/delete', methods=['POST'])
 @login_required
+@block_account_manager
 def delete_verifier_link(link_id):
     link = VerifierLink.query.get_or_404(link_id)
     db.session.delete(link)
@@ -2552,6 +2638,7 @@ def delete_verifier_link(link_id):
 
 @app.route('/verifier-links/<int:link_id>/mappings/add', methods=['POST'])
 @login_required
+@block_account_manager
 def add_verifier_mapping(link_id):
     VerifierLink.query.get_or_404(link_id)
     mapping = VerifierLinkMapping(verifier_link_id=link_id)
@@ -2564,6 +2651,7 @@ def add_verifier_mapping(link_id):
 
 @app.route('/verifier-link-mappings/<int:mapping_id>/update', methods=['POST'])
 @login_required
+@block_account_manager
 def update_verifier_mapping(mapping_id):
     mapping = VerifierLinkMapping.query.get_or_404(mapping_id)
     data = request.get_json(silent=True) or {}
@@ -2592,6 +2680,7 @@ def update_verifier_mapping(mapping_id):
 
 @app.route('/verifier-link-mappings/<int:mapping_id>/delete', methods=['POST'])
 @login_required
+@block_account_manager
 def delete_verifier_mapping(mapping_id):
     mapping = VerifierLinkMapping.query.get_or_404(mapping_id)
     db.session.delete(mapping)
@@ -2601,6 +2690,7 @@ def delete_verifier_mapping(mapping_id):
 
 @app.route('/verifier-links/<int:link_id>/upload-excel', methods=['POST'])
 @login_required
+@block_account_manager
 def upload_verifier_link_excel(link_id):
     """Upload an Adriver Excel export for one specific verifier link -
     stores the raw показы/клики (compared as-is against SAPE, not net of
@@ -2620,7 +2710,7 @@ def upload_verifier_link_excel(link_id):
 
     import tempfile
     temp_dir = tempfile.mkdtemp()
-    temp_file_path = os.path.join(temp_dir, file.filename)
+    temp_file_path = os.path.join(temp_dir, secure_filename(file.filename))
     file.save(temp_file_path)
 
     try:
@@ -2747,6 +2837,7 @@ def _fetch_and_apply_weborama_link(link):
 
 @app.route('/verifier-links/<int:link_id>/fetch-weborama', methods=['POST'])
 @login_required
+@block_account_manager
 def fetch_weborama_link(link_id):
     link = VerifierLink.query.get_or_404(link_id)
 
@@ -2786,6 +2877,7 @@ def fetch_weborama_link(link_id):
 
 @app.route('/monitoring/<int:monitoring_id>/fetch-targetads', methods=['POST'])
 @login_required
+@block_account_manager
 def fetch_targetads(monitoring_id):
     monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
 
@@ -2821,6 +2913,8 @@ def fetch_targetads(monitoring_id):
 # ============================================================================
 
 @app.route('/api/clients/<int:account_id>')
+# Not @block_account_manager - the monitoring view modal's client filter uses this too.
+@login_required
 def get_clients_by_account(account_id):
     """API endpoint to get clients for specific account"""
     clients = Client.query.filter_by(account_id=account_id, active=True).all()
@@ -2832,6 +2926,8 @@ def get_clients_by_account(account_id):
 
 
 @app.route('/api/campaigns/<int:account_id>')
+# Not @block_account_manager - the monitoring view modal's campaign list uses this too.
+@login_required
 def get_campaigns_by_account(account_id):
     """API endpoint to get campaigns for specific account"""
     client_id = request.args.get('client_id', type=int)
@@ -2854,6 +2950,8 @@ def get_campaigns_by_account(account_id):
 
 
 @app.route('/api/worksheets', methods=['POST'])
+@login_required
+@block_account_manager
 def get_worksheets():
     """API endpoint to get list of worksheets from Google Sheets"""
     try:
@@ -2878,6 +2976,8 @@ def get_worksheets():
 
 
 @app.route('/api/reports/<int:report_id>')
+@login_required
+@block_account_manager
 def get_report_data(report_id):
     """API endpoint to get report data for editing"""
     try:
@@ -2906,6 +3006,8 @@ def get_report_data(report_id):
 
 
 @app.route('/api/sync-status')
+@login_required
+@block_account_manager
 def sync_status():
     """Get last sync timestamp (no auth required)"""
     import os
@@ -2929,6 +3031,8 @@ def sync_status():
 
 
 @app.route('/api/reports/update-by-sheet', methods=['POST'])
+@login_required
+@block_account_manager
 def update_by_sheet():
     """
     API endpoint для обновления отчёта из Google Sheets
@@ -2982,6 +3086,8 @@ def update_by_sheet():
 
 
 @app.route('/reports/add', methods=['GET', 'POST'])
+@login_required
+@block_account_manager
 def add_report():
     """Add new report configuration"""
     if request.method == 'POST':
@@ -3203,6 +3309,8 @@ def add_report():
 
 
 @app.route('/reports/<int:report_id>/run')
+@login_required
+@block_account_manager
 def run_report(report_id):
     """Show progress page for report generation"""
     report = ReportConfig.query.get_or_404(report_id)
@@ -3210,6 +3318,8 @@ def run_report(report_id):
 
 
 @app.route('/reports/<int:report_id>/run/execute')
+@login_required
+@block_account_manager
 def execute_run_report(report_id):
     """Execute report generation and return progress as JSON"""
     from flask import Response
@@ -3307,6 +3417,8 @@ def _build_ad_scoped_daily_data(ad_stats, matched_ad_ids):
 
 
 @app.route('/reports/<int:report_id>/run-old')
+@login_required
+@block_account_manager
 def run_report_old(report_id):
     """Run report manually (old synchronous version)"""
     report = ReportConfig.query.get_or_404(report_id)
@@ -4241,6 +4353,8 @@ def run_report_old(report_id):
 
 
 @app.route('/reports/<int:report_id>/edit', methods=['GET', 'POST'])
+@login_required
+@block_account_manager
 def edit_report(report_id):
     """Edit existing report configuration"""
     report = ReportConfig.query.get_or_404(report_id)
@@ -4459,6 +4573,8 @@ def edit_report(report_id):
 
 
 @app.route('/reports/<int:report_id>/archive', methods=['POST'])
+@login_required
+@block_account_manager
 def archive_report(report_id):
     """Archive a report (hide from main view)"""
     report = ReportConfig.query.get_or_404(report_id)
@@ -4478,6 +4594,8 @@ def archive_report(report_id):
 
 
 @app.route('/reports/<int:report_id>/unarchive', methods=['POST'])
+@login_required
+@block_account_manager
 def unarchive_report(report_id):
     """Unarchive a report (restore to main view)"""
     report = ReportConfig.query.get_or_404(report_id)
@@ -4497,6 +4615,7 @@ def unarchive_report(report_id):
 
 @app.route('/reports/bulk-archive', methods=['POST'])
 @login_required
+@block_account_manager
 def bulk_archive_reports():
     """Archive multiple reports at once"""
     report_ids = (request.get_json(silent=True) or {}).get('report_ids', [])
@@ -4514,6 +4633,7 @@ def bulk_archive_reports():
 
 @app.route('/reports/bulk-delete', methods=['POST'])
 @login_required
+@block_account_manager
 def bulk_delete_reports():
     """Permanently delete multiple reports at once"""
     report_ids = (request.get_json(silent=True) or {}).get('report_ids', [])
@@ -4526,6 +4646,8 @@ def bulk_delete_reports():
 
 
 @app.route('/reports/<int:report_id>/copy')
+@login_required
+@block_account_manager
 def copy_report(report_id):
     """Copy a report with all settings"""
     original_report = ReportConfig.query.get_or_404(report_id)
@@ -4571,6 +4693,8 @@ def copy_report(report_id):
 # ==================== TEST API ENDPOINTS ====================
 
 @app.route('/api/test/campaign/<int:campaign_id>/detail')
+@login_required
+@block_account_manager
 def test_campaign_detail(campaign_id):
     """
     Test endpoint to see full campaign detail response from SAPE API

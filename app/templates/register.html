@@ -89,6 +89,20 @@
                     </div>
                 </div>
 
+                <!-- Role -->
+                <div style="margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Роль
+                        <span style="color: var(--primary-orange);">*</span>
+                    </label>
+                    <select name="role" id="role" style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary);">
+                        {% for value, label in roles.items() %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">Трафик-менеджер — полный доступ к Отчётам и Мониторингу. Аккаунт-менеджер — только просмотр Главной и Мониторинга, без права что-либо менять.</p>
+                </div>
+
                 <!-- Buttons -->
                 <div style="display: flex; gap: 12px; align-items: center;">
                     <button type="submit" class="btn btn-primary">
@@ -113,15 +127,29 @@
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
                     <div>
                         <div style="font-size: 14px; color: var(--text-primary); font-weight: 500;">{{ u.email }}</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">{{ roles.get(u.role) or 'Трафик-менеджер' }}</div>
                         {% if not u.active %}<div style="font-size: 12px; color: var(--text-light);">неактивен</div>{% endif %}
                     </div>
-                    <button type="button" onclick="toggleReset({{ u.id }})" style="border: none; background: none; color: var(--primary-orange); font-size: 13px; font-weight: 500; cursor: pointer; padding: 4px 8px;">
-                        Сбросить пароль
-                    </button>
+                    <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                        <button type="button" onclick="toggleReset({{ u.id }})" style="border: none; background: none; color: var(--primary-orange); font-size: 13px; font-weight: 500; cursor: pointer; padding: 4px 8px;">
+                            Сбросить пароль
+                        </button>
+                        <button type="button" onclick="toggleRole({{ u.id }})" style="border: none; background: none; color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; padding: 4px 8px;">
+                            Роль
+                        </button>
+                    </div>
                 </div>
                 <form id="reset-form-{{ u.id }}" method="POST" action="{{ url_for('admin_reset_password', user_id=u.id) }}" style="display: none; margin-top: 12px; gap: 8px; align-items: center;">
                     <input type="password" name="new_password" placeholder="Новый пароль" minlength="6" required
                            style="flex: 1; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">
+                    <button type="submit" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;">Сохранить</button>
+                </form>
+                <form id="role-form-{{ u.id }}" method="POST" action="{{ url_for('admin_set_role', user_id=u.id) }}" style="display: none; margin-top: 12px; gap: 8px; align-items: center;">
+                    <select name="role" style="flex: 1; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">
+                        {% for value, label in roles.items() %}
+                        <option value="{{ value }}" {% if u.role == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
                     <button type="submit" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;">Сохранить</button>
                 </form>
             </div>
@@ -135,6 +163,11 @@
 <script>
 function toggleReset(userId) {
     const form = document.getElementById('reset-form-' + userId);
+    form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+}
+
+function toggleRole(userId) {
+    const form = document.getElementById('role-form-' + userId);
     form.style.display = form.style.display === 'none' ? 'flex' : 'none';
 }
 </script>
