@@ -115,6 +115,12 @@ class ReportConfig(db.Model):
     # Manager assignment
     manager = db.Column(db.String(100), nullable=True)  # Даня, Саша, Аня, Лена
 
+    # Account manager - email pulled from the linked Asana task's free-text
+    # notes ("Адрес электронной почты:"), not the custom fields. Stored as
+    # email (stable, same every sync) rather than the task's free-text name
+    # (which varies in language/format between tasks for the same person).
+    account_manager = db.Column(db.String(255), nullable=True)
+
     # Brand (auto-extracted from Google Sheets)
     brand = db.Column(db.String(255), nullable=True)  # Бренд, извлеченный из таблицы
 
@@ -271,6 +277,7 @@ class MonitoringCampaign(db.Model):
 
     # Manager & metadata
     manager = db.Column(db.String(100), nullable=True)
+    account_manager = db.Column(db.String(255), nullable=True)  # email, pulled from Asana task notes
     google_sheet_url = db.Column(db.String(500), nullable=True)  # Ссылка на Google таблицу
     asana_task_url = db.Column(db.String(500), nullable=True)  # Ссылка на задачу Asana
     asana_kpi_comment = db.Column(db.Text, nullable=True)  # Комментарий из поля KPI задачи Asana

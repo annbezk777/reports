@@ -67,6 +67,17 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
             <option value="unassigned" {% if manager_filter == 'unassigned' %}selected{% endif %}>Не назначен</option>
         </select>
 
+        <!-- Account Manager Filter -->
+        <select id="accountManagerFilter" onchange="filterMonitoring()"
+                style="width: 150px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
+            <option value="">Все аккаунт-менеджеры</option>
+            {% set all_account_managers = monitorings | map(attribute='account_manager') | select | unique | list %}
+            {% for am in all_account_managers %}
+                <option value="{{ am|lower }}">{{ am|am_label }}</option>
+            {% endfor %}
+            <option value="unassigned">Не назначен</option>
+        </select>
+
         <!-- Sort -->
         <select id="sortFilter" title="Сортировка" onchange="filterMonitoring()"
                 style="width: 170px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
@@ -114,6 +125,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
             <div class="report-card monitoring-card"
                  data-name="{{ monitoring.name|lower }}"
                  data-manager="{{ monitoring.manager|lower if monitoring.manager else 'unassigned' }}"
+                 data-account-manager="{{ monitoring.account_manager|lower if monitoring.account_manager else 'unassigned' }}"
                  data-created-at="{{ monitoring.created_at.isoformat() if monitoring.created_at else '' }}">
 
                 <div style="display: flex; gap: 16px; align-items: start;">
@@ -169,6 +181,16 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <span style="color: var(--text-secondary);">Менеджер:</span>
                                     <strong style="color: var(--text-primary); font-weight: 500;">{{ monitoring.manager }}</strong>
+                                </div>
+                                {% endif %}
+
+                                {% if monitoring.account_manager %}
+                                <span style="color: #D1D5DB;">•</span>
+
+                                <!-- Account Manager -->
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="color: var(--text-secondary);">АМ:</span>
+                                    <strong style="color: var(--text-primary); font-weight: 500;" title="{{ monitoring.account_manager }}">{{ monitoring.account_manager|am_label }}</strong>
                                 </div>
                                 {% endif %}
 
@@ -690,6 +712,7 @@ function saveMonitoringFilterState() {
     sessionStorage.setItem(MONITORING_FILTER_STORAGE_KEY, JSON.stringify({
         search: document.getElementById('searchInput').value,
         manager: document.getElementById('managerFilter').value,
+        accountManager: document.getElementById('accountManagerFilter').value,
         sort: document.getElementById('sortFilter').value
     }));
 }
@@ -701,6 +724,7 @@ function restoreMonitoringFilterState() {
         const state = JSON.parse(raw);
         if (state.search) document.getElementById('searchInput').value = state.search;
         if (state.manager) document.getElementById('managerFilter').value = state.manager;
+        if (state.accountManager) document.getElementById('accountManagerFilter').value = state.accountManager;
         if (state.sort) document.getElementById('sortFilter').value = state.sort;
     } catch (e) {
         console.error('Error restoring filter state:', e);
@@ -710,17 +734,20 @@ function restoreMonitoringFilterState() {
 function filterMonitoring() {
     const searchValue = document.getElementById('searchInput').value.toLowerCase();
     const managerValue = document.getElementById('managerFilter').value.toLowerCase();
+    const accountManagerValue = document.getElementById('accountManagerFilter').value.toLowerCase();
     const sortValue = document.getElementById('sortFilter').value;
     const cards = document.querySelectorAll('.monitoring-card');
 
     cards.forEach(card => {
         const name = card.dataset.name;
         const manager = card.dataset.manager;
+        const accountManager = card.dataset.accountManager;
 
         const matchesSearch = !searchValue || name.includes(searchValue);
         const matchesManager = !managerValue || manager === managerValue;
+        const matchesAccountManager = !accountManagerValue || accountManager === accountManagerValue;
 
-        card.style.display = (matchesSearch && matchesManager) ? '' : 'none';
+        card.style.display = (matchesSearch && matchesManager && matchesAccountManager) ? '' : 'none';
     });
 
     // Reorder - appendChild moves existing nodes rather than recreating
@@ -1011,11 +1038,13 @@ function refreshAllMonitorings() {
                     <div class="form-group" style="flex: 1;">
                         <label for="asana_task_url">Ссылка на задачу Asana</label>
                         <div style="display: flex; gap: 8px;">
-                            <input type="text" id="asana_task_url" name="asana_task_url" placeholder="https://app.asana.com/.../task/..." style="flex: 1;">
+                            <input type="text" id="asana_task_url" name="asana_task_url" placeholder="https://app.asana.com/.../task/..."
+                                   onchange="fetchAsanaTaskInfo(this.value, 'asanaAccountManagerDisplay')" style="flex: 1;">
                             <button type="button" onclick="syncAsanaPlan()" class="btn btn-secondary" title="Обновить план из Asana" style="flex-shrink: 0; padding: 0; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                             </button>
                         </div>
+                        <p id="asanaAccountManagerDisplay" style="font-size: 12px; color: var(--primary-orange); margin-top: 6px; display: none;"></p>
                     </div>
                 </div>
 
@@ -1796,6 +1825,36 @@ function openMonitoringModal(monitoringId = null) {
     modal.style.display = 'flex';
     // Блокируем прокрутку основной страницы
     document.body.style.overflow = 'hidden';
+}
+
+function fetchAsanaTaskInfo(asanaUrl, amDisplayId) {
+    const amDisplay = document.getElementById(amDisplayId);
+    const url = (asanaUrl || '').trim();
+    if (!url) {
+        if (amDisplay) amDisplay.style.display = 'none';
+        return;
+    }
+    fetch('/api/asana-task-info', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({asana_task_url: url})
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                console.warn('Asana task info:', data.error);
+                return;
+            }
+            if (amDisplay) {
+                if (data.account_manager_label) {
+                    amDisplay.textContent = `Аккаунт-менеджер (из Asana): ${data.account_manager_label}`;
+                    amDisplay.style.display = 'block';
+                } else {
+                    amDisplay.style.display = 'none';
+                }
+            }
+        })
+        .catch(err => console.error('Error fetching Asana task info:', err));
 }
 
 function syncAsanaPlan() {

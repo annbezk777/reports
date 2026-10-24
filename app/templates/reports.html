@@ -64,6 +64,17 @@
             <option value="unassigned">Без менеджера</option>
         </select>
 
+        <!-- Account Manager Filter -->
+        <select id="accountManagerFilter" onchange="filterReports()"
+                style="width: 150px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
+            <option value="">Все аккаунт-менеджеры</option>
+            {% set all_account_managers = reports | map(attribute='account_manager') | select | unique | list %}
+            {% for am in all_account_managers %}
+                <option value="{{ am|lower }}">{{ am|am_label }}</option>
+            {% endfor %}
+            <option value="unassigned">Не назначен</option>
+        </select>
+
         <!-- Sort -->
         <select id="sortFilter" title="Сортировка" onchange="filterReports()"
                 style="width: 170px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
@@ -102,6 +113,7 @@
                  data-name="{{ (report.name if report.name else report.campaign.name)|lower }}"
                  data-brand="{{ report.brand|lower if report.brand else '' }}"
                  data-manager="{{ report.manager|lower if report.manager else 'unassigned' }}"
+                 data-account-manager="{{ report.account_manager|lower if report.account_manager else 'unassigned' }}"
                  data-created-month="{{ report.created_at.strftime('%Y-%m') }}"
                  data-created-at="{{ report.created_at.isoformat() if report.created_at else '' }}">
 
@@ -159,6 +171,16 @@
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <span style="color: var(--text-secondary);">Менеджер:</span>
                                     <strong style="color: var(--text-primary); font-weight: 500;">{{ report.manager }}</strong>
+                                </div>
+                                {% endif %}
+
+                                {% if report.account_manager %}
+                                <span style="color: #D1D5DB;">•</span>
+
+                                <!-- Account Manager -->
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="color: var(--text-secondary);">АМ:</span>
+                                    <strong style="color: var(--text-primary); font-weight: 500;" title="{{ report.account_manager }}">{{ report.account_manager|am_label }}</strong>
                                 </div>
                                 {% endif %}
                             </div>
@@ -914,6 +936,7 @@ function saveReportsFilterState() {
         search: document.getElementById('searchInput').value,
         month: document.getElementById('monthFilter').value,
         manager: document.getElementById('managerFilter').value,
+        accountManager: document.getElementById('accountManagerFilter').value,
         sort: document.getElementById('sortFilter').value
     }));
 }
@@ -926,6 +949,7 @@ function restoreReportsFilterState() {
         if (state.search) document.getElementById('searchInput').value = state.search;
         if (state.month) document.getElementById('monthFilter').value = state.month;
         if (state.manager) document.getElementById('managerFilter').value = state.manager;
+        if (state.accountManager) document.getElementById('accountManagerFilter').value = state.accountManager;
         if (state.sort) document.getElementById('sortFilter').value = state.sort;
     } catch (e) {
         console.error('Error restoring filter state:', e);
@@ -940,6 +964,7 @@ function filterReports() {
     const searchValue = document.getElementById('searchInput').value.toLowerCase();
     const monthValue = document.getElementById('monthFilter').value;
     const managerValue = document.getElementById('managerFilter').value.toLowerCase();
+    const accountManagerValue = document.getElementById('accountManagerFilter').value.toLowerCase();
     const sortValue = document.getElementById('sortFilter').value;
     const cards = document.querySelectorAll('.report-card');
 
@@ -947,13 +972,15 @@ function filterReports() {
         const name = card.dataset.name;
         const brand = card.dataset.brand;
         const manager = card.dataset.manager;
+        const accountManager = card.dataset.accountManager;
         const createdMonth = card.dataset.createdMonth;
 
         const matchesSearch = !searchValue || name.includes(searchValue) || brand.includes(searchValue);
         const matchesMonth = !monthValue || createdMonth === monthValue;
         const matchesManager = !managerValue || manager === managerValue;
+        const matchesAccountManager = !accountManagerValue || accountManager === accountManagerValue;
 
-        card.style.display = (matchesSearch && matchesMonth && matchesManager) ? '' : 'none';
+        card.style.display = (matchesSearch && matchesMonth && matchesManager && matchesAccountManager) ? '' : 'none';
     });
 
     // Reorder - appendChild moves existing nodes rather than recreating
@@ -1268,10 +1295,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     </label>
                     <input type="url" id="formAsanaTaskUrl" name="asana_task_url"
                            placeholder="https://app.asana.com/1/.../task/..."
+                           onchange="fetchAsanaTaskInfo('formAsanaTaskUrl', 'formGoogleSheetUrl', 'formAsanaAccountManager')"
                            style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
                     <p style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                        Если указать (или изменить), плановые показатели в связанном мониторинге подтянутся из задачи сразу при сохранении
+                        Если указать (или изменить), плановые показатели в связанном мониторинге подтянутся из задачи сразу при сохранении. Ссылка на таблицу и аккаунт-менеджер подтягиваются сразу, ещё до сохранения.
                     </p>
+                    <p id="formAsanaAccountManager" style="font-size: 12px; color: var(--primary-orange); margin-top: 6px; display: none;"></p>
                 </div>
 
                 <!-- Campaign Selection -->
@@ -1850,6 +1879,42 @@ function updateFormCampaignCounter() {
     } else {
         counter.textContent = `Выбрано кампаний: ${checked}`;
     }
+}
+
+function fetchAsanaTaskInfo(urlFieldId, sheetFieldId, amDisplayId) {
+    const url = document.getElementById(urlFieldId).value.trim();
+    const amDisplay = document.getElementById(amDisplayId);
+    if (!url) {
+        if (amDisplay) amDisplay.style.display = 'none';
+        return;
+    }
+
+    fetch('/api/asana-task-info', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({asana_task_url: url})
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                console.warn('Asana task info:', data.error);
+                return;
+            }
+            const sheetField = document.getElementById(sheetFieldId);
+            if (data.google_sheet_url && sheetField && !sheetField.value.trim()) {
+                sheetField.value = data.google_sheet_url;
+                sheetField.dispatchEvent(new Event('change'));
+            }
+            if (amDisplay) {
+                if (data.account_manager_label) {
+                    amDisplay.textContent = `Аккаунт-менеджер (из Asana): ${data.account_manager_label}`;
+                    amDisplay.style.display = 'block';
+                } else {
+                    amDisplay.style.display = 'none';
+                }
+            }
+        })
+        .catch(err => console.error('Error fetching Asana task info:', err));
 }
 
 function loadFormWorksheets(selectedWorksheet = null) {

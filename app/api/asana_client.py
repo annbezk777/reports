@@ -54,7 +54,7 @@ class AsanaClient:
             f'{self.BASE_URL}/tasks/{task_gid}',
             headers={'Authorization': f'Bearer {self.token}'},
             params={
-                'opt_fields': 'name,custom_fields.name,custom_fields.type,'
+                'opt_fields': 'name,notes,custom_fields.name,custom_fields.type,'
                               'custom_fields.text_value,custom_fields.display_value,'
                               'custom_fields.date_value.date,'
                               'custom_fields.multi_enum_values.name'
@@ -78,6 +78,45 @@ class AsanaClient:
             return datetime.strptime(raw[:10], '%Y-%m-%d').date()
         except ValueError:
             return None
+
+    @staticmethod
+    def _notes_field(notes, label_pattern):
+        """Pull the value following a 'Label:' line out of a task's free-text
+        notes - some intake forms (e.g. the DSP launch form) put the account
+        manager's contact info and the stats-sheet link there as plain text
+        ("Имя:\n\nVladislav Fesenko"), not as a custom_field. Works whether
+        the value sits on the same line as the label or the next one."""
+        if not notes:
+            return None
+        match = re.search(rf'{label_pattern}\s*:\s*\n*\s*(.+)', notes, re.IGNORECASE)
+        return match.group(1).strip() if match else None
+
+    @classmethod
+    def parse_task_notes(cls, notes):
+        """Extract the account-manager contact, stats-sheet link, and
+        Metrika counter from a task's free-text notes block, when present."""
+        if not notes:
+            return {}
+
+        email_raw = cls._notes_field(notes, r'Адрес электронной почты')
+        email = None
+        if email_raw:
+            m = re.search(r'[\w.+-]+@[\w.-]+\.\w+', email_raw)
+            email = m.group(0).lower() if m else None
+
+        sheet_raw = cls._notes_field(notes, r'Ссылка на статистический отчет')
+        sheet_url = None
+        if sheet_raw:
+            m = re.search(r'https?://\S+', sheet_raw)
+            sheet_url = m.group(0) if m else None
+
+        result = {
+            'account_manager_email': email,
+            'account_manager_name': cls._notes_field(notes, r'Имя'),
+            'google_sheet_url': sheet_url,
+            'metrika_counter_id': cls._notes_field(notes, r'#\s*счетчика'),
+        }
+        return {k: v for k, v in result.items() if v}
 
     @classmethod
     def _detect_format_index(cls, format_field):

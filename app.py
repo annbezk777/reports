@@ -186,6 +186,24 @@ ASSIGNABLE_ROLES = {
     ROLE_ACCOUNT_MANAGER: ROLES[ROLE_ACCOUNT_MANAGER],
 }
 
+# Display names for the client-side account managers (business role, not an
+# app login) pulled from Asana task notes - keyed by the email that's
+# actually stored on the report/monitoring, since that's stable across
+# tasks while the free-text "Имя" varies in language/format per task.
+# Unmapped emails just display as-is - add new people here as they come up.
+ACCOUNT_MANAGER_NAMES = {
+    'o.muzika@sape.ru': 'Оля',
+    'e.svirina@sape.ru': 'Лиза',
+    'v.fesenko@sape.ru': 'Владислав',
+}
+
+
+@app.template_filter('am_label')
+def account_manager_label(email):
+    if not email:
+        return None
+    return ACCOUNT_MANAGER_NAMES.get(email, email)
+
 
 def admin_required(f):
     """Restricts a route to ADMIN_EMAIL only. Everyone else (including
@@ -1374,6 +1392,14 @@ def reports():
     print(f"🔍 DEBUG reports(): session after: {dict(session)}")
     print(f"🔍 DEBUG reports(): final manager_filter: {manager_filter}")
 
+    # Account-manager filter - same session-persisted pattern as manager_filter
+    account_manager_filter = request.args.get('account_manager', None)
+    if account_manager_filter is not None:
+        session['account_manager_filter'] = account_manager_filter
+        session.modified = True
+    else:
+        account_manager_filter = session.get('account_manager_filter', '')
+
     # Build query
     query = ReportConfig.query.join(Campaign)
 
@@ -1390,6 +1416,13 @@ def reports():
         else:
             query = query.filter(ReportConfig.manager == manager_filter)
 
+    # Apply account-manager filter
+    if account_manager_filter:
+        if account_manager_filter == 'unassigned':
+            query = query.filter((ReportConfig.account_manager == None) | (ReportConfig.account_manager == ''))
+        else:
+            query = query.filter(ReportConfig.account_manager == account_manager_filter)
+
     all_reports = query.all()
 
     # Get unique months from reports for filter
@@ -1405,8 +1438,17 @@ def reports():
     # Get all accounts for the modal form
     accounts = SapeAccount.query.filter_by(active=True).order_by(SapeAccount.name).all()
 
+    # Distinct account managers across ALL active reports (not just the
+    # currently-filtered set) so the dropdown always shows every option.
+    all_account_managers = sorted(set(
+        r.account_manager for r in ReportConfig.query.filter_by(archived=show_archived).all()
+        if r.account_manager
+    ))
+
     return render_template('reports.html',
                          reports=all_reports,
+                         account_manager_filter=account_manager_filter,
+                         all_account_managers=all_account_managers,
                          show_archived=show_archived,
                          manager_filter=manager_filter,
                          accounts=accounts,
@@ -1432,6 +1474,8 @@ def monitoring():
         and session.get('user_role') != ROLE_ACCOUNT_MANAGER
     )
 
+    account_manager_filter = request.args.get('account_manager', None)
+
     # Build query
     query = MonitoringCampaign.query.filter(MonitoringCampaign.archived == show_archived)
 
@@ -1442,14 +1486,30 @@ def monitoring():
         else:
             query = query.filter(MonitoringCampaign.manager == manager_filter)
 
+    # Apply account-manager filter
+    if account_manager_filter:
+        if account_manager_filter == 'unassigned':
+            query = query.filter((MonitoringCampaign.account_manager == None) | (MonitoringCampaign.account_manager == ''))
+        else:
+            query = query.filter(MonitoringCampaign.account_manager == account_manager_filter)
+
     all_monitorings = query.order_by(MonitoringCampaign.created_at.desc()).all()
 
     # Get all accounts for the form
     accounts = SapeAccount.query.filter_by(active=True).order_by(SapeAccount.name).all()
 
+    # Distinct account managers across ALL monitorings in this archived/active
+    # view so the dropdown always shows every option, not just filtered ones.
+    all_account_managers = sorted(set(
+        m.account_manager for m in MonitoringCampaign.query.filter_by(archived=show_archived).all()
+        if m.account_manager
+    ))
+
     return render_template('monitoring.html',
                          monitorings=all_monitorings,
                          manager_filter=manager_filter,
+                         account_manager_filter=account_manager_filter,
+                         all_account_managers=all_account_managers,
                          show_archived=show_archived,
                          accounts=accounts,
                          admin_email=ADMIN_EMAIL)
@@ -1685,6 +1745,13 @@ def _sync_monitoring_from_asana(monitoring):
         monitoring.asana_kpi_comment = parsed['kpi_comment']
         updated_fields.append('asana_kpi_comment')
 
+    # Account manager's contact lives in the task's free-text notes, not
+    # custom_fields - see AsanaClient.parse_task_notes.
+    notes_fields = AsanaClient.parse_task_notes(task.get('notes'))
+    if notes_fields.get('account_manager_email'):
+        monitoring.account_manager = notes_fields['account_manager_email']
+        updated_fields.append('account_manager')
+
     # Визиты = клики × PI, same calculation the edit form does client-side -
     # recompute here too since this sync path bypasses that JS entirely.
     if ('plan_clicks' in updated_fields or 'plan_pi' in updated_fields) and monitoring.plan_clicks and monitoring.plan_pi:
@@ -1729,6 +1796,9 @@ def sync_monitoring_from_asana(monitoring_id):
         result = _sync_monitoring_from_asana(monitoring)
     except AsanaSyncError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+
+    if monitoring.account_manager and monitoring.report_config:
+        monitoring.report_config.account_manager = monitoring.account_manager
 
     db.session.commit()
 
@@ -1811,6 +1881,24 @@ def create_monitoring():
         asana_warning = None
         if monitoring.asana_task_url:
             try:
+                from app.api.asana_client import AsanaClient
+                # Pull the task's own "дата старта"/"дата завершения" as the
+                # monitoring's period - the form's date_from/date_to default
+                # to today/+30d, which silently wins over the real campaign
+                # dates if we don't override them here.
+                client = AsanaClient()
+                task_gid = client.extract_task_gid(monitoring.asana_task_url)
+                if task_gid:
+                    task = client.get_task(task_gid)
+                    monitoring_campaigns = monitoring.get_campaigns()
+                    format_type = monitoring_campaigns[0].format_type if monitoring_campaigns else None
+                    format_idx = AsanaClient.format_index_for_campaign_type(format_type)
+                    parsed = client.parse_monitoring_fields(task, format_idx=format_idx)
+                    if parsed.get('task_date_from') and parsed.get('task_date_to'):
+                        monitoring.date_from = parsed['task_date_from']
+                        monitoring.date_to = parsed['task_date_to']
+                        db.session.commit()
+
                 _sync_monitoring_from_asana(monitoring)
                 db.session.commit()
             except AsanaSyncError as e:
@@ -1941,6 +2029,24 @@ def edit_monitoring(monitoring_id):
         asana_warning = None
         if monitoring.asana_task_url and monitoring.asana_task_url != previous_asana_task_url:
             try:
+                from app.api.asana_client import AsanaClient
+                # Pull the task's own "дата старта"/"дата завершения" as the
+                # monitoring's period - whatever was in the date fields when
+                # the Asana link was pasted in (often just the create-form's
+                # today/+30d default) otherwise silently wins over the real
+                # campaign dates.
+                client = AsanaClient()
+                task_gid = client.extract_task_gid(monitoring.asana_task_url)
+                if task_gid:
+                    task = client.get_task(task_gid)
+                    monitoring_campaigns = monitoring.get_campaigns()
+                    format_type = monitoring_campaigns[0].format_type if monitoring_campaigns else None
+                    format_idx = AsanaClient.format_index_for_campaign_type(format_type)
+                    parsed = client.parse_monitoring_fields(task, format_idx=format_idx)
+                    if parsed.get('task_date_from') and parsed.get('task_date_to'):
+                        monitoring.date_from = parsed['task_date_from']
+                        monitoring.date_to = parsed['task_date_to']
+
                 _sync_monitoring_from_asana(monitoring)
             except AsanaSyncError as e:
                 asana_warning = str(e)
@@ -2999,6 +3105,41 @@ def get_worksheets():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/asana-task-info', methods=['POST'])
+@login_required
+@block_account_manager
+def get_asana_task_info():
+    """Pull the Google Sheets link + account manager out of an Asana
+    task's free-text notes, before the report/monitoring is even saved -
+    lets the form auto-fill those fields the moment the Asana link is
+    pasted in, instead of requiring a save-then-sync round trip."""
+    from app.api.asana_client import AsanaClient
+    data = request.get_json(silent=True) or {}
+    asana_task_url = data.get('asana_task_url', '').strip()
+    if not asana_task_url:
+        return jsonify({'error': 'Не указана ссылка на задачу Asana'}), 400
+
+    client = AsanaClient()
+    task_gid = client.extract_task_gid(asana_task_url)
+    if not task_gid:
+        return jsonify({'error': 'Не удалось распознать ID задачи из ссылки'}), 400
+
+    try:
+        task = client.get_task(task_gid)
+    except Exception as e:
+        return jsonify({'error': f'Ошибка запроса к Asana: {e}'}), 502
+
+    notes_fields = AsanaClient.parse_task_notes(task.get('notes'))
+    account_manager_email = notes_fields.get('account_manager_email')
+    return jsonify({
+        'task_name': task.get('name'),
+        'google_sheet_url': notes_fields.get('google_sheet_url'),
+        'account_manager_email': account_manager_email,
+        'account_manager_label': account_manager_label(account_manager_email),
+        'metrika_counter_id': notes_fields.get('metrika_counter_id'),
+    })
+
+
 @app.route('/api/reports/<int:report_id>')
 @login_required
 @block_account_manager
@@ -3284,6 +3425,8 @@ def add_report():
                             db.session.commit()
 
                         asana_result = _sync_monitoring_from_asana(monitoring)
+                        if monitoring.account_manager:
+                            report.account_manager = monitoring.account_manager
                         db.session.commit()
                         logging.info(f"✅ Synced auto-created monitoring {monitoring.id} from Asana: {asana_result['updated_fields']}")
                     else:
@@ -4608,6 +4751,8 @@ def edit_report(report_id):
                             db.session.commit()
 
                     asana_result = _sync_monitoring_from_asana(monitoring)
+                    if monitoring.account_manager:
+                        report.account_manager = monitoring.account_manager
                     db.session.commit()
                     flash(f'Отчет обновлён. План из Asana подтянут в мониторинг ({", ".join(asana_result["updated_fields"])})', 'success')
                     asana_flash_shown = True
@@ -4963,8 +5108,13 @@ def scheduled_refresh_all_monitorings():
         logging.info(f"⏰ SCHEDULED MONITORING REFRESH - {now.strftime('%Y-%m-%d %H:%M:%S')}")
         logging.info(f"{'='*60}")
 
-        # Find all active monitorings (not archived)
-        active_monitorings = MonitoringCampaign.query.filter_by(archived=False).all()
+        # Find all active monitorings (not archived) whose campaign hasn't
+        # ended yet - once date_to has passed there's nothing new to pull,
+        # so stop touching the card automatically (saves API quota too).
+        active_monitorings = MonitoringCampaign.query.filter(
+            MonitoringCampaign.archived == False,
+            MonitoringCampaign.date_to >= now.date()
+        ).all()
 
         if not active_monitorings:
             logging.info("ℹ️ No active monitorings found")
@@ -5088,6 +5238,7 @@ def scheduled_refresh_weborama_verifiers():
                  .filter(VerifierLink.verifier_type == 'weborama')
                  .filter(VerifierLink.permalink_url.isnot(None))
                  .filter(MonitoringCampaign.archived == False)
+                 .filter(MonitoringCampaign.date_to >= now.date())
                  .all())
 
         if not links:
