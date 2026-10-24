@@ -333,12 +333,12 @@
                     {% endif %}
                 </p>
                 {% if not show_archived %}
-                <a href="{{ url_for('add_report') }}" class="btn btn-primary">
+                <button onclick="openReportFormModal()" class="btn btn-primary">
                     <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                     </svg>
                     Создать первый отчет
-                </a>
+                </button>
                 {% endif %}
             </div>
         {% endif %}
@@ -1299,11 +1299,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
                                     <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ТОТАЛ</th>
                                     <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
+                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 110px;" title="Если не выбрано - используется общий лист отчёта ниже">ЛИСТ</th>
                                 </tr>
                             </thead>
                             <tbody id="formCampaignsList">
                                 <tr>
-                                    <td colspan="7" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+                                    <td colspan="8" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">
                                         Выберите аккаунт для загрузки кампаний
                                     </td>
                                 </tr>
@@ -1359,12 +1360,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 <!-- Worksheet Selection -->
                 <div id="formWorksheetSection" style="display: none; margin-bottom: 24px;">
                     <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
-                        Выберите лист *
+                        Лист по умолчанию
                     </label>
                     <select id="formWorksheetName" name="worksheet_name"
                             style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
                         <option value="">Загрузка листов...</option>
                     </select>
+                    <p id="formWorksheetHint" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                        Используется для кампаний без своего листа (колонка "ЛИСТ" в таблице кампаний выше).
+                    </p>
+                    <div id="formWorksheetLockWarning" style="display: none; margin-top: 8px; padding: 10px 12px; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; font-size: 12px; color: #92400E;">
+                        ⚠️ Общий лист сброшен и не используется: у выбранных кампаний задан свой лист. Снимите привязку у всех кампаний, чтобы вернуть общий лист.
+                    </div>
                 </div>
 
                 <!-- Schedule -->
@@ -1470,7 +1477,7 @@ function openReportFormModal(reportId = null) {
         document.getElementById('formCampaignsSection').style.display = 'block';
         const tbody = document.getElementById('formCampaignsList');
         if (tbody) {
-            tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-secondary);">Загрузка...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: var(--text-secondary);">Загрузка...</td></tr>';
         }
 
         // Load report data
@@ -1543,6 +1550,7 @@ function openReportFormModal(reportId = null) {
         // Clear campaigns section
         document.getElementById('formCampaignsSection').style.display = 'none';
         document.getElementById('formWorksheetSection').style.display = 'none';
+        window.formAvailableWorksheets = [];
     }
 
     modal.style.display = 'flex';
@@ -1581,14 +1589,14 @@ function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings
 
     document.getElementById('formCampaignsSection').style.display = 'block';
     const tbody = document.getElementById('formCampaignsList');
-    tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Загрузка кампаний...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Загрузка кампаний...</td></tr>';
 
     const campaignsUrl = clientId ? `/api/campaigns/${accountId}?client_id=${clientId}` : `/api/campaigns/${accountId}`;
     fetch(campaignsUrl)
         .then(res => res.json())
         .then(campaigns => {
             if (campaigns.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Нет активных кампаний</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Нет активных кампаний</td></tr>';
                 return;
             }
 
@@ -1648,6 +1656,14 @@ function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings
                             <input type="number" name="total_var_${campaign.id}" value="${totalVar}" step="0.01" min="0" max="2"
                                    style="width: 50px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; text-align: center;">
                         </td>
+                        <td style="padding: 8px; text-align: center;">
+                            <select name="worksheet_${campaign.id}" class="form-campaign-worksheet-select" data-current-value="${settings.worksheet_name || ''}"
+                                    onchange="updateGeneralWorksheetLock()"
+                                    style="width: 100px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px;">
+                                <option value="">По умолчанию</option>
+                                ${settings.worksheet_name ? `<option value="${settings.worksheet_name}" selected>${settings.worksheet_name}</option>` : ''}
+                            </select>
+                        </td>
                     </tr>
                 `;
             });
@@ -1660,6 +1676,15 @@ function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings
                 // Sort campaigns: selected first (like in old version)
                 sortFormCampaignsSelectedFirst();
 
+                // Worksheets may have already loaded before campaigns did
+                // (e.g. sheet URL typed first) - fill in the per-campaign
+                // dropdowns with whatever list is already available.
+                populateFormCampaignWorksheetSelects();
+                // A saved per-campaign pin is visible immediately (rendered
+                // straight from campaign_settings), even before the full
+                // worksheets list has loaded - check the lock state too.
+                updateGeneralWorksheetLock();
+
                 // Update counter after DOM is updated
                 setTimeout(() => {
                     updateFormCampaignCounter();
@@ -1668,13 +1693,43 @@ function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings
         })
         .catch(err => {
             console.error('Error loading campaigns:', err);
-            tbody.innerHTML = '<tr><td colspan="7" style="padding: 20px; text-align: center; color: #EF4444; font-size: 13px;">Ошибка загрузки кампаний</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: #EF4444; font-size: 13px;">Ошибка загрузки кампаний</td></tr>';
         });
 }
 
 function handleFormCampaignChange() {
     updateFormCampaignCounter();
     sortFormCampaignsSelectedFirst();
+    updateGeneralWorksheetLock();
+}
+
+// If any CHECKED (selected) campaign has its own worksheet pinned, the
+// general/default worksheet becomes meaningless for this report - clear and
+// lock it so it can't be saved as if it were still in effect. Unchecked
+// campaigns with a saved pin from before don't count - only what's actually
+// part of this report run right now.
+function updateGeneralWorksheetLock() {
+    const generalSelect = document.getElementById('formWorksheetName');
+    const hint = document.getElementById('formWorksheetHint');
+    const warning = document.getElementById('formWorksheetLockWarning');
+    if (!generalSelect) return;
+
+    const anyPinned = Array.from(document.querySelectorAll('#formCampaignsList input[name="campaign_ids"]:checked')).some(cb => {
+        const row = cb.closest('tr');
+        const select = row ? row.querySelector('.form-campaign-worksheet-select') : null;
+        return select && select.value;
+    });
+
+    if (anyPinned) {
+        generalSelect.value = '';
+        generalSelect.disabled = true;
+        if (hint) hint.style.display = 'none';
+        if (warning) warning.style.display = 'block';
+    } else {
+        generalSelect.disabled = false;
+        if (hint) hint.style.display = 'block';
+        if (warning) warning.style.display = 'none';
+    }
 }
 
 function sortFormCampaignsSelectedFirst() {
@@ -1709,6 +1764,7 @@ function selectAllFormCampaigns() {
     });
     updateFormCampaignCounter();
     sortFormCampaignsSelectedFirst();
+    updateGeneralWorksheetLock();
 }
 
 function deselectAllFormCampaigns() {
@@ -1717,6 +1773,7 @@ function deselectAllFormCampaigns() {
     });
     updateFormCampaignCounter();
     sortFormCampaignsSelectedFirst();
+    updateGeneralWorksheetLock();
 }
 
 function openBulkFormModal() {
@@ -1815,11 +1872,39 @@ function loadFormWorksheets(selectedWorksheet = null) {
             } else {
                 select.innerHTML = '<option value="">Листы не найдены</option>';
             }
+
+            window.formAvailableWorksheets = data.worksheets || [];
+            populateFormCampaignWorksheetSelects();
         })
         .catch(err => {
             console.error('Error loading worksheets:', err);
             select.innerHTML = '<option value="">Ошибка загрузки листов</option>';
         });
+}
+
+function populateFormCampaignWorksheetSelects() {
+    const worksheets = window.formAvailableWorksheets || [];
+    if (!worksheets.length) return;
+    document.querySelectorAll('.form-campaign-worksheet-select').forEach(select => {
+        const currentValue = select.dataset.currentValue || select.value;
+        select.innerHTML = '<option value="">По умолчанию</option>';
+        worksheets.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            select.appendChild(option);
+        });
+        if (worksheets.includes(currentValue)) {
+            select.value = currentValue;
+        } else if (currentValue) {
+            const staleOption = document.createElement('option');
+            staleOption.value = currentValue;
+            staleOption.textContent = currentValue + ' (не найден)';
+            select.appendChild(staleOption);
+            select.value = currentValue;
+        }
+    });
+    updateGeneralWorksheetLock();
 }
 
 // Toggle day button

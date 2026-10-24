@@ -3106,8 +3106,7 @@ def add_report():
 
         if not campaign_ids_str:
             flash('Выберите хотя бы одну кампанию', 'error')
-            accounts = SapeAccount.query.filter_by(active=True).all()
-            return render_template('add_report.html', accounts=accounts)
+            return redirect(url_for('reports'))
 
         # Convert to integers
         campaign_ids = [int(cid) for cid in campaign_ids_str]
@@ -3152,6 +3151,12 @@ def add_report():
                 }
                 campaign_frequencies[str(cid)] = 3.0
 
+            # Per-campaign worksheet pin - if left blank, the campaign falls
+            # back to the report's shared worksheet_name at run time.
+            campaign_worksheet = request.form.get(f'worksheet_{cid}', '').strip()
+            if campaign_worksheet:
+                campaign_settings[str(cid)]['worksheet_name'] = campaign_worksheet
+
             # Update format if changed
             format_key = f'format_{cid}'
             format_value = request.form.get(format_key)
@@ -3167,8 +3172,7 @@ def add_report():
         campaigns = Campaign.query.filter(Campaign.id.in_(campaign_ids)).all()
         if not campaigns:
             flash('Кампании не найдены', 'error')
-            accounts = SapeAccount.query.filter_by(active=True).all()
-            return render_template('add_report.html', accounts=accounts)
+            return redirect(url_for('reports'))
 
         # NOTE: Structure validation moved to run_report
         # We no longer validate structure at creation time to allow flexible setup
@@ -3303,9 +3307,9 @@ def add_report():
         flash(f'Отчет успешно создан для кампаний: {campaign_names}. Режим: {mode_labels.get(campaign_mode, campaign_mode)}', 'success')
         return redirect(url_for('reports'))
 
-    # Get all accounts for dropdown
-    accounts = SapeAccount.query.filter_by(active=True).all()
-    return render_template('add_report.html', accounts=accounts)
+    # No standalone create page anymore - creation happens via the modal on
+    # the reports list (reports.html).
+    return redirect(url_for('reports'))
 
 
 @app.route('/reports/<int:report_id>/run')
@@ -3416,6 +3420,19 @@ def _build_ad_scoped_daily_data(ad_stats, matched_ad_ids):
     return result
 
 
+def _resolve_campaign_worksheet(report, campaign):
+    """Effective worksheet for this campaign: its own override in
+    campaign_settings if set, else the report-level default (which can
+    itself be empty - gspread then falls back to the sheet's first tab,
+    same as always)."""
+    cid_str = str(campaign.id)
+    if report.campaign_settings and cid_str in report.campaign_settings:
+        override = (report.campaign_settings[cid_str] or {}).get('worksheet_name')
+        if override:
+            return override
+    return report.worksheet_name
+
+
 @app.route('/reports/<int:report_id>/run-old')
 @login_required
 @block_account_manager
@@ -3459,6 +3476,24 @@ def run_report_old(report_id):
             credentials_file=app.config['GOOGLE_CREDENTIALS_FILE'],
             scopes=app.config['GOOGLE_SCOPES']
         )
+
+        # Each worksheet actually touched by this run gets its own cached
+        # read - usually just one entry (the report's shared sheet), but a
+        # campaign can pin its own sheet via campaign_settings, in which
+        # case different campaigns need different cached reads.
+        worksheet_cache = {}
+
+        def get_cached_worksheet(worksheet_name):
+            if worksheet_name not in worksheet_cache:
+                obj = gs_client.get_worksheet_object(
+                    sheet_url=report.google_sheet_url,
+                    sheet_name=worksheet_name
+                )
+                worksheet_cache[worksheet_name] = {
+                    'object': obj,
+                    'data': obj.get('A1:DZ300') if obj else None
+                }
+            return worksheet_cache[worksheet_name]
 
         # ==================== REALWEB CUSTOM VIDEO DETAILED REPORT ====================
         # Check if this is Realweb custom report (by report name)
@@ -3578,10 +3613,10 @@ def run_report_old(report_id):
             print(f"   Period: {date_from.strftime('%Y-%m-%d')} to {date_to.strftime('%Y-%m-%d')}")
             print(f"{'='*60}\n")
 
-            campaigns_data = []
+            campaigns_data_by_worksheet = {}  # {worksheet_name: [campaign_data, ...]}
+            total_variances_by_worksheet = {}  # {worksheet_name: [variance, ...]}
             total_impressions = 0
             total_clicks = 0
-            total_variances = []  # Collect variances to calculate average
 
             for campaign in campaigns:
                 # Get data for this campaign for entire period
@@ -3615,7 +3650,8 @@ def run_report_old(report_id):
                     frequency = report.campaign_frequencies[cid_str]
                     total_variance = report.frequency_variance or 0.1
 
-                total_variances.append(total_variance)
+                campaign_worksheet = _resolve_campaign_worksheet(report, campaign)
+                total_variances_by_worksheet.setdefault(campaign_worksheet, []).append(total_variance)
 
                 # Calculate AVERAGE reach across days (not sum!)
                 # Apply variance ONCE per campaign (not per day!)
@@ -3646,7 +3682,7 @@ def run_report_old(report_id):
                 print(f"   Average daily reach: {average_reach:,} (from {len(daily_reaches)} days)")
                 print(f"   Period reach: {period_reach:,} (shows / frequency)")
 
-                campaigns_data.append({
+                campaigns_data_by_worksheet.setdefault(campaign_worksheet, []).append({
                     'campaign_id': campaign.campaign_id,
                     'shows': period_shows,
                     'clicks': period_clicks,
@@ -3657,22 +3693,28 @@ def run_report_old(report_id):
                 total_impressions += period_shows
                 total_clicks += period_clicks
 
-            if not campaigns_data:
+            if not campaigns_data_by_worksheet:
                 raise Exception("No data for any campaign in the period")
 
-            # Calculate average variance
-            avg_total_variance = sum(total_variances) / len(total_variances) if total_variances else 0.1
+            # Write one call per distinct worksheet - usually just one (every
+            # campaign defaults to the report's shared worksheet), but a
+            # campaign can pin its own sheet via campaign_settings.
+            total_campaigns_written = 0
+            for worksheet_name, campaigns_data in campaigns_data_by_worksheet.items():
+                variances = total_variances_by_worksheet.get(worksheet_name, [])
+                avg_total_variance = sum(variances) / len(variances) if variances else 0.1
 
-            # Write total report to Google Sheets
-            success = gs_client.write_total_report_data(
-                sheet_url=report.google_sheet_url,
-                sheet_name=report.worksheet_name,
-                campaigns_data=campaigns_data,
-                frequency_variance=avg_total_variance
-            )
+                success = gs_client.write_total_report_data(
+                    sheet_url=report.google_sheet_url,
+                    sheet_name=worksheet_name,
+                    campaigns_data=campaigns_data,
+                    frequency_variance=avg_total_variance
+                )
 
-            if not success:
-                raise Exception("Failed to write total report to Google Sheets")
+                if not success:
+                    raise Exception(f"Failed to write total report to Google Sheets (worksheet: '{worksheet_name}')")
+
+                total_campaigns_written += len(campaigns_data)
 
             # Log success
             avg_ctr = round(total_clicks / total_impressions * 100, 2) if total_impressions > 0 else 0
@@ -3680,7 +3722,7 @@ def run_report_old(report_id):
                 'total_impressions': total_impressions,
                 'total_clicks': total_clicks,
                 'avg_ctr': avg_ctr,
-                'campaigns_updated': len(campaigns_data)
+                'campaigns_updated': total_campaigns_written
             }
 
             log = ReportLog(
@@ -3693,7 +3735,7 @@ def run_report_old(report_id):
             report.last_update = datetime.utcnow()
             db.session.commit()
 
-            flash(f'Сводный отчёт успешно обновлен для {len(campaigns_data)} кампаний. Всего показов: {total_impressions:,}, кликов: {total_clicks:,}', 'success')
+            flash(f'Сводный отчёт успешно обновлен для {total_campaigns_written} кампаний. Всего показов: {total_impressions:,}, кликов: {total_clicks:,}', 'success')
             return redirect(url_for('reports'))
 
         # ==================== BY-CREATIVE REPORT MODE ====================
@@ -3709,17 +3751,14 @@ def run_report_old(report_id):
             print(f"   Period: {date_from.strftime('%Y-%m-%d')} to {date_to.strftime('%Y-%m-%d')}")
             print(f"{'='*60}\n")
 
-            cached_worksheet_object = gs_client.get_worksheet_object(
-                sheet_url=report.google_sheet_url,
-                sheet_name=report.worksheet_name
-            )
-            cached_worksheet_data = cached_worksheet_object.get('A1:DZ300') if cached_worksheet_object else None
-
             total_impressions = 0
             total_clicks = 0
             sections_written = 0
 
             for campaign in campaigns:
+                campaign_worksheet = _resolve_campaign_worksheet(report, campaign)
+                cache_entry = get_cached_worksheet(campaign_worksheet)
+
                 print(f"\n🔍 Fetching per-creative stats for campaign {campaign.campaign_id} ({campaign.name})")
                 ad_stats = sape_client.get_daily_stats_by_ad(
                     campaign_ids=[int(campaign.campaign_id)],
@@ -3731,9 +3770,9 @@ def run_report_old(report_id):
 
                 all_structures = gs_client.auto_detect_all_structures(
                     sheet_url=report.google_sheet_url,
-                    sheet_name=report.worksheet_name,
+                    sheet_name=campaign_worksheet,
                     campaign_id=str(campaign.campaign_id),
-                    cached_data=cached_worksheet_data,
+                    cached_data=cache_entry['data'],
                     known_ad_ids=known_ad_ids
                 )
 
@@ -3787,7 +3826,7 @@ def run_report_old(report_id):
 
                     success = gs_client.write_daily_data(
                         sheet_url=report.google_sheet_url,
-                        sheet_name=report.worksheet_name,
+                        sheet_name=campaign_worksheet,
                         daily_data=daily_data_to_write,
                         column_mapping=column_mapping,
                         data_start_row=structure['data_start_row'],
@@ -3798,7 +3837,7 @@ def run_report_old(report_id):
                         frequency=daily_frequency,
                         frequency_variance=report.frequency_variance or 0.1,
                         total_reach_coefficient=report.total_reach_coefficient or 0.96,
-                        cached_worksheet=cached_worksheet_object
+                        cached_worksheet=cache_entry['object']
                     )
 
                     if not success:
@@ -3842,40 +3881,25 @@ def run_report_old(report_id):
         sections_to_process = {}  # {frozenset(campaign_ids): {structure, campaigns}}
         failed_campaign_ids = []  # Track which campaigns failed to be found
 
+        campaign_worksheets = {c.id: _resolve_campaign_worksheet(report, c) for c in campaigns}
+        distinct_worksheets = sorted(set(campaign_worksheets.values()), key=lambda w: w or '')
+
         print(f"\n{'='*60}")
         print(f"📋 Detecting table sections for {len(campaigns)} campaigns")
         print(f"   Report: {report.name or 'Unnamed'}")
-        print(f"   Worksheet: '{report.worksheet_name}'")
+        print(f"   Worksheets in use: {distinct_worksheets}")
         print(f"   Campaign IDs: {[c.campaign_id for c in campaigns]}")
         print(f"{'='*60}")
 
-        # OPTIMIZATION: Open worksheet once and reuse for all operations
-        # This reduces API calls from N to 1 (huge speedup + avoids quota limit!)
-        print(f"📖 Opening worksheet once to cache for all operations...")
-        cached_worksheet_object = gs_client.get_worksheet_object(
-            sheet_url=report.google_sheet_url,
-            sheet_name=report.worksheet_name
-        )
-
-        if cached_worksheet_object:
-            print(f"✅ Cached worksheet object - will reuse for all operations (saves API quota)")
-            # Read data once from cached worksheet
-            cached_worksheet_data = cached_worksheet_object.get('A1:DZ300')
-            print(f"✅ Cached {len(cached_worksheet_data)} rows of data")
-            # DEBUG: Check if data is empty
-            if len(cached_worksheet_data) == 0:
-                print(f"⚠️ WARNING: Cached worksheet data is EMPTY! This will cause ID detection to fail.")
-                print(f"   Worksheet name might be incorrect or sheet might be empty.")
-        else:
-            print(f"⚠️ Failed to cache worksheet, will read individually (slower)")
-            cached_worksheet_data = None
-
-        # Extract brand from sheet (auto-detection)
+        # Extract brand from the report's default sheet (auto-detection) -
+        # this is a report-wide concept, not per-campaign, so it doesn't
+        # need to account for per-campaign worksheet overrides.
         print(f"\n🏷️ Attempting to extract brand from sheet...")
+        brand_cache_entry = get_cached_worksheet(report.worksheet_name)
         brand_name = gs_client.extract_brand_from_sheet(
             sheet_url=report.google_sheet_url,
             sheet_name=report.worksheet_name,
-            cached_worksheet=cached_worksheet_object
+            cached_worksheet=brand_cache_entry['object']
         )
 
         if brand_name:
@@ -3889,12 +3913,17 @@ def run_report_old(report_id):
         else:
             print(f"⚠️ Brand not found in sheet (searched first 10 rows for 'Бренд')")
 
-        # IMPORTANT: Find ALL sections for each campaign (a campaign may be in multiple sections)
-        # Build a unique list of sections, identified by (header_row, header_col)
-        sections_by_location = {}  # {(row, col): {structure, campaigns}}
+        # IMPORTANT: Find ALL sections for each campaign (a campaign may be in multiple sections).
+        # Build a unique list of sections, identified by (worksheet, header_row, header_col) -
+        # the worksheet is part of the key so campaigns pinned to different
+        # sheets never get merged into the same section just because their
+        # header happens to land on the same row/col in two different sheets.
+        sections_by_location = {}  # {(worksheet, row, col): {structure, campaigns, worksheet}}
 
         for idx, campaign in enumerate(campaigns, 1):
-            print(f"\n🔍 [{idx}/{len(campaigns)}] Searching for campaign {campaign.campaign_id} ({campaign.name})")
+            campaign_worksheet = campaign_worksheets[campaign.id]
+            cache_entry = get_cached_worksheet(campaign_worksheet)
+            print(f"\n🔍 [{idx}/{len(campaigns)}] Searching for campaign {campaign.campaign_id} ({campaign.name}) in worksheet '{campaign_worksheet}'")
 
             # Minimal delay since we use cached data (no API calls during detection)
             if idx > 1:
@@ -3904,9 +3933,9 @@ def run_report_old(report_id):
             # Find ALL sections containing this campaign (not just first one!)
             all_structures = gs_client.auto_detect_all_structures(
                 sheet_url=report.google_sheet_url,
-                sheet_name=report.worksheet_name,
+                sheet_name=campaign_worksheet,
                 campaign_id=str(campaign.campaign_id),
-                cached_data=cached_worksheet_data
+                cached_data=cache_entry['data']
             )
 
             if not all_structures:
@@ -3918,16 +3947,19 @@ def run_report_old(report_id):
 
             # Add this campaign to each section where it appears
             for structure in all_structures:
-                # Use (header_row, header_col) as unique section identifier
-                section_location = (structure['header_row'], structure['header_col'])
+                # Use (worksheet, header_row, header_col) as unique section
+                # identifier - keeps sections on different sheets separate
+                # even if their header lands on the same row/col.
+                section_location = (campaign_worksheet, structure['header_row'], structure['header_col'])
 
                 if section_location not in sections_by_location:
                     sections_by_location[section_location] = {
                         'structure': structure,
                         'campaigns': [],
-                        'header_ids': structure.get('campaign_ids', [])
+                        'header_ids': structure.get('campaign_ids', []),
+                        'worksheet': campaign_worksheet
                     }
-                    print(f"   📍 New section at row {structure['header_row']}, col {structure['header_col']}: IDs {structure.get('campaign_ids', [])}")
+                    print(f"   📍 New section in '{campaign_worksheet}' at row {structure['header_row']}, col {structure['header_col']}: IDs {structure.get('campaign_ids', [])}")
 
                 # Add campaign to this section
                 sections_by_location[section_location]['campaigns'].append(campaign)
@@ -3942,14 +3974,17 @@ def run_report_old(report_id):
 
         if len(sections_to_process) == 0:
             error_msg = f"Не удалось найти ни одной секции в Google таблице для выбранных кампаний.\n"
-            error_msg += f"Лист: '{report.worksheet_name}'\n"
+            error_msg += f"Листы: {', '.join(repr(w) for w in distinct_worksheets)}\n"
             error_msg += f"Искали ID: {', '.join(failed_campaign_ids[:10])}\n"
 
-            # Try to find ANY 6-digit IDs in the table to help with debugging
-            if cached_worksheet_data:
+            # Try to find ANY 6-digit IDs in the searched sheets to help with debugging
+            all_ids_in_table = set()
+            for worksheet_name in distinct_worksheets:
+                sheet_data = get_cached_worksheet(worksheet_name)['data']
+                if not sheet_data:
+                    continue
                 import re
-                all_ids_in_table = set()
-                for row in cached_worksheet_data[:50]:  # Check first 50 rows
+                for row in sheet_data[:50]:  # Check first 50 rows
                     if not row:
                         continue
                     for cell in row:
@@ -3957,14 +3992,14 @@ def run_report_old(report_id):
                             found = re.findall(r'(?:ID\s*)?(\d{6})\b', str(cell))
                             all_ids_in_table.update(found)
 
-                if all_ids_in_table:
-                    error_msg += f"ID найденные в таблице: {', '.join(sorted(list(all_ids_in_table))[:15])}\n"
-                else:
-                    error_msg += f"⚠️ В таблице не найдено ни одного 6-значного ID!\n"
-                    error_msg += f"Возможно выбран неправильный лист или таблица пустая.\n"
+            if all_ids_in_table:
+                error_msg += f"ID найденные в таблице: {', '.join(sorted(list(all_ids_in_table))[:15])}\n"
+            else:
+                error_msg += f"⚠️ В таблице не найдено ни одного 6-значного ID!\n"
+                error_msg += f"Возможно выбран неправильный лист или таблица пустая.\n"
 
             error_msg += f"Проверьте что ID кампаний присутствуют в заголовках таблицы.\n"
-            error_msg += f"Система ищет 6-значные ID по всей таблице листа '{report.worksheet_name}'."
+            error_msg += f"Система ищет 6-значные ID по листам: {', '.join(distinct_worksheets)}."
             print(f"❌ {error_msg}")
             raise Exception(error_msg)
 
@@ -3983,6 +4018,7 @@ def run_report_old(report_id):
                 structure = section_data['structure']
                 section_campaigns = section_data['campaigns']
                 header_ids = section_data['header_ids']
+                section_worksheet = section_data['worksheet']
 
                 print(f"\n{'='*60}")
                 if len(header_ids) > 1:
@@ -4203,7 +4239,7 @@ def run_report_old(report_id):
                 print(f"🔍 DEBUG: About to write {len(daily_data_to_write)} days to Google Sheets...")
                 success = gs_client.write_daily_data(
                     sheet_url=report.google_sheet_url,
-                    sheet_name=report.worksheet_name,  # Use worksheet from report config
+                    sheet_name=section_worksheet,
                     daily_data=daily_data_to_write,
                     column_mapping=column_mapping,
                     data_start_row=structure['data_start_row'],
@@ -4215,7 +4251,7 @@ def run_report_old(report_id):
                     frequency=avg_frequency,
                     frequency_variance=report.frequency_variance or 0.1,
                     total_reach_coefficient=report.total_reach_coefficient or 0.96,
-                    cached_worksheet=cached_worksheet_object  # Pass cached worksheet
+                    cached_worksheet=get_cached_worksheet(section_worksheet)['object']
                 )
                 print(f"🔍 DEBUG: write_daily_data returned: {success}")
 
@@ -4224,7 +4260,7 @@ def run_report_old(report_id):
                     print(f"❌ {error_msg}")
                     print(f"   Campaigns in section: {[campaigns_by_sape_id.get(cid).name for cid in header_ids if campaigns_by_sape_id.get(cid)]}")
                     print(f"   Data points to write: {len(daily_data_to_write)}")
-                    print(f"   Worksheet: {report.worksheet_name}")
+                    print(f"   Worksheet: {section_worksheet}")
                     raise Exception(error_msg)
 
                 # Accumulate metrics
@@ -4469,6 +4505,12 @@ def edit_report(report_id):
                 }
                 campaign_frequencies[str(cid)] = 3.0
 
+            # Per-campaign worksheet pin - if left blank, the campaign falls
+            # back to the report's shared worksheet_name at run time.
+            campaign_worksheet = request.form.get(f'worksheet_{cid}', '').strip()
+            if campaign_worksheet:
+                campaign_settings[str(cid)]['worksheet_name'] = campaign_worksheet
+
             # Update format if changed
             format_key = f'format_{cid}'
             format_value = request.form.get(format_key)
@@ -4558,18 +4600,9 @@ def edit_report(report_id):
             flash('Отчет успешно обновлен', 'success')
         return redirect(url_for('reports'))
 
-    # GET request - show edit form
-    account = report.campaign.account
-    accounts = SapeAccount.query.filter_by(active=True).all()
-
-    # Get all campaigns for this account
-    campaigns = Campaign.query.filter_by(account_id=account.id, active=True).all()
-
-    return render_template('edit_report.html',
-                         report=report,
-                         accounts=accounts,
-                         account=account,
-                         campaigns=campaigns)
+    # No standalone edit page anymore - editing happens via the modal on
+    # the reports list (reports.html).
+    return redirect(url_for('reports'))
 
 
 @app.route('/reports/<int:report_id>/archive', methods=['POST'])

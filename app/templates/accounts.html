@@ -241,10 +241,13 @@
 
 .kebab-dropdown {
     display: none;
-    position: absolute;
-    right: 0;
-    top: 100%;
-    margin-top: 4px;
+    /* position: fixed, not absolute - the table sits in .table-container
+       which needs overflow: hidden for its rounded corners, and that same
+       overflow: hidden clips an absolutely-positioned dropdown the moment
+       it would extend past the container's edge (e.g. the last/only row
+       in a short filtered list). Fixed positioning escapes that clipping;
+       exact coordinates are set in JS from the button's position on open. */
+    position: fixed;
     background: white;
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -553,6 +556,12 @@ function toggleKebabMenu(event, accountId) {
         if (d !== dropdown) d.classList.remove('show');
     });
 
+    const willShow = !dropdown.classList.contains('show');
+    if (willShow) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        dropdown.style.top = (rect.bottom + 4) + 'px';
+        dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+    }
     dropdown.classList.toggle('show');
 }
 
@@ -560,6 +569,12 @@ function toggleKebabMenu(event, accountId) {
 document.addEventListener('click', () => {
     document.querySelectorAll('.kebab-dropdown').forEach(d => d.classList.remove('show'));
 });
+
+// Fixed-position dropdowns don't move with the page - close on scroll so
+// one doesn't end up visually detached from its button.
+window.addEventListener('scroll', () => {
+    document.querySelectorAll('.kebab-dropdown').forEach(d => d.classList.remove('show'));
+}, true);
 
 // Toggle account from kebab menu
 function toggleAccountFromMenu(accountId, newStatus) {
