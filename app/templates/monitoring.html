@@ -29,7 +29,9 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                     <span class="tab-button tab-active" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Архив</span>
                 {% else %}
                     <span class="tab-button tab-active" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Активные</span>
+                    {% if session.get('user_role') != 'account_manager' %}
                     <a href="{{ url_for('monitoring', show_archived='true') }}" class="tab-button" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Архив</a>
+                    {% endif %}
                 {% endif %}
             </div>
             <span onclick="selectAllMonitorings()"

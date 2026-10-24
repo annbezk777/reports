@@ -170,9 +170,20 @@ ADMIN_EMAIL = 'a.bereznyak@sape.ru'
 
 ROLE_TRAFFIC_MANAGER = 'traffic_manager'
 ROLE_ACCOUNT_MANAGER = 'account_manager'
+ROLE_ADMIN = 'admin'
+# ROLES is the full set, used to label every user in the list (including
+# ADMIN_EMAIL's own "Администратор" row). ASSIGNABLE_ROLES is the subset
+# offered in the create/change-role dropdowns - "admin" isn't picked from
+# a dropdown, it's tied to ADMIN_EMAIL, so offering it there would be
+# misleading (picking it wouldn't actually grant admin_required access).
 ROLES = {
     ROLE_TRAFFIC_MANAGER: 'Трафик-менеджер',
     ROLE_ACCOUNT_MANAGER: 'Аккаунт-менеджер (просмотр мониторинга)',
+    ROLE_ADMIN: 'Администратор',
+}
+ASSIGNABLE_ROLES = {
+    ROLE_TRAFFIC_MANAGER: ROLES[ROLE_TRAFFIC_MANAGER],
+    ROLE_ACCOUNT_MANAGER: ROLES[ROLE_ACCOUNT_MANAGER],
 }
 
 
@@ -279,7 +290,7 @@ def register():
             flash('Пароли не совпадают', 'error')
             return redirect(url_for('register'))
 
-        if role not in ROLES:
+        if role not in ASSIGNABLE_ROLES:
             flash('Неизвестная роль', 'error')
             return redirect(url_for('register'))
 
@@ -314,7 +325,8 @@ VALUES (?, ?, NULL, 1, 1, ?)
     users = cursor.fetchall()
     conn.close()
 
-    return render_template('register.html', users=users, roles=ROLES)
+    return render_template('register.html', users=users, roles=ROLES,
+                         assignable_roles=ASSIGNABLE_ROLES, admin_email=ADMIN_EMAIL)
 
 
 @app.route('/users/<int:user_id>/set-role', methods=['POST'])
@@ -322,7 +334,7 @@ VALUES (?, ?, NULL, 1, 1, ?)
 def admin_set_role(user_id):
     """Change an existing user's role."""
     role = request.form.get('role', '').strip()
-    if role not in ROLES:
+    if role not in ASSIGNABLE_ROLES:
         flash('Неизвестная роль', 'error')
         return redirect(url_for('register'))
 
@@ -1334,8 +1346,14 @@ def scheduled_sync_all_accounts():
 @block_account_manager
 def reports():
     """List of report configurations"""
-    # Check if user wants to see archived reports
-    show_archived = request.args.get('show_archived', 'false').lower() == 'true'
+    # Check if user wants to see archived reports. Account-manager is
+    # view-only and doesn't get the archive view; Трафик-менеджер still can
+    # (can restore from it) even though only the admin can delete - those
+    # are two different permissions (see task #17).
+    show_archived = (
+        request.args.get('show_archived', 'false').lower() == 'true'
+        and session.get('user_role') != ROLE_ACCOUNT_MANAGER
+    )
 
     # Get manager filter from URL or session
     manager_filter = request.args.get('manager', None)
@@ -1392,7 +1410,8 @@ def reports():
                          show_archived=show_archived,
                          manager_filter=manager_filter,
                          accounts=accounts,
-                         months_list=months_list)
+                         months_list=months_list,
+                         admin_email=ADMIN_EMAIL)
 
 
 # ============================================================================
@@ -1405,7 +1424,13 @@ def monitoring():
     """List of monitoring campaigns"""
     # Get manager filter from URL or session
     manager_filter = request.args.get('manager', None)
-    show_archived = request.args.get('show_archived', 'false').lower() == 'true'
+    # Account-manager is view-only and doesn't get the archive view;
+    # Трафик-менеджер still can (can restore from it) even though only the
+    # admin can delete - those are two different permissions (see task #17).
+    show_archived = (
+        request.args.get('show_archived', 'false').lower() == 'true'
+        and session.get('user_role') != ROLE_ACCOUNT_MANAGER
+    )
 
     # Build query
     query = MonitoringCampaign.query.filter(MonitoringCampaign.archived == show_archived)
@@ -1426,7 +1451,8 @@ def monitoring():
                          monitorings=all_monitorings,
                          manager_filter=manager_filter,
                          show_archived=show_archived,
-                         accounts=accounts)
+                         accounts=accounts,
+                         admin_email=ADMIN_EMAIL)
 
 
 @app.route('/monitoring/<int:monitoring_id>')
@@ -4665,8 +4691,7 @@ def bulk_archive_reports():
 
 
 @app.route('/reports/bulk-delete', methods=['POST'])
-@login_required
-@block_account_manager
+@admin_required
 def bulk_delete_reports():
     """Permanently delete multiple reports at once"""
     report_ids = (request.get_json(silent=True) or {}).get('report_ids', [])

@@ -96,7 +96,7 @@
                         <span style="color: var(--primary-orange);">*</span>
                     </label>
                     <select name="role" id="role" style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; color: var(--text-primary);">
-                        {% for value, label in roles.items() %}
+                        {% for value, label in assignable_roles.items() %}
                         <option value="{{ value }}">{{ label }}</option>
                         {% endfor %}
                     </select>
@@ -134,9 +134,11 @@
                         <button type="button" onclick="toggleReset({{ u.id }})" style="border: none; background: none; color: var(--primary-orange); font-size: 13px; font-weight: 500; cursor: pointer; padding: 4px 8px;">
                             Сбросить пароль
                         </button>
+                        {% if u.email != admin_email %}
                         <button type="button" onclick="toggleRole({{ u.id }})" style="border: none; background: none; color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; padding: 4px 8px;">
                             Роль
                         </button>
+                        {% endif %}
                     </div>
                 </div>
                 <form id="reset-form-{{ u.id }}" method="POST" action="{{ url_for('admin_reset_password', user_id=u.id) }}" style="display: none; margin-top: 12px; gap: 8px; align-items: center;">
@@ -144,14 +146,16 @@
                            style="flex: 1; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">
                     <button type="submit" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;">Сохранить</button>
                 </form>
+                {% if u.email != admin_email %}
                 <form id="role-form-{{ u.id }}" method="POST" action="{{ url_for('admin_set_role', user_id=u.id) }}" style="display: none; margin-top: 12px; gap: 8px; align-items: center;">
                     <select name="role" style="flex: 1; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">
-                        {% for value, label in roles.items() %}
+                        {% for value, label in assignable_roles.items() %}
                         <option value="{{ value }}" {% if u.role == value %}selected{% endif %}>{{ label }}</option>
                         {% endfor %}
                     </select>
                     <button type="submit" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;">Сохранить</button>
                 </form>
+                {% endif %}
             </div>
             {% else %}
             <div style="padding: 20px; text-align: center; font-size: 13px; color: var(--text-secondary);">Пользователей пока нет</div>
