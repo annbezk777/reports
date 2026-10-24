@@ -110,6 +110,7 @@
         {% if reports %}
             {% for report in reports %}
             <div class="report-card"
+                 id="report-card-{{ report.id }}"
                  data-name="{{ (report.name if report.name else report.campaign.name)|lower }}"
                  data-brand="{{ report.brand|lower if report.brand else '' }}"
                  data-manager="{{ report.manager|lower if report.manager else 'unassigned' }}"
@@ -1070,6 +1071,20 @@ function bulkDeleteSelected() {
 document.addEventListener('DOMContentLoaded', function() {
     restoreReportsFilterState();
     filterReports();
+
+    // Deep link from Главная ("Отчёты, требующие внимания") -
+    // ?highlight=<id> scrolls to and highlights that report's card.
+    const highlightId = new URLSearchParams(window.location.search).get('highlight');
+    if (highlightId) {
+        const card = document.getElementById('report-card-' + highlightId);
+        if (card) {
+            card.style.display = '';
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.style.transition = 'box-shadow 0.3s';
+            card.style.boxShadow = '0 0 0 2px var(--primary-orange)';
+            setTimeout(() => { card.style.boxShadow = ''; }, 2500);
+        }
+    }
 });
 
 function openDatePickerModal(reportId, reportName) {

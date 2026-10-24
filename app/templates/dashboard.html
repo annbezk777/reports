@@ -330,9 +330,10 @@
         </div>
     </div>
 
-    <!-- Reports Needing Attention -->
+    <!-- Reports Needing Attention + Recent Activity -->
+    <div style="display: grid; grid-template-columns: {{ '1fr 1fr' if problem_reports else '1fr' }}; gap: 24px; margin-bottom: 32px;">
     {% if problem_reports %}
-    <div class="metric-card" style="margin-bottom: 32px;">
+    <div class="metric-card">
         <div style="margin-bottom: 20px;">
             <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">
                 Отчёты, требующие внимания
@@ -343,14 +344,11 @@
         </div>
         <div style="max-height: 300px; overflow-y: auto;">
             {% for r in problem_reports %}
-            <div style="padding: 12px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
-                <div>
-                    <div style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">{{ r.name }}</div>
-                    {% for issue in r.issues %}
-                    <div style="font-size: 12px; color: {{ '#dc2626' if issue.severity == 'error' else 'var(--primary-orange)' }};">{{ issue.text }}</div>
-                    {% endfor %}
-                </div>
-                <a href="{{ url_for('reports') }}" class="btn btn-secondary" style="flex-shrink: 0; padding: 6px 12px; font-size: 11px;">Открыть</a>
+            <div style="padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                <a href="{{ url_for('reports', highlight=r.id) }}" style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; text-decoration: none;" onmouseover="this.style.color='var(--primary-orange)';" onmouseout="this.style.color='var(--text-primary)';">{{ r.name }}</a>
+                {% for issue in r.issues %}
+                <div style="font-size: 12px; color: {{ '#dc2626' if issue.severity == 'error' else 'var(--primary-orange)' }};">{{ issue.text }}</div>
+                {% endfor %}
             </div>
             {% endfor %}
         </div>
@@ -405,6 +403,7 @@
                 </p>
             {% endif %}
         </div>
+    </div>
     </div>
 
     <!-- Quick Actions -->
