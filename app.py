@@ -1547,8 +1547,7 @@ def copy_monitoring(monitoring_id):
 
 
 @app.route('/monitoring/<int:monitoring_id>/delete', methods=['POST'])
-@login_required
-@block_account_manager
+@admin_required
 def delete_monitoring(monitoring_id):
     """Delete monitoring campaign"""
     monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
@@ -1574,8 +1573,7 @@ def bulk_archive_monitorings():
 
 
 @app.route('/monitoring/bulk-delete', methods=['POST'])
-@login_required
-@block_account_manager
+@admin_required
 def bulk_delete_monitorings():
     """Permanently delete multiple monitoring campaigns at once"""
     monitoring_ids = (request.get_json(silent=True) or {}).get('monitoring_ids', [])

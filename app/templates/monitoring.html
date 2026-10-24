@@ -97,7 +97,9 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
     <div id="bulkMonitoringActionBar" style="display: none; align-items: center; gap: 12px; padding: 10px 16px; margin-bottom: 16px; background: var(--bg-light); border-radius: 8px; font-size: 10px;">
         <span id="bulkMonitoringSelectedCount" style="color: var(--text-secondary);"></span>
         {% if show_archived %}
+        {% if session.get('user_email') == admin_email %}
         <button onclick="bulkDeleteMonitoringsSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">Удалить</button>
+        {% endif %}
         {% else %}
         <button onclick="bulkArchiveMonitoringsSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">В архив</button>
         {% endif %}
@@ -480,6 +482,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     </button>
                                 </form>
                                 {% endif %}
+                                {% if session.get('user_email') == admin_email %}
                                 <div class="kebab-divider"></div>
                                 <form action="{{ url_for('delete_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;" onsubmit="return confirm('Вы уверены, что хотите удалить этот мониторинг?\n\nЭто действие необратимо.');">
                                     <button type="submit" class="kebab-item kebab-item-danger" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
@@ -489,6 +492,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         Удалить
                                     </button>
                                 </form>
+                                {% endif %}
                             </div>
                         </div>
                         {% endif %}
