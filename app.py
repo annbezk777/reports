@@ -612,7 +612,7 @@ def dashboard():
             performance_buckets['none'] += 1
             continue
         entry = {'id': mo.id, 'name': mo.name, 'percent': perf, 'metric': metric}
-        if perf >= 100:
+        if perf >= 95:
             performance_buckets['green'] += 1
             performance_details['green'].append(entry)
         elif perf >= 80:
@@ -701,13 +701,13 @@ def dashboard():
     for r in active_reports:
         issues = []
         if r.schedule_enabled and not r.schedule_days:
-            issues.append('Расписание включено, но дни не выбраны')
+            issues.append({'text': 'Расписание включено, но дни не выбраны', 'severity': 'warning'})
         if r.schedule_enabled and not r.last_update:
-            issues.append('Ни разу не запускался')
+            issues.append({'text': 'Ни разу не запускался', 'severity': 'warning'})
         last_log = ReportLog.query.filter_by(report_config_id=r.id).order_by(ReportLog.executed_at.desc()).first()
         if last_log and last_log.status == 'error':
             err = (last_log.error_message or '').strip().split('\n')[0][:120]
-            issues.append(f'Последний запуск с ошибкой: {err}' if err else 'Последний запуск с ошибкой')
+            issues.append({'text': f'Последний запуск с ошибкой: {err}' if err else 'Последний запуск с ошибкой', 'severity': 'error'})
         if issues:
             problem_reports.append({
                 'id': r.id,
@@ -715,12 +715,12 @@ def dashboard():
                 'issues': issues
             })
 
-    # 6. Campaigns ending within the next 5 days
+    # 6. Campaigns ending within the next 3 days
     today = now.date()
     ending_soon = MonitoringCampaign.query.filter(
         MonitoringCampaign.archived == False,
         MonitoringCampaign.date_to >= today,
-        MonitoringCampaign.date_to <= today + timedelta(days=5)
+        MonitoringCampaign.date_to <= today + timedelta(days=3)
     ).order_by(MonitoringCampaign.date_to).all()
     ending_soon_data = [
         {'id': mo.id, 'name': mo.name, 'date_to': mo.date_to, 'days_left': (mo.date_to - today).days}

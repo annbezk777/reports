@@ -57,7 +57,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
         <!-- Manager Filter -->
         <select id="managerFilter" onchange="filterMonitoring()"
                 style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="">Все ADOPS</option>
+            <option value="">Трафик-менеджер</option>
             {% set all_managers = monitorings | map(attribute='manager') | select | unique | list %}
             {% for manager in all_managers %}
                 <option value="{{ manager|lower }}" {% if manager_filter and manager_filter|lower == manager|lower %}selected{% endif %}>
@@ -70,7 +70,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
         <!-- Account Manager Filter -->
         <select id="accountManagerFilter" onchange="filterMonitoring()"
                 style="width: 150px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="">Все Account</option>
+            <option value="">Аккаунт-менеджер</option>
             {% set all_account_managers = monitorings | map(attribute='account_manager') | select | unique | list %}
             {% for am in all_account_managers %}
                 <option value="{{ am|lower }}">{{ am|am_label }}</option>
@@ -88,17 +88,17 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 
         <!-- Action Buttons -->
         {% if monitorings and session.get('user_role') != 'account_manager' %}
-        <button onclick="refreshAllMonitorings()" class="btn btn-primary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px;">
-            <svg class="btn-icon" style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-            Обновить все
-        </button>
         <button onclick="openMonitoringModal()" class="btn btn-secondary" style="width: 160px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px; color: var(--text-secondary); white-space: nowrap;">
             <svg class="btn-icon" style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
             Добавить мониторинг
+        </button>
+        <button onclick="refreshAllMonitorings()" class="btn btn-primary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px;">
+            <svg class="btn-icon" style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Обновить все
         </button>
         {% endif %}
     </div>
@@ -179,7 +179,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 
                                 <!-- Manager -->
                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="color: var(--text-secondary);">ADOPS:</span>
+                                    <span style="color: var(--text-secondary);">Трафик-менеджер:</span>
                                     <strong style="color: var(--text-primary); font-weight: 500;">{{ monitoring.manager }}</strong>
                                 </div>
                                 {% endif %}
@@ -189,7 +189,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 
                                 <!-- Account Manager -->
                                 <div style="display: flex; align-items: center; gap: 6px;">
-                                    <span style="color: var(--text-secondary);">Account:</span>
+                                    <span style="color: var(--text-secondary);">Аккаунт-менеджер:</span>
                                     <strong style="color: var(--text-primary); font-weight: 500;" title="{{ monitoring.account_manager }}">{{ monitoring.account_manager|am_label }}</strong>
                                 </div>
                                 {% endif %}
@@ -1847,7 +1847,7 @@ function fetchAsanaTaskInfo(asanaUrl, amDisplayId) {
             }
             if (amDisplay) {
                 if (data.account_manager_label) {
-                    amDisplay.textContent = `Account (из Asana): ${data.account_manager_label}`;
+                    amDisplay.textContent = `Аккаунт-менеджер (из Asana): ${data.account_manager_label}`;
                     amDisplay.style.display = 'block';
                 } else {
                     amDisplay.style.display = 'none';
