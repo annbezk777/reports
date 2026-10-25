@@ -243,14 +243,21 @@
                         <div>
                             <a href="{{ url_for('monitoring', open=v.id) }}" style="font-size: 13px; color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color='var(--primary-orange)';" onmouseout="this.style.color='var(--text-primary)';">{{ v.name }}</a>
                             <div style="font-size: 11px; color: var(--text-secondary);">
-                                {{ v.type }}
-                                {% if v.is_stale %}
-                                · <span style="color: var(--primary-orange); font-weight: 600;">{{ 'не обновлялось ' ~ v.days_stale ~ ' дн.' if v.days_stale is not none else 'дата обновления неизвестна' }}</span>
+                                {{ v.type }} ·
+                                {% if v.days_stale is none %}
+                                <span style="color: var(--primary-orange); font-weight: 600;">дата обновления неизвестна</span>
+                                {% elif v.is_stale %}
+                                <span style="color: var(--primary-orange); font-weight: 600;">не обновлялось {{ v.days_stale }} дн.</span>
+                                {% elif v.days_stale == 0 %}
+                                <span>обновлено сегодня</span>
+                                {% elif v.days_stale == 1 %}
+                                <span>обновлено вчера</span>
+                                {% else %}
+                                <span>обновлено {{ v.days_stale }} дн. назад</span>
                                 {% endif %}
                             </div>
                         </div>
-                        {% if v.is_stale %}
-                        {% else %}
+                        {% if not v.is_stale %}
                         <strong style="font-size: 13px; color: {{ row_color }}; flex-shrink: 0; margin-left: 8px;">{{ '+' if v.diff > 0 else '' }}{{ v.diff }}%</strong>
                         {% endif %}
                     </div>
