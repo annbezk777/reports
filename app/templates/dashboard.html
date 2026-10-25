@@ -77,25 +77,38 @@
 
     <!-- Charts Row -->
     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 32px;">
-        <!-- Active Reports by Month -->
+        <!-- Metric Success Rates (compact) -->
         <div class="metric-card">
-            <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+                <div style="width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--peach-light) 0%, var(--peach-bg) 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg width="16" height="16" fill="none" stroke="var(--primary-orange)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v6m3-6v6m3-6v6M5 9l4-4 4 4 6-6"/></svg>
+                </div>
                 <div>
-                    <h3 id="reportsChartTitle" style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">
-                        Активные отчеты по дням
+                    <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                        Метрики успешности
                     </h3>
-                    <p id="reportsChartSubtitle" style="font-size: 13px; color: var(--text-secondary); margin: 0;">
-                        Создание отчетов в {{ daily_chart_data.month_label }}
+                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+                        По трафик-менеджерам, относительно плана
                     </p>
                 </div>
-                <div style="display: flex; gap: 4px; background: var(--bg-light); border-radius: 8px; padding: 3px; flex-shrink: 0;">
-                    <button id="reportsChartBtnDaily" onclick="setReportsChartMode('daily')" style="border: none; background: #fff; color: var(--text-primary); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 6px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.08);">По дням</button>
-                    <button id="reportsChartBtnMonthly" onclick="setReportsChartMode('monthly')" style="border: none; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 6px; cursor: pointer;">По месяцам</button>
+            </div>
+            {% if manager_metric_success %}
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
+                {% for manager_name, metrics in manager_metric_success.items() %}
+                {% set manager_idx = loop.index %}
+                <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 12px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">{{ manager_name }}</span>
+                        <span style="font-size: 10px; font-weight: 600; color: var(--primary-orange); background: var(--peach-bg); border-radius: 999px; padding: 2px 8px; white-space: nowrap;">{{ manager_avg_success[loop.index0].percent }}%</span>
+                    </div>
+                    <div style="height: 190px; position: relative;">
+                        <canvas id="managerBarChart-{{ manager_idx }}"></canvas>
+                    </div>
+                    <div id="managerDetail-{{ manager_idx }}" style="display: none; margin-top: 8px;"></div>
                 </div>
+                {% endfor %}
             </div>
-            <div style="height: 250px; position: relative;">
-                <canvas id="reportsChart"></canvas>
-            </div>
+            {% endif %}
         </div>
 
         <!-- Ending Soon -->
@@ -134,7 +147,7 @@
                 </div>
                 <div>
                     <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
-                        Выполнение плана
+                        Выполнение плана по показам/кликам
                     </h3>
                     <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
                         Активные мониторинги, равномерное распределение по дням
@@ -248,6 +261,7 @@
             {% endif %}
         </div>
     </div>
+
 
     <!-- Traffic Quality Row -->
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
@@ -457,6 +471,17 @@ function togglePerfBucket(bucket) {
     if (chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
+// Toggle the campaign list under each metric-success row
+function toggleMetricBucket(key) {
+    const detail = document.getElementById('metric-detail-' + key);
+    const chevron = document.getElementById('metric-chevron-' + key);
+    if (!detail) return;
+
+    const isOpen = detail.style.display === 'block';
+    detail.style.display = isOpen ? 'none' : 'block';
+    if (chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
 // Toggle the monitoring list under each IVT source
 function toggleIvtBucket(source) {
     const detail = document.getElementById('ivt-detail-' + source);
@@ -466,107 +491,6 @@ function toggleIvtBucket(source) {
     const isOpen = detail.style.display === 'block';
     detail.style.display = isOpen ? 'none' : 'block';
     if (chevron) chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
-}
-
-// Reports Chart
-const reportsChartData = {
-    daily: {{ daily_chart_data | tojson }},
-    monthly: {{ chart_data | tojson }}
-};
-const ctx = document.getElementById('reportsChart').getContext('2d');
-const reportsChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-        labels: reportsChartData.daily.labels,
-        datasets: [{
-            label: 'Новых отчетов',
-            data: reportsChartData.daily.data,
-            borderColor: '#FF8A5B',
-            backgroundColor: 'rgba(255, 138, 91, 0.1)',
-            tension: 0.4,
-            fill: true,
-            borderWidth: 2,
-            pointBackgroundColor: '#FF8A5B',
-            pointBorderColor: '#fff',
-            pointBorderWidth: 2,
-            pointRadius: 4,
-            pointHoverRadius: 6
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                display: false
-            },
-            tooltip: {
-                backgroundColor: '#1A1A1A',
-                padding: 12,
-                titleColor: '#fff',
-                bodyColor: '#fff',
-                borderColor: '#FF8A5B',
-                borderWidth: 1,
-                displayColors: false,
-                callbacks: {
-                    title: function(context) {
-                        return context[0].label;
-                    },
-                    label: function(context) {
-                        return 'Отчетов: ' + context.parsed.y;
-                    }
-                }
-            }
-        },
-        scales: {
-            y: {
-                beginAtZero: true,
-                ticks: {
-                    stepSize: 1,
-                    color: '#9CA3AF',
-                    font: {
-                        size: 12
-                    }
-                },
-                grid: {
-                    color: '#E5E7EB',
-                    drawBorder: false
-                }
-            },
-            x: {
-                ticks: {
-                    color: '#9CA3AF',
-                    font: {
-                        size: 12
-                    }
-                },
-                grid: {
-                    display: false
-                }
-            }
-        }
-    }
-});
-
-function setReportsChartMode(mode) {
-    const d = reportsChartData[mode];
-    reportsChart.data.labels = d.labels;
-    reportsChart.data.datasets[0].data = d.data;
-    reportsChart.update();
-
-    const dailyBtn = document.getElementById('reportsChartBtnDaily');
-    const monthlyBtn = document.getElementById('reportsChartBtnMonthly');
-    const activeStyle = {background: '#fff', color: 'var(--text-primary)', boxShadow: '0 1px 2px rgba(0,0,0,0.08)'};
-    const inactiveStyle = {background: 'transparent', color: 'var(--text-secondary)', boxShadow: 'none'};
-    const active = mode === 'daily' ? dailyBtn : monthlyBtn;
-    const inactive = mode === 'daily' ? monthlyBtn : dailyBtn;
-    Object.assign(active.style, activeStyle);
-    Object.assign(inactive.style, inactiveStyle);
-
-    document.getElementById('reportsChartTitle').textContent = mode === 'daily' ? 'Активные отчеты по дням' : 'Активные отчеты по месяцам';
-    document.getElementById('reportsChartSubtitle').textContent = mode === 'daily'
-        ? 'Создание отчетов в ' + reportsChartData.daily.month_label
-        : 'Динамика создания отчетов за последние 6 месяцев';
 }
 
 // Performance (plan fulfillment) donut chart
@@ -600,6 +524,117 @@ new Chart(perfCtx, {
     }
 });
 {% endif %}
+
+// Per-manager metric bar chart - one bar per metric, sorted worst-last,
+// coloured by the same 95/80 thresholds used everywhere else on this
+// widget, with the %/ratio drawn above each bar.
+function metricBarColor(percent) {
+    if (percent >= 95) return '#10B981';
+    if (percent >= 80) return '#FF8A5B';
+    return '#9B59B6';
+}
+
+const barValueLabelPlugin = {
+    id: 'barValueLabels',
+    afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        const ratios = chart.data.datasets[0].ratios;
+        meta.data.forEach((bar, i) => {
+            const percent = chart.data.datasets[0].data[i];
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#1F2937';
+            ctx.font = '700 11px -apple-system, sans-serif';
+            ctx.fillText(percent + '%', bar.x, bar.y - 14);
+            ctx.fillStyle = '#9CA3AF';
+            ctx.font = '400 9px -apple-system, sans-serif';
+            ctx.fillText('(' + ratios[i] + ')', bar.x, bar.y - 3);
+            ctx.restore();
+        });
+    }
+};
+
+// Clicking a bar reveals the campaigns behind that metric, linking into
+// Monitoring pre-filtered by name via the existing search box (?search=).
+// Clicking the same bar again collapses it back.
+const metricDetailShownKey = {};
+
+function showMetricDetail(detailId, metric) {
+    const el = document.getElementById(detailId);
+    if (!el) return;
+
+    if (metricDetailShownKey[detailId] === metric.key) {
+        el.style.display = 'none';
+        metricDetailShownKey[detailId] = null;
+        return;
+    }
+
+    if (!metric.bad_details.length) {
+        el.innerHTML = '<div style="font-size: 13px; color: var(--text-secondary);">' + metric.label + ': все кампании выполняют план</div>';
+    } else {
+        const rows = metric.bad_details.map(b =>
+            '<div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-color);">' +
+            '<a href="/monitoring?search=' + encodeURIComponent(b.name) + '" style="font-size: 12px; color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color=\'var(--primary-orange)\';" onmouseout="this.style.color=\'var(--text-primary)\';">' + b.name + '</a>' +
+            '<span style="font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; margin-left: 8px;">' + b.diff + '</span>' +
+            '</div>'
+        ).join('');
+        el.innerHTML = '<div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">' + metric.label + ' — требуют внимания:</div>' + rows;
+    }
+    el.style.display = 'block';
+    metricDetailShownKey[detailId] = metric.key;
+}
+
+function createMetricBarChart(canvasId, detailId, metrics) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const labels = metrics.map(m => m.label);
+    const percents = metrics.map(m => m.percent);
+    const ratios = metrics.map(m => m.ratio_string);
+    new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: percents,
+                ratios: ratios,
+                backgroundColor: percents.map(metricBarColor),
+                borderRadius: 3,
+                maxBarThickness: 18
+            }]
+        },
+        plugins: [barValueLabelPlugin],
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 28 } },
+            scales: {
+                y: { min: 0, max: 100, ticks: { stepSize: 50, color: '#9CA3AF', font: { size: 9 }, callback: (v) => v + '%' }, grid: { color: '#F3F4F6' } },
+                x: { grid: { display: false }, ticks: { color: '#374151', font: { size: 9, weight: '500' } } }
+            },
+            onClick: (evt, elements) => {
+                if (!elements.length) return;
+                showMetricDetail(detailId, metrics[elements[0].index]);
+            },
+            onHover: (evt, elements) => {
+                evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false }
+            }
+        }
+    });
+}
+
+{% for manager_name, metrics in manager_metric_success.items() %}
+{% set sorted_metrics = metrics|sort(attribute='percent', reverse=True) %}
+createMetricBarChart(
+    'managerBarChart-{{ loop.index }}',
+    'managerDetail-{{ loop.index }}',
+    {{ sorted_metrics|tojson }}
+);
+{% endfor %}
 
 </script>
 {% endblock %}

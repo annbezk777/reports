@@ -625,6 +625,92 @@ def dashboard():
     for bucket in performance_details.values():
         bucket.sort(key=lambda e: e['percent'])
 
+    # 1b. Success rate per non-volume metric (CTR, VTR, Отказы, Время,
+    # Роботность, PI) - "X/Y кампаний выполняют метрику", using the same
+    # good/bad direction already established by each diff method's sign
+    # convention and the colour coding on the monitoring table itself.
+    # VTR only applies to video-format monitorings - VR (banner/TGB) is a
+    # different metric that isn't tracked here. Глубина dropped entirely -
+    # not a reliable enough signal to include. Время/PI get a tolerance
+    # band (small shortfalls still count as meeting the KPI) since a
+    # strict >0 cutoff flagged near-misses as failures.
+    # CTR tolerance differs by creative format - banner CTRs sit much
+    # closer to their plan than video CTRs do, so a flat cutoff flagged
+    # video campaigns too aggressively.
+    def ctr_tolerance(mo):
+        return 0.1 if mo.is_video_format() else 0.03
+
+    METRIC_DEFS = [
+        ('ctr', 'CTR', lambda mo: mo.get_ctr_diff(), False, None, ctr_tolerance),
+        ('vtr', 'VTR', lambda mo: mo.get_vtr_diff(), False, lambda mo: mo.is_video_format(), 0),
+        ('bounce', 'Отказы', lambda mo: mo.get_bounce_diff(), True, None, 5),
+        ('time', 'Время', lambda mo: mo.get_time_diff_seconds(), False, None, 10),
+        ('robotness', 'Роботность', lambda mo: mo.get_robotness_diff(), True, None, 0),
+        ('pi', 'PI', lambda mo: mo.get_pi_diff_percent(), False, None, 5),
+    ]
+    def compute_metric_success(monitorings):
+        results = []
+        for key, label, diff_fn, inverse, applies_fn, tolerance in METRIC_DEFS:
+            good = 0
+            total = 0
+            bad_details = []
+            for mo in monitorings:
+                if applies_fn and not applies_fn(mo):
+                    continue
+                diff = diff_fn(mo)
+                if diff is None:
+                    continue
+                total += 1
+                tol = tolerance(mo) if callable(tolerance) else tolerance
+                if (diff <= tol) if inverse else (diff >= -tol):
+                    good += 1
+                else:
+                    bad_details.append({'id': mo.id, 'name': mo.name, 'diff': diff})
+            if total == 0:
+                continue
+            bad_details.sort(key=lambda e: abs(e['diff']), reverse=True)
+            percent = round(good / total * 100)
+            results.append({
+                'key': key, 'label': label, 'good': good, 'total': total,
+                'percent': percent, 'bad_details': bad_details,
+                'ratio_string': f'{good}/{total}'
+            })
+        return results
+
+    metric_success = compute_metric_success(active_monitorings)
+
+    def bucket_color(percent):
+        if percent >= 95:
+            return '#10B981'
+        if percent >= 80:
+            return '#FF8A5B'
+        return '#9B59B6'
+
+    # Same success rates again, but split out per trafik-menedzher (collapsed
+    # drill-down on the dashboard) - each manager only appears if they have
+    # at least one monitoring with usable data for some metric. A small
+    # donut per manager (avg % across their metrics) acts as the row's
+    # at-a-glance summary.
+    manager_names = sorted({
+        (mo.manager or '').strip() for mo in active_monitorings if (mo.manager or '').strip()
+    })
+    manager_metric_success = {}
+    for manager_name in manager_names:
+        manager_monitorings = [mo for mo in active_monitorings if (mo.manager or '').strip() == manager_name]
+        computed = compute_metric_success(manager_monitorings)
+        if computed:
+            manager_metric_success[manager_name] = computed
+
+    manager_avg_success = [
+        {
+            'name': name,
+            'percent': round(sum(m['percent'] for m in metrics) / len(metrics)),
+        }
+        for name, metrics in manager_metric_success.items()
+    ]
+    for entry in manager_avg_success:
+        entry['color'] = bucket_color(entry['percent'])
+
     # 2. Verifier discrepancies (показы) across every monitoring that has
     # Weborama and/or Adriver/TargetADS data to compare against SAPE fact.
     # A big diff can just mean the verifier side hasn't been refreshed in
@@ -734,6 +820,9 @@ def dashboard():
                          recent_activity=recent_activity,
                          performance_buckets=performance_buckets,
                          performance_details=performance_details,
+                         metric_success=metric_success,
+                         manager_metric_success=manager_metric_success,
+                         manager_avg_success=manager_avg_success,
                          verifier_avg_abs_diff=verifier_avg_abs_diff,
                          verifier_top_diffs=verifier_top_diffs,
                          avg_ivt_by_source=avg_ivt_by_source,

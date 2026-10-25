@@ -290,10 +290,10 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     <!-- ПЛАН -->
                                     <tr style="border-bottom: 1px solid #e7e5e4;">
                                         <td style="padding: 6px 8px; font-weight: 600; color: #78716c; background: white; position: sticky; left: 0; z-index: 10; border-right: 1px solid #e7e5e4; text-transform: uppercase; font-size: 8px;">План</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_impressions|default(0)).replace(',', ' ') if monitoring.plan_impressions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_clicks|default(0)).replace(',', ' ') if monitoring.plan_clicks else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_impressions|default(0)).replace(',', ' ') if monitoring.plan_impressions else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_clicks|default(0)).replace(',', ' ') if monitoring.plan_clicks else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % monitoring.get_plan_ctr()) if monitoring.get_plan_ctr() else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_visits|default(0)).replace(',', ' ') if monitoring.plan_visits else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_visits|default(0)).replace(',', ' ') if monitoring.plan_visits else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">
                                             {{ ('%.0f%%' % monitoring.get_plan_vr()) if monitoring.get_plan_vr() else '—' }}
                                         </td>
@@ -315,10 +315,10 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     <!-- ФАКТ -->
                                     <tr style="border-bottom: 1px solid #e7e5e4;">
                                         <td style="padding: 6px 8px; font-weight: 600; color: #78716c; background: white; position: sticky; left: 0; z-index: 10; border-right: 1px solid #e7e5e4; text-transform: uppercase; font-size: 8px;">Факт</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_impressions).replace(',', ' ') if monitoring.fact_impressions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_clicks).replace(',', ' ') if monitoring.fact_clicks else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_impressions).replace(',', ' ') if monitoring.fact_impressions else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_clicks).replace(',', ' ') if monitoring.fact_clicks else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.get_fact_ctr()) if monitoring.get_fact_ctr() else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_visits).replace(',', ' ') if monitoring.fact_visits else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_visits).replace(',', ' ') if monitoring.fact_visits else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">
                                             {{ ('%.0f%%' % monitoring.get_fact_vr()) if monitoring.get_fact_vr() else '—' }}
                                         </td>
@@ -334,13 +334,13 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 
                                         {% set adr_imp = monitoring.adriver_impressions %}
                                         {% set adr_clk = monitoring.adriver_clicks %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(adr_imp).replace(',', ' ') if adr_imp else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(adr_clk).replace(',', ' ') if adr_clk else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(adr_imp).replace(',', ' ') if adr_imp else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(adr_clk).replace(',', ' ') if adr_clk else '—' }}</td>
 
                                         {% set wcm_imp = monitoring.get_weborama_impressions() %}
                                         {% set wcm_clk = monitoring.get_weborama_clicks() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917; border-left: 1px solid #e7e5e4;">{{ "{:,}".format(wcm_imp).replace(',', ' ') if wcm_imp else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(wcm_clk).replace(',', ' ') if wcm_clk else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917; border-left: 1px solid #e7e5e4;">{{ "{:,}".format(wcm_imp).replace(',', ' ') if wcm_imp else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(wcm_clk).replace(',', ' ') if wcm_clk else '—' }}</td>
                                     </tr>
 
                                     <!-- ВЫПОЛНЕНИЕ -->
@@ -354,28 +354,28 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if perf_clicks %}color: {% if perf_clicks >= 100 %}#16a34a{% elif perf_clicks >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_clicks) if perf_clicks else '—' }}</td>
 
                                         {% set ctr_diff = monitoring.get_ctr_diff() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if ctr_diff is not none %}color: {% if ctr_diff > 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % ctr_diff) if ctr_diff > 0 else ('%.2f' % ctr_diff)) if ctr_diff is not none else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if ctr_diff is not none %}color: {% if ctr_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % ctr_diff) if ctr_diff > 0 else ('%.2f' % ctr_diff)) if ctr_diff is not none else '—' }}</td>
 
                                         {% set perf_visits = monitoring.get_uniform_performance_percent(monitoring.fact_visits, monitoring.plan_visits) %}
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if perf_visits %}color: {% if perf_visits >= 100 %}#16a34a{% elif perf_visits >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_visits) if perf_visits else '—' }}</td>
 
                                         {% set vtr_diff = monitoring.get_vtr_diff() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if vtr_diff is not none %}color: {% if vtr_diff > 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0f' % vtr_diff) if vtr_diff > 0 else ('%.0f' % vtr_diff)) if vtr_diff is not none else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if vtr_diff is not none %}color: {% if vtr_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0f' % vtr_diff) if vtr_diff > 0 else ('%.0f' % vtr_diff)) if vtr_diff is not none else '—' }}</td>
 
                                         {% set bounce_diff = monitoring.get_bounce_diff() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if bounce_diff is not none %}color: {% if bounce_diff < 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % bounce_diff) if bounce_diff is not none else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if bounce_diff is not none %}color: {% if bounce_diff <= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % bounce_diff) if bounce_diff is not none else '—' }}</td>
 
                                         {% set time_diff = monitoring.get_time_diff_seconds() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if time_diff is not none %}color: {% if time_diff > 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0fс' % time_diff) if time_diff > 0 else ('%.0fс' % time_diff)) if time_diff is not none else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if time_diff is not none %}color: {% if time_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0fс' % time_diff) if time_diff > 0 else ('%.0fс' % time_diff)) if time_diff is not none else '—' }}</td>
 
                                         {% set depth_diff = monitoring.get_depth_diff() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if depth_diff is not none %}color: {% if depth_diff > 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % depth_diff) if depth_diff > 0 else ('%.1f' % depth_diff)) if depth_diff is not none else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if depth_diff is not none %}color: {% if depth_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % depth_diff) if depth_diff > 0 else ('%.1f' % depth_diff)) if depth_diff is not none else '—' }}</td>
 
                                         {% set robotness_diff = monitoring.get_robotness_diff() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if robotness_diff is not none %}color: {% if robotness_diff < 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % robotness_diff) if robotness_diff is not none else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if robotness_diff is not none %}color: {% if robotness_diff <= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % robotness_diff) if robotness_diff is not none else '—' }}</td>
 
                                         {% set pi_diff = monitoring.get_pi_diff_percent() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if pi_diff is not none %}color: {% if pi_diff > 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % pi_diff) if pi_diff > 0 else ('%.1f' % pi_diff)) if pi_diff is not none else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if pi_diff is not none %}color: {% if pi_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % pi_diff) if pi_diff > 0 else ('%.1f' % pi_diff)) if pi_diff is not none else '—' }}</td>
 
                                         {% set ivt_diff = monitoring.get_ivt_diff() %}
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; border-left: 1px solid #e7e5e4; {% if ivt_diff is not none %}color: {% if ivt_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % ivt_diff) if ivt_diff > 0 else ('%.2f' % ivt_diff)) if ivt_diff is not none else '—' }}</td>
@@ -836,6 +836,14 @@ function bulkDeleteMonitoringsSelected() {
 
 document.addEventListener('DOMContentLoaded', function() {
     restoreMonitoringFilterState();
+
+    // Deep link from Главная ("Метрики успешности" drill-down) -
+    // ?search=<name> pre-fills the search box so only that campaign shows.
+    const searchQuery = new URLSearchParams(window.location.search).get('search');
+    if (searchQuery) {
+        document.getElementById('searchInput').value = searchQuery;
+    }
+
     filterMonitoring();
 
     // Deep link from Главная (e.g. "Выполнение плана" drill-down) -
