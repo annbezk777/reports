@@ -139,7 +139,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                     <div style="flex: 1;">
                         <!-- Title, Account, Manager & Timeline in one line -->
                         <div style="margin-bottom: 10px;">
-                            <div class="monitoring-card-meta" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12px;">
+                            <div class="monitoring-card-meta" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 11px;">
                                 <!-- Title -->
                                 <h3 class="monitoring-card-title" style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0; line-height: 1.3;">
                                     {{ monitoring.name }}
@@ -154,6 +154,20 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     </svg>
                                     <span class="kpi-tooltip">{{ monitoring.asana_kpi_comment }}</span>
                                 </span>
+                                {% endif %}
+
+                                {% if monitoring.verifier_badge %}
+                                <span class="verifier-badge-wrap">
+                                    <span class="verifier-badge verifier-badge-{{ monitoring.verifier_badge }}">{{ monitoring.verifier_badge }}</span>
+                                    <span class="verifier-badge-tooltip">{{ monitoring.verifier_badge|verifier_label }}</span>
+                                </span>
+                                {% endif %}
+
+                                {% if monitoring.asana_task_url %}
+                                <a href="{{ monitoring.asana_task_url }}" target="_blank" class="meta-field" style="display: flex; align-items: center; gap: 4px; color: var(--text-secondary); text-decoration: none; white-space: nowrap;" onmouseover="this.style.color='var(--primary-orange)';" onmouseout="this.style.color='var(--text-secondary)';">
+                                    <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink: 0;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                    Asana
+                                </a>
                                 {% endif %}
 
                                 <span class="meta-dot" style="color: #D1D5DB;">•</span>
@@ -262,7 +276,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         <th class="col-data" rowspan="2" style="vertical-align: bottom;">Глубина</th>
                                         <th class="col-data" rowspan="2" style="vertical-align: bottom;">Роботн.</th>
                                         <th class="col-data" rowspan="2" style="vertical-align: bottom;">PI</th>
-                                        <th class="col-data" colspan="6" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">ADRIVER/TARGET ADS</th>
+                                        <th class="col-data" colspan="6" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">ADRIVER/TARGET ADS/ADSERVING</th>
                                         <th class="col-data" colspan="2" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">WEBORAMA</th>
                                     </tr>
                                     <tr>
@@ -1056,12 +1070,12 @@ function refreshAllMonitorings() {
                         <div id="verifierLinksContainer" style="display: flex; flex-direction: column; gap: 8px;"></div>
                         <div style="display: flex; gap: 8px; margin-top: 6px;">
                             <button type="button" onclick="addVerifierLink('weborama')" class="btn-vl-compact">+ Weborama</button>
-                            <button type="button" id="addAdriverFactBtn" onclick="showAdriverFactCard()" class="btn-vl-compact">+ Adriver/TargetADS</button>
+                            <button type="button" id="addAdriverFactBtn" onclick="showAdriverFactCard()" class="btn-vl-compact">+ Adriver/TargetADS/Adserving</button>
                         </div>
 
                         <div class="verifier-link-card" id="adriverFactCard" style="display: none; margin-top: 8px;">
                             <div style="display: flex; align-items: center; justify-content: space-between;">
-                                <strong style="font-size: 13px; color: var(--text-primary);">Adriver/TargetADS</strong>
+                                <strong style="font-size: 13px; color: var(--text-primary);">Adriver/TargetADS/Adserving</strong>
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <span id="adriverLastUpdated" style="font-size: 11px; color: var(--text-secondary);"></span>
                                     <button type="button" class="kebab-button" onclick="toggleAdriverKebab(event)" aria-label="Действия">
@@ -1364,6 +1378,53 @@ function refreshAllMonitorings() {
 .kpi-info-icon:hover .kpi-tooltip {
     display: block;
 }
+
+/* Verifier letter badge - color keyed to which verifier parsed from the
+   Asana task's "Верификатор:" note (W/S/T/A, see AsanaClient.VERIFIER_BADGES) */
+.verifier-badge-wrap {
+    position: relative;
+    display: inline-flex;
+    cursor: help;
+}
+.verifier-badge-wrap .verifier-badge-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #292524;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 400;
+    white-space: nowrap;
+    padding: 6px 9px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 50;
+}
+.verifier-badge-wrap:hover .verifier-badge-tooltip {
+    display: block;
+}
+.verifier-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    background: transparent;
+    font-size: 7px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    flex-shrink: 0;
+}
+.verifier-badge-W { color: #2563eb; } /* Weborama - синий */
+.verifier-badge-A { color: #dc2626; } /* Adriver - красный */
+.verifier-badge-T { color: #16a34a; } /* Target Ads - зеленый */
+.verifier-badge-S { color: #7c3aed; } /* Adservin/Sizmek - фиолетовый */
 
 /* Fast hover tooltip for non-icon elements (e.g. buttons) - same visual
    style as .kpi-tooltip above, but without the native title attribute's

@@ -91,10 +91,31 @@ class AsanaClient:
         match = re.search(rf'{label_pattern}\s*:\s*\n*\s*(.+)', notes, re.IGNORECASE)
         return match.group(1).strip() if match else None
 
+    # Letter badge shown on report/monitoring cards for the verifier named
+    # in a task's free-text "Верификатор:" line. Checked in order, first
+    # match wins - order matters only for "target ads" vs a stray "ads".
+    VERIFIER_BADGES = [
+        (r'weborama|веборама', 'W'),
+        (r'adservin|sizmek|сайзмек|адсервин', 'S'),
+        (r'target\s*ads|таргет\s*(эдс|адс)', 'T'),
+        (r'adriver|адривер', 'A'),
+    ]
+
+    @classmethod
+    def _detect_verifier_badge(cls, raw):
+        if not raw:
+            return None
+        text = raw.lower()
+        for pattern, letter in cls.VERIFIER_BADGES:
+            if re.search(pattern, text):
+                return letter
+        return None
+
     @classmethod
     def parse_task_notes(cls, notes):
-        """Extract the account-manager contact, stats-sheet link, and
-        Metrika counter from a task's free-text notes block, when present."""
+        """Extract the account-manager contact, stats-sheet link,
+        Metrika counter, and verifier badge from a task's free-text
+        notes block, when present."""
         if not notes:
             return {}
 
@@ -115,6 +136,7 @@ class AsanaClient:
             'account_manager_name': cls._notes_field(notes, r'Имя'),
             'google_sheet_url': sheet_url,
             'metrika_counter_id': cls._notes_field(notes, r'#\s*счетчика'),
+            'verifier_badge': cls._detect_verifier_badge(cls._notes_field(notes, r'Верификатор')),
         }
         return {k: v for k, v in result.items() if v}
 

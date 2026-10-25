@@ -24,11 +24,11 @@
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
-                Всего отчетов
+                Активных отчетов
             </div>
-            <div class="metric-value">{{ stats.total_reports }}</div>
+            <div class="metric-value">{{ stats.active_reports }}</div>
             <div class="metric-change" style="color: var(--text-secondary);">
-                Активных: {{ stats.active_reports }}
+                Из {{ stats.total_reports }} всего
             </div>
         </div>
 
@@ -224,7 +224,7 @@
                         Расхождения с верификаторами
                     </h3>
                     <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
-                        Weborama и Adriver/TargetADS vs SAPE-факт, показы
+                        Weborama и Adriver/TargetADS/Adserving vs SAPE-факт, показы
                     </p>
                 </div>
             </div>
@@ -246,6 +246,8 @@
                                 {{ v.type }} ·
                                 {% if v.days_stale is none %}
                                 <span style="color: var(--primary-orange); font-weight: 600;">дата обновления неизвестна</span>
+                                {% elif v.is_stale and v.as_of_date %}
+                                <span style="color: var(--primary-orange); font-weight: 600;">данные в файле по {{ v.as_of_date.strftime('%d.%m') }} — обновите выгрузку</span>
                                 {% elif v.is_stale %}
                                 <span style="color: var(--primary-orange); font-weight: 600;">не обновлялось {{ v.days_stale }} дн.</span>
                                 {% elif v.days_stale == 0 %}
@@ -360,7 +362,7 @@
                 Отчёты, требующие внимания
             </h3>
             <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
-                Не запускались, расписание не настроено, или последний запуск с ошибкой
+                Не запускались, ошибка запуска, или верификатор не обновлялся 3+ дня
             </p>
         </div>
         <div style="max-height: 300px; overflow-y: auto;">

@@ -205,6 +205,21 @@ def account_manager_label(email):
     return ACCOUNT_MANAGER_NAMES.get(email, email)
 
 
+VERIFIER_BADGE_NAMES = {
+    'W': 'Weborama',
+    'S': 'Adservin (Sizmek)',
+    'T': 'Target Ads',
+    'A': 'Adriver',
+}
+
+
+@app.template_filter('verifier_label')
+def verifier_badge_label(code):
+    if not code:
+        return None
+    return VERIFIER_BADGE_NAMES.get(code, code)
+
+
 def admin_required(f):
     """Restricts a route to ADMIN_EMAIL only. Everyone else (including
     other logged-in users) gets a plain 404, not a 403 - the feature
@@ -718,6 +733,19 @@ def dashboard():
     # that's not a real discrepancy, it's stale data, so staleness itself
     # needs to be the visible signal, not folded silently into the diff.
     STALE_DAYS_THRESHOLD = 3
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    today_moscow = datetime.now(moscow_tz).date()
+
+    def _days_since_moscow(utc_dt):
+        """Calendar-day difference in Moscow time. (now - dt).days on naive
+        UTC datetimes undercounts when under 24h have elapsed but the
+        Moscow calendar date already rolled over - e.g. a file uploaded
+        23:50 МСК yesterday checked at 00:10 МСК today is 20 minutes old
+        by elapsed time but should read "вчера", not "сегодня"."""
+        if not utc_dt:
+            return None
+        return (today_moscow - pytz.utc.localize(utc_dt).astimezone(moscow_tz).date()).days
+
     verifier_diffs = []
     for mo in active_monitorings:
         wcm_diff = mo.get_weborama_impressions_diff_percent()
@@ -727,7 +755,7 @@ def dashboard():
                 for m in link.mappings if m.last_fetched_at
             ]
             oldest_fetch = min(fetch_times) if fetch_times else None
-            days_stale = (now - oldest_fetch).days if oldest_fetch else None
+            days_stale = _days_since_moscow(oldest_fetch)
             # No timestamp at all means we have no idea when this was last
             # refreshed - treat that as stale too, not as fresh. Silently
             # trusting unknown-age data let frozen numbers (e.g. adriver
@@ -735,14 +763,25 @@ def dashboard():
             # "fresh" average as if they were current.
             verifier_diffs.append({
                 'id': mo.id, 'name': mo.name, 'type': 'Weborama', 'diff': wcm_diff,
-                'days_stale': days_stale, 'is_stale': days_stale is None or days_stale >= STALE_DAYS_THRESHOLD
+                'days_stale': days_stale, 'is_stale': days_stale is None or days_stale >= STALE_DAYS_THRESHOLD,
+                'as_of_date': None,
             })
         adr_diff = mo.get_adriver_impressions_diff_percent()
         if adr_diff is not None:
-            days_stale = (now - mo.adriver_data_updated_at).days if mo.adriver_data_updated_at else None
+            # Excel-выгрузка знает, по какую дату у неё реально есть данные
+            # (распарсено построчно из файла) - это надёжнее, чем просто
+            # "когда мы в последний раз трогали это поле": файл можно
+            # загрузить сегодня, а данные в нём будут только по позавчера.
+            # Ручной ввод/Target Ads API такой даты не знают - для них
+            # остаётся старая логика по времени обновления поля.
+            if mo.adriver_data_as_of_date:
+                days_stale = (today_moscow - mo.adriver_data_as_of_date).days
+            else:
+                days_stale = _days_since_moscow(mo.adriver_data_updated_at)
             verifier_diffs.append({
-                'id': mo.id, 'name': mo.name, 'type': 'Adriver/TargetADS', 'diff': adr_diff,
-                'days_stale': days_stale, 'is_stale': days_stale is None or days_stale >= STALE_DAYS_THRESHOLD
+                'id': mo.id, 'name': mo.name, 'type': 'Adriver/TargetADS/Adserving', 'diff': adr_diff,
+                'days_stale': days_stale, 'is_stale': days_stale is None or days_stale >= STALE_DAYS_THRESHOLD,
+                'as_of_date': mo.adriver_data_as_of_date,
             })
 
     # Fresh-data discrepancies are the real signal - rank those first, stale
@@ -800,6 +839,40 @@ def dashboard():
                 'name': r.name or (r.campaign.name if r.campaign else f'Отчёт #{r.id}'),
                 'issues': issues
             })
+
+    # Verifier configured but stale (3+ days, same threshold/is_stale as the
+    # "Расхождения с верификаторами" widget) also belongs on this card - a
+    # verifier wired up but not producing fresh data is itself an attention
+    # item, independent of schedule/run-error issues above.
+    stale_by_monitoring_id = {}
+    for v in verifier_diffs:
+        if v['is_stale']:
+            stale_by_monitoring_id.setdefault(v['id'], []).append(v)
+
+    problem_reports_by_id = {r['id']: r for r in problem_reports}
+    for mo in active_monitorings:
+        stale_entries = stale_by_monitoring_id.get(mo.id)
+        if not stale_entries or not mo.report_config:
+            continue
+        report = mo.report_config
+        for v in stale_entries:
+            if v['days_stale'] is None:
+                text = f"{v['type']}: дата обновления неизвестна"
+            elif v['as_of_date']:
+                text = f"{v['type']}: данные в файле по {v['as_of_date'].strftime('%d.%m')} — обновите выгрузку"
+            else:
+                text = f"{v['type']}: не обновлялось {v['days_stale']} дн."
+            issue = {'text': text, 'severity': 'warning'}
+            if report.id in problem_reports_by_id:
+                problem_reports_by_id[report.id]['issues'].append(issue)
+            else:
+                entry = {
+                    'id': report.id,
+                    'name': report.name or (report.campaign.name if report.campaign else f'Отчёт #{report.id}'),
+                    'issues': [issue]
+                }
+                problem_reports.append(entry)
+                problem_reports_by_id[report.id] = entry
 
     # 6. Campaigns ending within the next 3 days
     today = now.date()
@@ -1830,6 +1903,9 @@ def _sync_monitoring_from_asana(monitoring):
     if notes_fields.get('account_manager_email'):
         monitoring.account_manager = notes_fields['account_manager_email']
         updated_fields.append('account_manager')
+    if notes_fields.get('verifier_badge'):
+        monitoring.verifier_badge = notes_fields['verifier_badge']
+        updated_fields.append('verifier_badge')
 
     # Визиты = клики × PI, same calculation the edit form does client-side -
     # recompute here too since this sync path bypasses that JS entirely.
@@ -2360,6 +2436,50 @@ def _refresh_adriver_fact(monitoring, client, date_to):
         logger.error(f"⚠️ Failed to fetch scoped Adriver SAPE fact for monitoring {monitoring.id}: {e}")
 
 
+def _refresh_adriver_fact_for_upload(monitoring, as_of_date):
+    """After an Adriver/Sizmek Excel upload, pull SAPE's fact scoped to the
+    SAME end date as the file's own last day of data (as_of_date, parsed
+    from the file itself - see AdriverExcelParser._find_last_date).
+
+    Without this, the discrepancy % compares SAPE's fact (refreshed daily
+    through "yesterday" by the scheduler) against a file that may have been
+    exported a day or more earlier - SAPE keeps accumulating a full extra
+    day's showы/clicks the file never had a chance to include, which reads
+    as a fake "SAPE is bigger than the verifier" discrepancy every time.
+
+    Writes into adriver_fact_impressions/clicks - the same scoped-fact
+    fields _adriver_sape_facts() already prefers over the unscoped
+    fact_impressions/clicks when set, so no changes needed downstream."""
+    campaigns = monitoring.get_campaigns()
+    if not campaigns:
+        return
+    account = monitoring.account
+    if not account or not account.api_token:
+        return
+    date_from = monitoring.adriver_compare_date_from or monitoring.date_from
+    date_to = min(as_of_date, monitoring.date_to)
+    if date_from > date_to:
+        return
+    try:
+        client = SapeAPIClient(login=account.login, token=account.api_token)
+        if not client.authenticate():
+            logger.error(f"⚠️ SAPE auth failed scoping Adriver fact for monitoring {monitoring.id}")
+            return
+        stats = client.get_stats(
+            campaign_ids=[int(c.campaign_id) for c in campaigns],
+            date_from=datetime.combine(date_from, datetime.min.time()),
+            date_to=datetime.combine(date_to, datetime.min.time()),
+            fields=None
+        )
+        if not stats:
+            return
+        total = stats.get('total', {})
+        monitoring.adriver_fact_impressions = total.get('shows', 0)
+        monitoring.adriver_fact_clicks = total.get('clicks', 0)
+    except Exception as e:
+        logger.error(f"⚠️ Failed to fetch upload-scoped SAPE fact for monitoring {monitoring.id}: {e}")
+
+
 class TargetAdsRefreshError(Exception):
     pass
 
@@ -2737,6 +2857,14 @@ def upload_adriver_excel(monitoring_id):
             monitoring.adriver_impressions = ivt_data.get('impressions')
             monitoring.adriver_clicks = ivt_data.get('clicks')
             monitoring.adriver_data_updated_at = datetime.utcnow()
+            monitoring.adriver_data_as_of_date = ivt_data.get('data_as_of_date')
+
+            # Scope the SAPE comparison fact to the same end date as the
+            # file, so the discrepancy % isn't comparing SAPE's fact
+            # (refreshed daily through yesterday) against a file that may
+            # cover an earlier day - see _refresh_adriver_fact_for_upload.
+            if monitoring.adriver_data_as_of_date:
+                _refresh_adriver_fact_for_upload(monitoring, monitoring.adriver_data_as_of_date)
 
             # Update last sync time
             monitoring.last_sync = datetime.utcnow()

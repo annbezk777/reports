@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 import tempfile
 import re
+from datetime import datetime
 
 # Add current directory to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -95,6 +96,12 @@ class AdriverExcelParser:
             # Extract IVT data
             ivt_data = self._extract_ivt_data(data)
 
+            # Последняя дата, которой реально есть данные в файле - день
+            # выгрузки может отставать от сегодняшнего (экспорт вчера
+            # вечером ещё не содержит сегодняшний день), и это надо уметь
+            # показать отдельно от "когда мы обновили поле в базе".
+            ivt_data['data_as_of_date'] = self._find_last_date(rows, shared_strings, ns, header_row_idx, total_row_idx)
+
             return ivt_data
 
         finally:
@@ -112,6 +119,26 @@ class AdriverExcelParser:
                 if 'дата' in str(first_cell).lower():
                     return i
         return None
+
+    def _find_last_date(self, rows, shared_strings, ns, header_row_idx, total_row_idx):
+        """Max date among the per-day rows between the header ('Дата', ...)
+        and the 'Всего' row - this is the actual last day the export has
+        data for, as opposed to adriver_data_updated_at which only says
+        when we last touched the field (could be today even if the file
+        itself only covers up through a few days ago)."""
+        last_date = None
+        for row in rows[header_row_idx + 1:total_row_idx]:
+            cells = row.findall('.//ss:c', ns)
+            if not cells:
+                continue
+            raw = self._get_cell_value(cells[0], shared_strings, ns)
+            try:
+                d = datetime.strptime(str(raw).strip(), '%d.%m.%Y').date()
+            except (ValueError, TypeError):
+                continue
+            if last_date is None or d > last_date:
+                last_date = d
+        return last_date
 
     def _find_total_row(self, rows, shared_strings, ns):
         """Find row with 'Всего' (Total)"""

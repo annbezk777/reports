@@ -255,6 +255,13 @@ class MonitoringCampaign(db.Model):
     # забыли обновить данные, а SAPE-факт тем временем вырос".
     adriver_data_updated_at = db.Column(db.DateTime, nullable=True)
 
+    # Последняя дата, по которую в выгруженном Excel-файле реально есть
+    # данные (из колонки "Дата" построчно, не из момента загрузки) - файл
+    # может быть загружен сегодня, но содержать данные только по позавчера.
+    # Заполняется только Excel-загрузкой (parse_adriver_excel.py); при
+    # ручном вводе/Target Ads API остаётся None.
+    adriver_data_as_of_date = db.Column(db.Date, nullable=True)
+
     # Пиксель Adriver/Target Ads тоже иногда ставят позже старта РК - если
     # задано, вместо monitoring.date_from для SAPE-факта (на этой паре
     # adriver_fact_*) используется эта дата, по той же логике что и
@@ -278,6 +285,7 @@ class MonitoringCampaign(db.Model):
     # Manager & metadata
     manager = db.Column(db.String(100), nullable=True)
     account_manager = db.Column(db.String(255), nullable=True)  # email, pulled from Asana task notes
+    verifier_badge = db.Column(db.String(1), nullable=True)  # W/S/T/A, parsed from Asana task's "Верификатор:" note
     google_sheet_url = db.Column(db.String(500), nullable=True)  # Ссылка на Google таблицу
     asana_task_url = db.Column(db.String(500), nullable=True)  # Ссылка на задачу Asana
     asana_kpi_comment = db.Column(db.Text, nullable=True)  # Комментарий из поля KPI задачи Asana

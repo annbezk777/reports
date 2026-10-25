@@ -133,6 +133,14 @@
                                     {{ report.name if report.name else report.campaign.name }}
                                 </h3>
 
+                                {% set asana_monitoring = report.get_asana_monitoring() %}
+                                {% if asana_monitoring and asana_monitoring.verifier_badge %}
+                                <span class="verifier-badge-wrap">
+                                    <span class="verifier-badge verifier-badge-{{ asana_monitoring.verifier_badge }}">{{ asana_monitoring.verifier_badge }}</span>
+                                    <span class="verifier-badge-tooltip">{{ asana_monitoring.verifier_badge|verifier_label }}</span>
+                                </span>
+                                {% endif %}
+
                                 <!-- Schedule status badge -->
                                 {% set schedule_summary = report.get_schedule_summary() %}
                                 {% if schedule_summary %}
@@ -481,6 +489,53 @@
     border: 1px solid var(--border-color);
     transition: box-shadow 0.2s;
 }
+
+/* Verifier letter badge - color keyed to which verifier parsed from the
+   Asana task's "Верификатор:" note (W/S/T/A, see AsanaClient.VERIFIER_BADGES) */
+.verifier-badge-wrap {
+    position: relative;
+    display: inline-flex;
+    cursor: help;
+}
+.verifier-badge-wrap .verifier-badge-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #292524;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 400;
+    white-space: nowrap;
+    padding: 6px 9px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 50;
+}
+.verifier-badge-wrap:hover .verifier-badge-tooltip {
+    display: block;
+}
+.verifier-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    background: transparent;
+    font-size: 7px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    flex-shrink: 0;
+}
+.verifier-badge-W { color: #2563eb; } /* Weborama - синий */
+.verifier-badge-A { color: #dc2626; } /* Adriver - красный */
+.verifier-badge-T { color: #16a34a; } /* Target Ads - зеленый */
+.verifier-badge-S { color: #7c3aed; } /* Adservin/Sizmek - фиолетовый */
 
 .report-card:hover {
     box-shadow: var(--shadow-md);
