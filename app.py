@@ -896,7 +896,7 @@ def dashboard():
         report = mo.report_config
         badge_name = VERIFIER_BADGE_NAMES.get(mo.verifier_badge, mo.verifier_badge)
         issue = {
-            'text': f'Верификатор {badge_name} указан в Asana, но не подключён (кампания идёт {days_running} дн.)',
+            'text': f'Верификатор {badge_name} указан в Asana, данных по верификатору нет (кампания идёт {days_running} дн.)',
             'severity': 'warning'
         }
         if report.id in problem_reports_by_id:
