@@ -1219,11 +1219,12 @@ class GoogleSheetsClient:
                     cell = f"{column_mapping['vast75_column']}{row_num}"
                     updates.append({'range': cell, 'values': [[vast75]]})
 
-                # Write completes (100% completion)
+                # Write completes (Досмотры 100%) - показы (impressions)
+                # and Досмотры 100% are the same figure, always, so just
+                # mirror impressions into this column.
                 if 'completes_column' in column_mapping and column_mapping['completes_column']:
-                    completes = day_data.get('completes', day_data.get('vastComplete', 0))
                     cell = f"{column_mapping['completes_column']}{row_num}"
-                    updates.append({'range': cell, 'values': [[completes]]})
+                    updates.append({'range': cell, 'values': [[day_data.get('impressions', 0)]]})
 
             # Batch update all cells
             if updates:

@@ -12,7 +12,7 @@
 <!-- Content Body -->
 <div class="content-body">
     <!-- Toolbar: Tabs + Search + Filter + Actions -->
-    <div style="display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start; flex-wrap: wrap;">
+    <div id="reportsToolbar" style="display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start; flex-wrap: wrap;">
         <!-- Tabs -->
         <div>
             <div style="display: flex; gap: 8px;">
@@ -84,11 +84,11 @@
         </select>
 
         <!-- Add Report Button -->
-        <button onclick="openReportFormModal()" class="btn btn-secondary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px; color: var(--text-secondary);">
-            <svg class="btn-icon" style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button id="createReportBtn" onclick="openReportFormModal()" class="btn btn-secondary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px; color: var(--text-secondary);">
+            <svg class="btn-icon" style="width: 12px; height: 12px; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
-            Создать отчет
+            <span class="btn-label">Создать отчет</span>
         </button>
     </div>
 
@@ -198,8 +198,8 @@
                                             {{ campaign.campaign_id }}
                                         </code>
                                     </div>
-                                    <div style="flex: 1; color: var(--text-primary);">
-                                        {{ campaign.name[:45] }}{% if campaign.name|length > 45 %}...{% endif %}
+                                    <div style="flex: 1; min-width: 0; color: var(--text-primary); overflow-wrap: break-word;">
+                                        {{ campaign.name }}
                                     </div>
                                     <div style="width: 100px; text-align: right; color: var(--text-secondary);">
                                         {% if settings %}
@@ -222,8 +222,8 @@
                                                 {{ campaign.campaign_id }}
                                             </code>
                                         </div>
-                                        <div style="flex: 1; color: var(--text-primary);">
-                                            {{ campaign.name[:45] }}{% if campaign.name|length > 45 %}...{% endif %}
+                                        <div style="flex: 1; min-width: 0; color: var(--text-primary); overflow-wrap: break-word;">
+                                            {{ campaign.name }}
                                         </div>
                                         <div style="width: 100px; text-align: right; color: var(--text-secondary);">
                                             {% if settings %}
@@ -265,7 +265,7 @@
                     </div>
 
                     <!-- Right: Actions -->
-                    <div style="display: flex; gap: 8px; align-items: center;">
+                    <div class="report-card-actions" style="display: flex; gap: 8px; align-items: center;">
                         {% set asana_monitoring = report.get_asana_monitoring() %}
                         {% if asana_monitoring %}
                         <a href="{{ asana_monitoring.asana_task_url }}" target="_blank" class="btn btn-secondary" style="padding: 5px 9px; font-size: 11px;">
@@ -466,7 +466,7 @@
 </div>
 
 <!-- Toast Notification -->
-<div id="toast" style="display: none; position: fixed; bottom: 24px; right: 24px; background: #10B981; color: white; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); z-index: 10001; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px;">
+<div id="toast" style="display: none; position: fixed; bottom: 24px; right: 24px; background: #10B981; color: white; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); z-index: 10001; font-size: 14px; font-weight: 500; align-items: center; gap: 8px;">
     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
     </svg>

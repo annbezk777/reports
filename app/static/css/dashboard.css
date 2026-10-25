@@ -387,17 +387,274 @@ tbody tr:hover {
     color: #1E40AF;
 }
 
+/* Mobile top bar - hidden on desktop, shown via the media query below */
+.mobile-topbar {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: var(--bg-white);
+    border-bottom: 1px solid var(--border-color);
+    align-items: center;
+    gap: 14px;
+    padding: 0 16px;
+    z-index: 60;
+}
+
+.mobile-menu-btn {
+    background: none;
+    border: none;
+    padding: 6px;
+    margin: 0;
+    cursor: pointer;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.sidebar-backdrop {
+    display: none;
+}
+
+.sidebar-backdrop.show {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 65;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .sidebar {
-        transform: translateX(-100%);
-    }
-
-    .sidebar.open {
-        transform: translateX(0);
+        top: 0;
+        z-index: 70;
     }
 
     .main-content {
         margin-left: 0;
+    }
+
+    .content-header {
+        padding: 16px;
+    }
+
+    .content-header h1 {
+        font-size: 20px;
+    }
+
+    .content-body {
+        padding: 16px;
+    }
+
+    .metric-card {
+        padding: 16px;
+    }
+
+    /* Every inline grid layout collapses to a single column - stat rows,
+       charts rows, manager panels, filter grids, etc. The !important is
+       required since these are all set via inline style="" in templates,
+       which a plain media-query selector can't otherwise out-rank. */
+    [style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Grid items get an automatic min-width based on their content's
+       min-content size by default - a card containing a wide table (with
+       its own overflow-x:auto scroller a few levels down) still forces
+       the whole grid track that wide unless the item's own min-width is
+       reset, even though the table itself would happily scroll in place. */
+    #monitoringGrid > *,
+    #reportsGrid > * {
+        min-width: 0;
+    }
+
+    /* Flex rows (filter bars, card meta rows, button groups) wrap instead
+       of overflowing horizontally off the edge of the screen. */
+    [style*="display: flex"],
+    [style*="display:flex"] {
+        flex-wrap: wrap !important;
+    }
+
+    /* flex:1 children default to min-width:auto, which keeps them at their
+       unwrapped content width even inside a wrapping flex row - this lets
+       them actually shrink instead of pushing the row past the viewport. */
+    [style*="flex: 1"],
+    [style*="flex:1"] {
+        min-width: 0 !important;
+    }
+
+    /* Campaign id/name/frequency row: on mobile there just isn't room for
+       all 3 - frequency (daily/total) is the least useful column here, so
+       drop it and let id+name sit on one clean, single-line, truncated
+       row instead of wrapping a long unbroken tracking string. */
+    .campaigns-table-header > div:nth-child(3),
+    .campaign-row > div:nth-child(3) {
+        display: none !important;
+    }
+
+    .campaigns-table-header [style*="flex: 1"],
+    .campaign-row [style*="flex: 1"] {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Report card action row (Asana / Открыть отчет / Выбрать даты / ⋮) -
+       keep on one line, shrinking padding/font rather than wrapping to a
+       second row; scrolls internally in the rare case it still doesn't
+       fit instead of pushing the card wider than the screen. */
+    .report-card-actions {
+        width: 100%;
+        flex-wrap: nowrap !important;
+        justify-content: flex-end !important;
+        gap: 4px !important;
+        overflow-x: auto;
+    }
+
+    .report-card-actions .btn {
+        padding: 4px 6px !important;
+        font-size: 9px !important;
+        white-space: nowrap;
+    }
+
+    /* Monitoring card title - one line, truncated, rather than wrapping
+       across two lines inside the already-crowded meta row. */
+    .monitoring-card-title {
+        width: 100%;
+        font-size: 13px !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Monitoring card meta row (Кабинет / Трафик-менеджер / Период /
+       Данные обновлены) - stack each on its own line instead of wrapping
+       an inline bullet-separated row, and drop the now-redundant bullets. */
+    .monitoring-card-meta {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 4px !important;
+    }
+
+    .meta-dot {
+        display: none;
+    }
+
+    .meta-field {
+        width: 100%;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    /* Sync-status dot (green/grey) before "Данные обновлены" and the
+       Аккаунт-менеджер footer line - both dropped on mobile to save a
+       bit more vertical room on an already dense card. */
+    .sync-dot,
+    .am-footer,
+    .campaigns-footer {
+        display: none !important;
+    }
+
+    /* Page subtitle (e.g. "Настройка автоматической выгрузки в Google
+       Sheets") - shrink and keep to one line instead of wrapping across
+       half the header. */
+    .content-header p {
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Reports/Monitoring toolbar: explicit 3-column grid instead of
+       organic flex-wrap, so related controls land in predictable rows
+       (tabs+search / filters / sort+primary action) instead of whatever
+       grouping falls out of each control's individual width. Desktop is
+       untouched - this only applies inside the mobile breakpoint. */
+    #reportsToolbar,
+    #monitoringToolbar {
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+
+    /* Un-nest the tabs wrapper (and its inner row) so Активные/Архив
+       become direct grid items instead of being trapped two levels deep
+       inside their own box - display:contents keeps them in the DOM
+       (still clickable, still styled) but removes their own layout box. */
+    #reportsToolbar > div:first-child,
+    #reportsToolbar > div:first-child > div:first-child,
+    #monitoringToolbar > div:first-child,
+    #monitoringToolbar > div:first-child > div:first-child {
+        display: contents !important;
+    }
+
+    #reportsToolbar .tab-button,
+    #monitoringToolbar .tab-button {
+        width: 100% !important;
+        min-width: 0 !important;
+        margin: 0;
+    }
+
+    /* "Выбрать все" isn't part of any of the 3-up rows - send it to the
+       very end of grid auto-placement and let it span the full width on
+       its own line, rather than breaking the Активные/Архив/Поиск row. */
+    #reportsToolbar [onclick="selectAllReports()"],
+    #monitoringToolbar [onclick="selectAllMonitorings()"] {
+        order: 99;
+        grid-column: 1 / -1;
+        width: auto !important;
+        text-align: left !important;
+        margin: 4px 0 0 0 !important;
+    }
+
+    /* Every grid item's automatic min-width otherwise defaults to its own
+       min-content size (a select's full option text, a button's full
+       label) - that's what was making each of the 3 columns a different
+       width instead of true equal thirds. Reset every direct toolbar
+       item to min-width:0 so the 1fr tracks are actually equal, and let
+       each item's own width:100% (below) fill its track evenly. */
+    #reportsToolbar > *,
+    #monitoringToolbar > * {
+        min-width: 0 !important;
+    }
+
+    #reportsToolbar select,
+    #monitoringToolbar select,
+    #reportsToolbar #createReportBtn,
+    #monitoringToolbar button {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding: 0 8px !important;
+        font-size: 9px !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* These buttons are icon+text flex rows, not plain text - ellipsis on
+       the button itself doesn't reach text buried inside a flex child, so
+       truncate the label span directly instead ("Добавить мониторинг",
+       "Обновить все", "Создать отчет" are the longest toolbar labels). */
+    #reportsToolbar .btn-label,
+    #monitoringToolbar .btn-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Wide tables (accounts list, KPI table) scroll horizontally inside
+       their own card rather than overflowing the page. */
+    .table-container {
+        overflow-x: auto;
+    }
+
+    body {
+        overflow-x: hidden;
     }
 }
