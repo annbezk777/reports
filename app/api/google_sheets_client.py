@@ -637,6 +637,11 @@ class GoogleSheetsClient:
                 elif '100%' in header and not structure['completes_column']:
                     # Column for video completions (100% views)
                     structure['completes_column'] = col_idx_to_letter(i)
+                elif 'досмотр' in header and not structure['completes_column']:
+                    # Bare "Досмотры" with no percentage number - same
+                    # column as "Досмотры 100%"/"Показы 100%" above, just
+                    # a naming variant some report templates use instead.
+                    structure['completes_column'] = col_idx_to_letter(i)
 
             # Verify required columns found - "Охват" isn't always present
             # (e.g. some reports only track показы/клики), so reach_column
@@ -1219,12 +1224,11 @@ class GoogleSheetsClient:
                     cell = f"{column_mapping['vast75_column']}{row_num}"
                     updates.append({'range': cell, 'values': [[vast75]]})
 
-                # Write completes (Досмотры 100%) - показы (impressions)
-                # and Досмотры 100% are the same figure, always, so just
-                # mirror impressions into this column.
+                # Write completes (Досмотры 100%) - real SAPE figure
                 if 'completes_column' in column_mapping and column_mapping['completes_column']:
+                    completes = day_data.get('completes', day_data.get('vastComplete', 0))
                     cell = f"{column_mapping['completes_column']}{row_num}"
-                    updates.append({'range': cell, 'values': [[day_data.get('impressions', 0)]]})
+                    updates.append({'range': cell, 'values': [[completes]]})
 
             # Batch update all cells
             if updates:
