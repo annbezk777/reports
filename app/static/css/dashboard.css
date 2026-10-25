@@ -1,5 +1,16 @@
 /* SAPE Reports Dashboard - Custom Styles */
 
+/* Smooth cross-document navigation between pages (Отчёты/Мониторинг/...) -
+   progressive enhancement, ignored by browsers that don't support it, no
+   change to how/when pages actually load or what data they show. */
+@view-transition {
+    navigation: auto;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 0.08s;
+}
+
 *, *::before, *::after {
     box-sizing: border-box;
 }

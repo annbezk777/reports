@@ -2,6 +2,445 @@
 
 {% block title %}Отчеты - ОТЧЕТЫ{% endblock %}
 
+{% block extra_head %}
+<style>
+.report-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    transition: box-shadow 0.2s;
+}
+
+/* Verifier letter badge - color keyed to which verifier parsed from the
+   Asana task's "Верификатор:" note (W/S/T/A, see AsanaClient.VERIFIER_BADGES) */
+.verifier-badge-wrap {
+    position: relative;
+    display: inline-flex;
+    cursor: help;
+}
+.verifier-badge-wrap .verifier-badge-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #292524;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 400;
+    white-space: nowrap;
+    padding: 6px 9px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 50;
+}
+.verifier-badge-wrap:hover .verifier-badge-tooltip {
+    display: block;
+}
+.verifier-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    background: transparent;
+    font-size: 7px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    flex-shrink: 0;
+}
+.verifier-badge-W { color: #2563eb; } /* Weborama - синий */
+.verifier-badge-A { color: #dc2626; } /* Adriver - красный */
+.verifier-badge-T { color: #16a34a; } /* Target Ads - зеленый */
+.verifier-badge-S { color: #7c3aed; } /* Adservin/Sizmek - фиолетовый */
+
+.report-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.tab-button {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    color: var(--text-secondary);
+    background: white;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+    cursor: pointer;
+    display: inline-block;
+}
+
+.tab-button:hover {
+    background: var(--bg-light);
+}
+
+.tab-button.tab-active {
+    background: var(--primary-orange);
+    color: white;
+    border-color: var(--primary-orange);
+}
+
+/* Campaigns table */
+.campaigns-table-header {
+    display: flex;
+    gap: 12px;
+    padding: 4px 0;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 4px;
+}
+
+.campaigns-table {
+    display: flex;
+    flex-direction: column;
+}
+
+.campaign-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    line-height: 24px;
+    font-size: 11px;
+    padding: 2px 0;
+}
+
+.campaign-id {
+    background: var(--peach-light);
+    color: var(--primary-orange);
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+    display: inline-block;
+}
+
+.campaign-id:hover {
+    background: var(--primary-orange);
+    color: white;
+}
+
+/* Accordion */
+.accordion-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    color: var(--primary-orange);
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 6px 0;
+    margin-top: 8px;
+    transition: opacity 0.2s;
+}
+
+.accordion-toggle:hover {
+    opacity: 0.7;
+}
+
+.accordion-icon {
+    transition: transform 0.2s;
+}
+
+.accordion-toggle.open .accordion-icon {
+    transform: rotate(180deg);
+}
+
+.campaigns-hidden {
+    /* display: flex moved to inline style via JS */
+    flex-direction: column;
+}
+
+/* Kebab Menu */
+.kebab-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.kebab-button {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.kebab-button:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+}
+
+.kebab-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    min-width: 180px;
+    z-index: 1000;
+}
+
+.kebab-dropdown.show {
+    display: block;
+}
+
+.kebab-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.kebab-item:hover {
+    background: var(--bg-light);
+}
+
+.kebab-item svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
+}
+
+.kebab-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Loading spinner */
+.progress-indicator.spinner {
+    display: inline-block;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.progress-indicator.spinner.progress-medium {
+    width: 120px;
+    height: 120px;
+}
+
+.progress-spinner {
+    width: 100%;
+    height: 100%;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.modal-content {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    max-width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Day buttons */
+.day-button {
+    padding: 8px 16px;
+    border: 1px solid var(--border-color);
+    background: white;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.day-button:hover {
+    border-color: var(--primary-orange);
+    background: var(--peach-light);
+}
+
+.day-button.active {
+    background: var(--primary-orange);
+    border-color: var(--primary-orange);
+    color: white;
+}
+
+/* Date preset buttons */
+.date-preset-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border-color);
+    background: white;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.date-preset-btn:hover {
+    border-color: var(--primary-orange);
+    background: var(--peach-light);
+    color: var(--primary-orange);
+}
+
+.date-preset-btn.active {
+    background: var(--peach-light);
+    border-color: var(--primary-orange);
+    color: var(--primary-orange);
+}
+
+/* Date picker modal buttons */
+.date-cancel-btn {
+    padding: 10px 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.date-cancel-btn:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+}
+
+.date-submit-btn {
+    padding: 10px 24px;
+    border: none;
+    background: var(--primary-orange);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+    height: 40px;
+}
+
+.date-submit-btn:hover {
+    background: #E67951;
+}
+
+/* Orange checkboxes in modal */
+#formCampaignsTable input[type="checkbox"] {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #D1D5DB;
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+}
+
+#formCampaignsTable input[type="checkbox"]:hover {
+    border-color: var(--primary-orange);
+}
+
+#formCampaignsTable input[type="checkbox"]:checked {
+    background: var(--primary-orange);
+    border-color: var(--primary-orange);
+}
+
+#formCampaignsTable input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* Toast notification animation */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+#toast.show {
+    animation: slideInRight 0.3s ease-out;
+}
+
+#toast.hide {
+    animation: slideOutRight 0.3s ease-out;
+}
+</style>
+<style>
+.account-combobox-option {
+    padding: 10px 16px;
+    font-size: 14px;
+    cursor: pointer;
+}
+.account-combobox-option:hover,
+.account-combobox-option.active {
+    background-color: var(--peach-light);
+    color: var(--primary-orange);
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <!-- Header -->
 <div class="content-header">
@@ -481,430 +920,6 @@
     <span id="toastMessage">ID скопирован</span>
 </div>
 
-<style>
-.report-card {
-    background: white;
-    border-radius: 12px;
-    padding: 16px;
-    border: 1px solid var(--border-color);
-    transition: box-shadow 0.2s;
-}
-
-/* Verifier letter badge - color keyed to which verifier parsed from the
-   Asana task's "Верификатор:" note (W/S/T/A, see AsanaClient.VERIFIER_BADGES) */
-.verifier-badge-wrap {
-    position: relative;
-    display: inline-flex;
-    cursor: help;
-}
-.verifier-badge-wrap .verifier-badge-tooltip {
-    display: none;
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: #292524;
-    color: #fff;
-    font-size: 11px;
-    font-weight: 400;
-    white-space: nowrap;
-    padding: 6px 9px;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    z-index: 50;
-}
-.verifier-badge-wrap:hover .verifier-badge-tooltip {
-    display: block;
-}
-.verifier-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 12px;
-    height: 12px;
-    padding: 0;
-    border-radius: 50%;
-    border: 1px solid currentColor;
-    background: transparent;
-    font-size: 7px;
-    font-weight: 700;
-    line-height: 1;
-    text-align: center;
-    flex-shrink: 0;
-}
-.verifier-badge-W { color: #2563eb; } /* Weborama - синий */
-.verifier-badge-A { color: #dc2626; } /* Adriver - красный */
-.verifier-badge-T { color: #16a34a; } /* Target Ads - зеленый */
-.verifier-badge-S { color: #7c3aed; } /* Adservin/Sizmek - фиолетовый */
-
-.report-card:hover {
-    box-shadow: var(--shadow-md);
-}
-
-.tab-button {
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    text-decoration: none;
-    color: var(--text-secondary);
-    background: white;
-    border: 1px solid var(--border-color);
-    transition: all 0.2s;
-    cursor: pointer;
-    display: inline-block;
-}
-
-.tab-button:hover {
-    background: var(--bg-light);
-}
-
-.tab-button.tab-active {
-    background: var(--primary-orange);
-    color: white;
-    border-color: var(--primary-orange);
-}
-
-/* Campaigns table */
-.campaigns-table-header {
-    display: flex;
-    gap: 12px;
-    padding: 4px 0;
-    font-size: 9px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 1px solid var(--border-color);
-    margin-bottom: 4px;
-}
-
-.campaigns-table {
-    display: flex;
-    flex-direction: column;
-}
-
-.campaign-row {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    line-height: 24px;
-    font-size: 11px;
-    padding: 2px 0;
-}
-
-.campaign-id {
-    background: var(--peach-light);
-    color: var(--primary-orange);
-    padding: 2px 5px;
-    border-radius: 3px;
-    font-size: 9px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.2s;
-    display: inline-block;
-}
-
-.campaign-id:hover {
-    background: var(--primary-orange);
-    color: white;
-}
-
-/* Accordion */
-.accordion-toggle {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    background: none;
-    border: none;
-    color: var(--primary-orange);
-    font-size: 10px;
-    font-weight: 500;
-    cursor: pointer;
-    padding: 6px 0;
-    margin-top: 8px;
-    transition: opacity 0.2s;
-}
-
-.accordion-toggle:hover {
-    opacity: 0.7;
-}
-
-.accordion-icon {
-    transition: transform 0.2s;
-}
-
-.accordion-toggle.open .accordion-icon {
-    transform: rotate(180deg);
-}
-
-.campaigns-hidden {
-    /* display: flex moved to inline style via JS */
-    flex-direction: column;
-}
-
-/* Kebab Menu */
-.kebab-menu {
-    position: relative;
-    display: inline-block;
-}
-
-.kebab-button {
-    background: none;
-    border: none;
-    padding: 4px;
-    cursor: pointer;
-    color: var(--text-secondary);
-    border-radius: 4px;
-    transition: all 0.2s;
-}
-
-.kebab-button:hover {
-    background: var(--bg-light);
-    color: var(--text-primary);
-}
-
-.kebab-dropdown {
-    display: none;
-    position: absolute;
-    right: 0;
-    top: 100%;
-    margin-top: 4px;
-    background: white;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    min-width: 180px;
-    z-index: 1000;
-}
-
-.kebab-dropdown.show {
-    display: block;
-}
-
-.kebab-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    color: var(--text-primary);
-    text-decoration: none;
-    font-size: 14px;
-    transition: background 0.2s;
-}
-
-.kebab-item:hover {
-    background: var(--bg-light);
-}
-
-.kebab-item svg {
-    width: 16px;
-    height: 16px;
-    color: var(--text-secondary);
-}
-
-.kebab-divider {
-    height: 1px;
-    background: var(--border-color);
-    margin: 4px 0;
-}
-
-/* Modal */
-.modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 10000;
-    align-items: center;
-    justify-content: center;
-}
-
-/* Loading spinner */
-.progress-indicator.spinner {
-    display: inline-block;
-    animation: pulse 2s ease-in-out infinite;
-}
-
-.progress-indicator.spinner.progress-medium {
-    width: 120px;
-    height: 120px;
-}
-
-.progress-spinner {
-    width: 100%;
-    height: 100%;
-}
-
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.7;
-    }
-}
-
-.modal-content {
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    max-width: 90%;
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-/* Day buttons */
-.day-button {
-    padding: 8px 16px;
-    border: 1px solid var(--border-color);
-    background: white;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.day-button:hover {
-    border-color: var(--primary-orange);
-    background: var(--peach-light);
-}
-
-.day-button.active {
-    background: var(--primary-orange);
-    border-color: var(--primary-orange);
-    color: white;
-}
-
-/* Date preset buttons */
-.date-preset-btn {
-    padding: 6px 14px;
-    border: 1px solid var(--border-color);
-    background: white;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.date-preset-btn:hover {
-    border-color: var(--primary-orange);
-    background: var(--peach-light);
-    color: var(--primary-orange);
-}
-
-.date-preset-btn.active {
-    background: var(--peach-light);
-    border-color: var(--primary-orange);
-    color: var(--primary-orange);
-}
-
-/* Date picker modal buttons */
-.date-cancel-btn {
-    padding: 10px 20px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    border-radius: 8px;
-    transition: all 0.2s;
-}
-
-.date-cancel-btn:hover {
-    background: var(--bg-light);
-    color: var(--text-primary);
-}
-
-.date-submit-btn {
-    padding: 10px 24px;
-    border: none;
-    background: var(--primary-orange);
-    color: white;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    border-radius: 8px;
-    transition: all 0.2s;
-    height: 40px;
-}
-
-.date-submit-btn:hover {
-    background: #E67951;
-}
-
-/* Orange checkboxes in modal */
-#formCampaignsTable input[type="checkbox"] {
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    border: 2px solid #D1D5DB;
-    border-radius: 4px;
-    cursor: pointer;
-    position: relative;
-    transition: all 0.2s;
-}
-
-#formCampaignsTable input[type="checkbox"]:hover {
-    border-color: var(--primary-orange);
-}
-
-#formCampaignsTable input[type="checkbox"]:checked {
-    background: var(--primary-orange);
-    border-color: var(--primary-orange);
-}
-
-#formCampaignsTable input[type="checkbox"]:checked::after {
-    content: '';
-    position: absolute;
-    left: 5px;
-    top: 2px;
-    width: 4px;
-    height: 8px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-}
-
-/* Toast notification animation */
-@keyframes slideInRight {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes slideOutRight {
-    from {
-        transform: translateX(0);
-        opacity: 1;
-    }
-    to {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-}
-
-#toast.show {
-    animation: slideInRight 0.3s ease-out;
-}
-
-#toast.hide {
-    animation: slideOutRight 0.3s ease-out;
-}
-</style>
 
 <script>
 function toggleReportKebab(event, reportId) {
@@ -2060,18 +2075,6 @@ document.getElementById('reportFormModal')?.addEventListener('click', (e) => {
 });
 </script>
 
-<style>
-.account-combobox-option {
-    padding: 10px 16px;
-    font-size: 14px;
-    cursor: pointer;
-}
-.account-combobox-option:hover,
-.account-combobox-option.active {
-    background-color: var(--peach-light);
-    color: var(--primary-orange);
-}
-</style>
 
 <script>
 // Единое поле выбора аккаунта: печатаешь прямо в той же ячейке, что и

@@ -10,6 +10,602 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 
 {% block title %}Мониторинг - ОТЧЕТЫ{% endblock %}
 
+{% block extra_head %}
+<style>
+.tab-button {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 500;
+    text-decoration: none;
+    color: var(--text-secondary);
+    background: white;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+    cursor: pointer;
+    display: inline-block;
+}
+.tab-button:hover {
+    background: var(--bg-light);
+}
+.tab-button.tab-active {
+    background: var(--primary-orange);
+    color: white;
+    border-color: var(--primary-orange);
+}
+
+.report-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    transition: box-shadow 0.2s;
+}
+
+.report-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.kebab-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.kebab-button {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.kebab-button:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+}
+
+.kebab-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    min-width: 180px;
+    z-index: 1000;
+}
+
+.kebab-dropdown.show {
+    display: block;
+}
+
+.kebab-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.kebab-item:hover {
+    background: var(--bg-light);
+}
+
+.kebab-item svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
+}
+
+.kebab-item.kebab-item-danger {
+    color: #dc2626;
+}
+
+.kebab-item.kebab-item-danger:hover {
+    background: #fee2e2;
+}
+
+.kebab-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
+}
+
+/* KPI Table */
+.kpi-table-fixed {
+    width: 100% !important;
+    min-width: 1280px !important;
+    table-layout: fixed !important;
+    text-align: left;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+.kpi-table-fixed thead tr {
+    border-bottom: 1px solid #e7e5e4;
+    font-size: 8px;
+    font-weight: 500;
+    color: #a8a29e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: rgba(250, 250, 249, 0.8);
+}
+
+.kpi-table-fixed th {
+    padding: 6px 8px;
+    vertical-align: middle;
+    font-size: 8px;
+}
+
+.kpi-table-fixed .col-label {
+    width: 90px;
+    background: #fafaf9;
+    text-align: left;
+}
+
+.kpi-table-fixed .col-data {
+    width: 85px;
+    text-align: right;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+</style>
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
+<style>
+/* KPI info icon tooltip */
+.kpi-info-icon {
+    position: relative;
+    display: inline-flex;
+    cursor: help;
+    flex-shrink: 0;
+}
+.kpi-info-icon .kpi-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #292524;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.4;
+    white-space: pre-line;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 6px;
+    width: 240px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 50;
+}
+.kpi-info-icon:hover .kpi-tooltip {
+    display: block;
+}
+
+/* Verifier letter badge - color keyed to which verifier parsed from the
+   Asana task's "Верификатор:" note (W/S/T/A, see AsanaClient.VERIFIER_BADGES) */
+.verifier-badge-wrap {
+    position: relative;
+    display: inline-flex;
+    cursor: help;
+}
+.verifier-badge-wrap .verifier-badge-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #292524;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 400;
+    white-space: nowrap;
+    padding: 6px 9px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 50;
+}
+.verifier-badge-wrap:hover .verifier-badge-tooltip {
+    display: block;
+}
+.verifier-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    background: transparent;
+    font-size: 7px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    flex-shrink: 0;
+}
+.verifier-badge-W { color: #2563eb; } /* Weborama - синий */
+.verifier-badge-A { color: #dc2626; } /* Adriver - красный */
+.verifier-badge-T { color: #16a34a; } /* Target Ads - зеленый */
+.verifier-badge-S { color: #7c3aed; } /* Adservin/Sizmek - фиолетовый */
+
+/* Fast hover tooltip for non-icon elements (e.g. buttons) - same visual
+   style as .kpi-tooltip above, but without the native title attribute's
+   3-5s browser delay before it appears. */
+.fast-tooltip-wrap {
+    position: relative;
+    display: inline-flex;
+}
+.fast-tooltip-wrap .kpi-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    background: #292524;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.4;
+    white-space: pre-line;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 6px;
+    width: 220px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 50;
+}
+.fast-tooltip-wrap:hover .kpi-tooltip {
+    display: block;
+}
+
+/* Modal styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9999;
+    /* display: flex moved to inline style via JS */
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    position: relative;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    line-height: 1;
+    color: #a8a29e;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background: #f5f5f4;
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    max-height: calc(90vh - 160px);
+}
+
+/* Custom scrollbar for modal */
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+.modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.form-group {
+    margin-bottom: 10px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 8px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.required {
+    color: #dc2626;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--text-primary);
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--primary-orange);
+}
+
+.verifier-link-card {
+    border: 1px solid #fde8cc;
+    border-radius: 8px;
+    padding: 10px;
+    position: relative;
+    background: var(--peach-bg);
+}
+
+.verifier-link-card + .verifier-link-card {
+    margin-top: 8px;
+}
+
+.btn-vl-compact {
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 6px;
+    background: var(--bg-white);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.btn-vl-compact:hover {
+    background: var(--bg-light);
+}
+
+.btn-vl-compact-ghost {
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    border-radius: 5px;
+    background: none;
+    color: var(--text-secondary);
+    border: 1px dashed var(--border-color);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.btn-vl-compact-ghost:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
+}
+
+.btn-icon-ghost {
+    background: none;
+    border: none;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.btn-icon-ghost:hover {
+    color: var(--primary-orange);
+}
+
+.vlm-campaign-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    border: 1.5px solid var(--border-color);
+    border-radius: 3px;
+    cursor: pointer;
+    position: relative;
+    background: white;
+    flex-shrink: 0;
+}
+.vlm-campaign-checkbox:checked {
+    background: var(--primary-orange);
+    border-color: var(--primary-orange);
+}
+.vlm-campaign-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 46%;
+    width: 3px;
+    height: 7px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.vl-fetch-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--peach-light);
+    color: var(--primary-orange);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.vlm-select-all-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+
+.vlm-select-all-link:hover {
+    color: var(--primary-orange);
+}
+
+.verifier-mapping-row {
+    border-top: 1px dashed var(--border-color);
+    padding-top: 8px;
+    margin-top: 8px;
+}
+
+.verifier-mapping-row:first-of-type {
+    border-top: none;
+    padding-top: 0;
+    margin-top: 0;
+}
+
+/* Campaign selection table styles */
+#campaignsTable tbody tr {
+    transition: background 0.15s ease;
+}
+
+/* Orange checkboxes in campaigns table - v2 */
+#campaignsTable input[type="checkbox"] {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    width: 18px !important;
+    height: 18px !important;
+    border: 2px solid #D1D5DB !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    position: relative !important;
+    transition: all 0.2s !important;
+    background: white !important;
+    margin: 0 !important;
+}
+
+#campaignsTable input[type="checkbox"]:hover {
+    border-color: var(--primary-orange) !important;
+}
+
+#campaignsTable input[type="checkbox"]:checked {
+    background: var(--primary-orange) !important;
+    border-color: var(--primary-orange) !important;
+}
+
+#campaignsTable input[type="checkbox"]:checked::after {
+    content: '' !important;
+    position: absolute !important;
+    left: 5px !important;
+    top: 2px !important;
+    width: 4px !important;
+    height: 8px !important;
+    border: solid white !important;
+    border-width: 0 2px 2px 0 !important;
+    transform: rotate(45deg) !important;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <!-- Header -->
 <div class="content-header">
@@ -548,169 +1144,6 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
     </div>
 </div>
 
-<style>
-.tab-button {
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: 500;
-    text-decoration: none;
-    color: var(--text-secondary);
-    background: white;
-    border: 1px solid var(--border-color);
-    transition: all 0.2s;
-    cursor: pointer;
-    display: inline-block;
-}
-.tab-button:hover {
-    background: var(--bg-light);
-}
-.tab-button.tab-active {
-    background: var(--primary-orange);
-    color: white;
-    border-color: var(--primary-orange);
-}
-
-.report-card {
-    background: white;
-    border-radius: 12px;
-    padding: 16px;
-    border: 1px solid var(--border-color);
-    transition: box-shadow 0.2s;
-}
-
-.report-card:hover {
-    box-shadow: var(--shadow-md);
-}
-
-.kebab-menu {
-    position: relative;
-    display: inline-block;
-}
-
-.kebab-button {
-    background: none;
-    border: none;
-    padding: 4px;
-    cursor: pointer;
-    color: var(--text-secondary);
-    border-radius: 4px;
-    transition: all 0.2s;
-}
-
-.kebab-button:hover {
-    background: var(--bg-light);
-    color: var(--text-primary);
-}
-
-.kebab-dropdown {
-    display: none;
-    position: absolute;
-    right: 0;
-    top: 100%;
-    margin-top: 4px;
-    background: white;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    min-width: 180px;
-    z-index: 1000;
-}
-
-.kebab-dropdown.show {
-    display: block;
-}
-
-.kebab-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    color: var(--text-primary);
-    text-decoration: none;
-    font-size: 14px;
-    transition: background 0.2s;
-}
-
-.kebab-item:hover {
-    background: var(--bg-light);
-}
-
-.kebab-item svg {
-    width: 16px;
-    height: 16px;
-    color: var(--text-secondary);
-}
-
-.kebab-item.kebab-item-danger {
-    color: #dc2626;
-}
-
-.kebab-item.kebab-item-danger:hover {
-    background: #fee2e2;
-}
-
-.kebab-divider {
-    height: 1px;
-    background: var(--border-color);
-    margin: 4px 0;
-}
-
-/* KPI Table */
-.kpi-table-fixed {
-    width: 100% !important;
-    min-width: 1280px !important;
-    table-layout: fixed !important;
-    text-align: left;
-    border-collapse: collapse;
-    font-variant-numeric: tabular-nums;
-}
-
-.kpi-table-fixed thead tr {
-    border-bottom: 1px solid #e7e5e4;
-    font-size: 8px;
-    font-weight: 500;
-    color: #a8a29e;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    background: rgba(250, 250, 249, 0.8);
-}
-
-.kpi-table-fixed th {
-    padding: 6px 8px;
-    vertical-align: middle;
-    font-size: 8px;
-}
-
-.kpi-table-fixed .col-label {
-    width: 90px;
-    background: #fafaf9;
-    text-align: left;
-}
-
-.kpi-table-fixed .col-data {
-    width: 85px;
-    text-align: right;
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-    height: 5px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
-</style>
 
 <script>
 // Filter function
@@ -997,12 +1430,6 @@ function refreshAllMonitorings() {
 }
 </script>
 
-<style>
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-</style>
 
 <!-- Monitoring Modal -->
 <div id="monitoringModal" class="modal" style="display: none;" onclick="event.target === this && closeMonitoringModal()">
@@ -1348,430 +1775,6 @@ function refreshAllMonitorings() {
         </form>
     </div>
 </div>
-<style>
-/* KPI info icon tooltip */
-.kpi-info-icon {
-    position: relative;
-    display: inline-flex;
-    cursor: help;
-    flex-shrink: 0;
-}
-.kpi-info-icon .kpi-tooltip {
-    display: none;
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: #292524;
-    color: #fff;
-    font-size: 11px;
-    font-weight: 400;
-    line-height: 1.4;
-    white-space: pre-line;
-    text-align: left;
-    padding: 8px 10px;
-    border-radius: 6px;
-    width: 240px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    z-index: 50;
-}
-.kpi-info-icon:hover .kpi-tooltip {
-    display: block;
-}
-
-/* Verifier letter badge - color keyed to which verifier parsed from the
-   Asana task's "Верификатор:" note (W/S/T/A, see AsanaClient.VERIFIER_BADGES) */
-.verifier-badge-wrap {
-    position: relative;
-    display: inline-flex;
-    cursor: help;
-}
-.verifier-badge-wrap .verifier-badge-tooltip {
-    display: none;
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: #292524;
-    color: #fff;
-    font-size: 11px;
-    font-weight: 400;
-    white-space: nowrap;
-    padding: 6px 9px;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    z-index: 50;
-}
-.verifier-badge-wrap:hover .verifier-badge-tooltip {
-    display: block;
-}
-.verifier-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 12px;
-    height: 12px;
-    padding: 0;
-    border-radius: 50%;
-    border: 1px solid currentColor;
-    background: transparent;
-    font-size: 7px;
-    font-weight: 700;
-    line-height: 1;
-    text-align: center;
-    flex-shrink: 0;
-}
-.verifier-badge-W { color: #2563eb; } /* Weborama - синий */
-.verifier-badge-A { color: #dc2626; } /* Adriver - красный */
-.verifier-badge-T { color: #16a34a; } /* Target Ads - зеленый */
-.verifier-badge-S { color: #7c3aed; } /* Adservin/Sizmek - фиолетовый */
-
-/* Fast hover tooltip for non-icon elements (e.g. buttons) - same visual
-   style as .kpi-tooltip above, but without the native title attribute's
-   3-5s browser delay before it appears. */
-.fast-tooltip-wrap {
-    position: relative;
-    display: inline-flex;
-}
-.fast-tooltip-wrap .kpi-tooltip {
-    display: none;
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 0;
-    background: #292524;
-    color: #fff;
-    font-size: 11px;
-    font-weight: 400;
-    line-height: 1.4;
-    white-space: pre-line;
-    text-align: left;
-    padding: 8px 10px;
-    border-radius: 6px;
-    width: 220px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    z-index: 50;
-}
-.fast-tooltip-wrap:hover .kpi-tooltip {
-    display: block;
-}
-
-/* Modal styles */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 9999;
-    /* display: flex moved to inline style via JS */
-    align-items: center;
-    justify-content: center;
-}
-
-.modal-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-}
-
-.modal-content {
-    position: relative;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-    width: 90%;
-    max-width: 800px;
-    max-height: 90vh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-.modal-header {
-    padding: 20px 24px;
-    border-bottom: 1px solid var(--border-color);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.modal-header h2 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 28px;
-    line-height: 1;
-    color: #a8a29e;
-    cursor: pointer;
-    padding: 0;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    transition: all 0.2s;
-}
-
-.modal-close:hover {
-    background: #f5f5f4;
-    color: var(--text-primary);
-}
-
-.modal-body {
-    padding: 24px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    flex: 1;
-    max-height: calc(90vh - 160px);
-}
-
-/* Custom scrollbar for modal */
-.modal-body::-webkit-scrollbar {
-    width: 6px;
-}
-
-.modal-body::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
-
-.modal-body::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-}
-
-.modal-body::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
-
-.modal-footer {
-    padding: 16px 24px;
-    border-top: 1px solid var(--border-color);
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-}
-
-.form-group {
-    margin-bottom: 10px;
-}
-
-.form-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-    gap: 8px;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 4px;
-    font-size: 10px;
-    font-weight: 500;
-    color: var(--text-secondary);
-}
-
-.required {
-    color: #dc2626;
-}
-
-.form-group input,
-.form-group select {
-    width: 100%;
-    padding: 6px 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    font-size: 11px;
-    color: var(--text-primary);
-    transition: border-color 0.2s;
-}
-
-.form-group input:focus,
-.form-group select:focus {
-    outline: none;
-    border-color: var(--primary-orange);
-}
-
-.verifier-link-card {
-    border: 1px solid #fde8cc;
-    border-radius: 8px;
-    padding: 10px;
-    position: relative;
-    background: var(--peach-bg);
-}
-
-.verifier-link-card + .verifier-link-card {
-    margin-top: 8px;
-}
-
-.btn-vl-compact {
-    padding: 5px 10px;
-    font-size: 11px;
-    font-weight: 500;
-    border-radius: 6px;
-    background: var(--bg-white);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    cursor: pointer;
-    transition: background 0.15s;
-}
-
-.btn-vl-compact:hover {
-    background: var(--bg-light);
-}
-
-.btn-vl-compact-ghost {
-    padding: 4px 8px;
-    font-size: 10px;
-    font-weight: 500;
-    border-radius: 5px;
-    background: none;
-    color: var(--text-secondary);
-    border: 1px dashed var(--border-color);
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.btn-vl-compact-ghost:hover {
-    background: var(--bg-light);
-    color: var(--text-primary);
-    border-color: var(--text-secondary);
-}
-
-.btn-icon-ghost {
-    background: none;
-    border: none;
-    padding: 0;
-    width: 30px;
-    height: 30px;
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: color 0.15s;
-}
-
-.btn-icon-ghost:hover {
-    color: var(--primary-orange);
-}
-
-.vlm-campaign-checkbox {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
-    margin: 0;
-    border: 1.5px solid var(--border-color);
-    border-radius: 3px;
-    cursor: pointer;
-    position: relative;
-    background: white;
-    flex-shrink: 0;
-}
-.vlm-campaign-checkbox:checked {
-    background: var(--primary-orange);
-    border-color: var(--primary-orange);
-}
-.vlm-campaign-checkbox:checked::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 46%;
-    width: 3px;
-    height: 7px;
-    border: solid #fff;
-    border-width: 0 2px 2px 0;
-    transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.vl-fetch-progress {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--peach-light);
-    color: var(--primary-orange);
-    font-size: 11px;
-    font-weight: 500;
-    padding: 6px 10px;
-    border-radius: 6px;
-    margin-bottom: 8px;
-}
-
-.vlm-select-all-link {
-    color: var(--text-secondary);
-    text-decoration: none;
-}
-
-.vlm-select-all-link:hover {
-    color: var(--primary-orange);
-}
-
-.verifier-mapping-row {
-    border-top: 1px dashed var(--border-color);
-    padding-top: 8px;
-    margin-top: 8px;
-}
-
-.verifier-mapping-row:first-of-type {
-    border-top: none;
-    padding-top: 0;
-    margin-top: 0;
-}
-
-/* Campaign selection table styles */
-#campaignsTable tbody tr {
-    transition: background 0.15s ease;
-}
-
-/* Orange checkboxes in campaigns table - v2 */
-#campaignsTable input[type="checkbox"] {
-    appearance: none !important;
-    -webkit-appearance: none !important;
-    -moz-appearance: none !important;
-    width: 18px !important;
-    height: 18px !important;
-    border: 2px solid #D1D5DB !important;
-    border-radius: 4px !important;
-    cursor: pointer !important;
-    position: relative !important;
-    transition: all 0.2s !important;
-    background: white !important;
-    margin: 0 !important;
-}
-
-#campaignsTable input[type="checkbox"]:hover {
-    border-color: var(--primary-orange) !important;
-}
-
-#campaignsTable input[type="checkbox"]:checked {
-    background: var(--primary-orange) !important;
-    border-color: var(--primary-orange) !important;
-}
-
-#campaignsTable input[type="checkbox"]:checked::after {
-    content: '' !important;
-    position: absolute !important;
-    left: 5px !important;
-    top: 2px !important;
-    width: 4px !important;
-    height: 8px !important;
-    border: solid white !important;
-    border-width: 0 2px 2px 0 !important;
-    transform: rotate(45deg) !important;
-}
-</style>
 
 <script>
 const IS_VIEW_ONLY = {{ 'true' if session.get('user_role') == 'account_manager' else 'false' }};
