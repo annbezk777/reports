@@ -874,6 +874,42 @@ def dashboard():
                 problem_reports.append(entry)
                 problem_reports_by_id[report.id] = entry
 
+    # Asana's "Верификатор:" note names a verifier (the badge), but nothing
+    # is actually wired up on the monitoring yet - once a campaign has been
+    # running 3+ days that's a configuration gap worth surfacing, not just
+    # silently waiting. 'W' is tracked via VerifierLink; 'A'/'S'/'T' all
+    # currently share adriver_impressions/targetads_report_url (see
+    # AsanaClient.VERIFIER_BADGES - no separate storage per verifier yet).
+    today_for_attention = now.date()
+    for mo in active_monitorings:
+        if not mo.verifier_badge or not mo.report_config:
+            continue
+        days_running = (today_for_attention - mo.date_from).days
+        if days_running < 3:
+            continue
+        if mo.verifier_badge == 'W':
+            connected = any(link.verifier_type == 'weborama' for link in mo.verifier_links)
+        else:
+            connected = mo.adriver_impressions is not None or bool(mo.targetads_report_url)
+        if connected:
+            continue
+        report = mo.report_config
+        badge_name = VERIFIER_BADGE_NAMES.get(mo.verifier_badge, mo.verifier_badge)
+        issue = {
+            'text': f'Верификатор {badge_name} указан в Asana, но не подключён (кампания идёт {days_running} дн.)',
+            'severity': 'warning'
+        }
+        if report.id in problem_reports_by_id:
+            problem_reports_by_id[report.id]['issues'].append(issue)
+        else:
+            entry = {
+                'id': report.id,
+                'name': report.name or (report.campaign.name if report.campaign else f'Отчёт #{report.id}'),
+                'issues': [issue]
+            }
+            problem_reports.append(entry)
+            problem_reports_by_id[report.id] = entry
+
     # 6. Campaigns ending within the next 3 days
     today = now.date()
     ending_soon = MonitoringCampaign.query.filter(
@@ -2773,6 +2809,14 @@ def refresh_all_monitorings():
 
                 _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
                 _refresh_adriver_fact(monitoring, client, date_to)
+
+                if monitoring.targetads_report_url:
+                    try:
+                        _refresh_targetads_fact(monitoring)
+                    except TargetAdsRefreshError as e:
+                        logger.error(f"⚠️ TargetAds refresh failed for monitoring {monitoring.id}: {e}")
+                    except Exception as e:
+                        logger.error(f"⚠️ Unexpected error refreshing TargetAds for monitoring {monitoring.id}: {e}")
 
                 monitoring.last_sync = datetime.utcnow()
 
@@ -5394,6 +5438,14 @@ def scheduled_refresh_all_monitorings():
 
                 _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
                 _refresh_adriver_fact(monitoring, client, date_to)
+
+                if monitoring.targetads_report_url:
+                    try:
+                        _refresh_targetads_fact(monitoring)
+                    except TargetAdsRefreshError as e:
+                        logging.error(f"⚠️ TargetAds refresh failed for monitoring {monitoring.id}: {e}")
+                    except Exception as e:
+                        logging.error(f"⚠️ Unexpected error refreshing TargetAds for monitoring {monitoring.id}: {e}")
 
                 monitoring.last_sync = datetime.utcnow()
 
