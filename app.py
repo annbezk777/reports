@@ -2522,10 +2522,11 @@ class TargetAdsRefreshError(Exception):
 
 def _refresh_targetads_fact(monitoring):
     """Pull показы/клики (+ IVT/GIVT/SIVT share) from TargetAds, scoped to
-    the Sape (FS) source, for [adriver_compare_date_from or date_from .. yesterday].
-    No-op if no targetads_report_url is set. Raises TargetAdsRefreshError
-    on a real failure (bad link, auth, API error) so callers can decide
-    whether to surface it or just log and move on."""
+    the SAPE-attributed source(s), for [adriver_compare_date_from or
+    date_from .. yesterday]. No-op if no targetads_report_url is set.
+    Raises TargetAdsRefreshError on a real failure (bad link, auth, API
+    error) so callers can decide whether to surface it or just log and
+    move on."""
     if not monitoring.targetads_report_url:
         return None
 
@@ -2534,6 +2535,13 @@ def _refresh_targetads_fact(monitoring):
     project_id = TargetAdsClient.extract_project_id(monitoring.targetads_report_url)
     if not project_id:
         raise TargetAdsRefreshError('Не удалось распознать project_id в ссылке TargetAds')
+
+    # Not every project labels its SAPE traffic "Sape (FS)" - some split it
+    # across several source rows with project-specific names (e.g. "Sape
+    # Geo 1/2/3"). If the saved link carries the filter the user applied in
+    # the TargetAds UI (g=source&f=...), use those exact values instead of
+    # the generic default.
+    source_filter = TargetAdsClient.extract_source_filter(monitoring.targetads_report_url) or 'Sape (FS)'
 
     yesterday = (datetime.now() - timedelta(days=1)).date()
     date_from = monitoring.adriver_compare_date_from or monitoring.date_from
@@ -2547,7 +2555,8 @@ def _refresh_targetads_fact(monitoring):
         result = client.get_daily_stats(
             project_id,
             datetime.combine(date_from, datetime.min.time()),
-            datetime.combine(date_to, datetime.min.time())
+            datetime.combine(date_to, datetime.min.time()),
+            source=source_filter
         )
     except TargetAdsFetchError as e:
         raise TargetAdsRefreshError(str(e))

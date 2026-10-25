@@ -11,6 +11,7 @@ that use a TargetAds link.
 import os
 import re
 from datetime import datetime
+from urllib.parse import unquote_plus
 
 import requests
 
@@ -69,18 +70,36 @@ class TargetAdsClient:
         match = re.search(r'/projects/(\d+)', url)
         return match.group(1) if match else None
 
+    @staticmethod
+    def extract_source_filter(url):
+        """Pull the source filter's value list out of a TargetAds dashboard
+        URL's `f=` param, e.g. ...&g=source&f=name%3Dsource%3Bcondition%3D
+        equal%3Bvalue%3DSape+Geo+1%2CSape+Geo+2%2CSape+Geo+3 decodes to
+        "name=source;condition=equal;value=Sape Geo 1,Sape Geo 2,Sape Geo 3".
+
+        Not every project labels its SAPE-attributed traffic "Sape (FS)" -
+        some split it into several source rows with project-specific names
+        (e.g. "Sape Geo 1/2/3"). The only reliable way to get the right
+        label(s) is from the exact URL the user copies after filtering by
+        source to just the SAPE rows in the TargetAds UI - returns None if
+        the URL doesn't carry that filter (older links), so the caller can
+        fall back to the "Sape (FS)" default."""
+        if not url:
+            return None
+        match = re.search(r'[?&]f=([^&]+)', url)
+        if not match:
+            return None
+        decoded = unquote_plus(match.group(1))
+        parts = dict(p.split('=', 1) for p in decoded.split(';') if '=' in p)
+        if parts.get('name') != 'source' or not parts.get('value'):
+            return None
+        values = [v.strip() for v in parts['value'].split(',') if v.strip()]
+        return values or None
+
     def _headers(self):
         return {'authorization': f'Bearer {self.access_token}', 'content-type': 'application/json'}
 
-    def get_daily_stats(self, project_id, date_from, date_to, source='Sape (FS)'):
-        """
-        Returns {'daily': [{'date_iso': ..., 'impressions': int, 'clicks': int}, ...],
-                 'total_impressions': int, 'total_clicks': int}
-        scoped to the given source only (default: just the SAPE-attributed slice).
-        """
-        if not self.access_token:
-            self.authenticate()
-
+    def _fetch_dashboard(self, project_id, date_from, date_to, filter_body):
         body = {
             'common_params': {
                 'interval_from': date_from.strftime('%Y-%m-%d'),
@@ -92,9 +111,8 @@ class TargetAdsClient:
                 {'name_id': 'media_main_chart_click', 'date_grouping': 'day', 'scale': 'day'},
                 {'name_id': 'media_table_chart_source', 'date_grouping': 'day', 'scale': 'day'},
             ],
-            'filter': [{'name': 'source', 'condition': 'equal', 'value': [source]}]
+            'filter': filter_body
         }
-
         resp = requests.post(
             f'{self.BASE_URL}/dashboard/fetch/?project_id={project_id}',
             headers=self._headers(),
@@ -103,8 +121,10 @@ class TargetAdsClient:
         )
         if resp.status_code != 200:
             raise TargetAdsFetchError(f'Ошибка запроса к TargetAds: {resp.status_code} {resp.text}')
+        return resp.json()
 
-        data = resp.json()
+    @staticmethod
+    def _extract_stats(data):
         impressions_by_date = {
             row[0]: row[1] for row in data.get('media_main_chart_impressions', {}).get('data', {}).get('dataset', [])
         }
@@ -126,17 +146,35 @@ class TargetAdsClient:
         # the whole period with share_givt/share_sivt/share_ivt as 0-1
         # fractions - IVT quality metrics, not available per-day.
         ivt_shares = {'ivt_share': None, 'givt_share': None, 'sivt_share': None}
-        table = data.get('media_table_chart_source', {}).get('data', {})
-        rows = table.get('dataset', [])
-        cols = [c['name'] for c in table.get('column', [])]
-        if rows and cols:
-            row = dict(zip(cols, rows[0]))
+        table_rows = data.get('media_table_chart_source', {}).get('data', {}).get('dataset', [])
+        table_cols = [c['name'] for c in data.get('media_table_chart_source', {}).get('data', {}).get('column', [])]
+        if table_rows and table_cols:
+            row = dict(zip(table_cols, table_rows[0]))
             if row.get('share_givt') is not None:
                 ivt_shares['givt_share'] = round(row['share_givt'] * 100, 2)
             if row.get('share_sivt') is not None:
                 ivt_shares['sivt_share'] = round(row['share_sivt'] * 100, 2)
             if row.get('share_ivt') is not None:
                 ivt_shares['ivt_share'] = round(row['share_ivt'] * 100, 2)
+
+        return daily, ivt_shares, table_rows, table_cols
+
+    def get_daily_stats(self, project_id, date_from, date_to, source='Sape (FS)'):
+        """
+        Returns {'daily': [{'date_iso': ..., 'impressions': int, 'clicks': int}, ...],
+                 'total_impressions': int, 'total_clicks': int}
+        scoped to the given source(s) only - a string for one label, or a
+        list for projects that split SAPE traffic across several source
+        rows (e.g. "Sape Geo 1/2/3" - see extract_source_filter). Defaults
+        to "Sape (FS)" for callers that don't have a more specific value
+        parsed from the monitoring's own targetads_report_url.
+        """
+        if not self.access_token:
+            self.authenticate()
+
+        source_values = source if isinstance(source, list) else [source]
+        data = self._fetch_dashboard(project_id, date_from, date_to, [{'name': 'source', 'condition': 'equal', 'value': source_values}])
+        daily, ivt_shares, table_rows, table_cols = self._extract_stats(data)
 
         return {
             'daily': daily,
