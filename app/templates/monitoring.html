@@ -845,7 +845,7 @@ function bulkDeleteMonitoringsSelected() {
 document.addEventListener('DOMContentLoaded', function() {
     restoreMonitoringFilterState();
 
-    // Deep link from Главная ("Метрики успешности" drill-down) -
+    // Deep link from Главная ("Метрики эффективности" drill-down) -
     // ?search=<name> pre-fills the search box so only that campaign shows.
     const searchQuery = new URLSearchParams(window.location.search).get('search');
     if (searchQuery) {
