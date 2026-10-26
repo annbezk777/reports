@@ -746,6 +746,11 @@ def dashboard():
             return None
         return (today_moscow - pytz.utc.localize(utc_dt).astimezone(moscow_tz).date()).days
 
+    # A diff over this magnitude (показы or клики, whichever is worse) is
+    # the "this needs a look" signal - drives both the severity color and
+    # which entries surface in verifier_top_diffs.
+    VERIFIER_DIFF_SIGNAL_THRESHOLD = 10
+
     verifier_diffs = []
     for mo in active_monitorings:
         wcm_diff = mo.get_weborama_impressions_diff_percent()
@@ -762,7 +767,8 @@ def dashboard():
             # facts entered before we tracked update time) leak into the
             # "fresh" average as if they were current.
             verifier_diffs.append({
-                'id': mo.id, 'name': mo.name, 'type': 'Weborama', 'diff': wcm_diff,
+                'id': mo.id, 'name': mo.name, 'type': 'Weborama',
+                'diff': wcm_diff, 'clicks_diff': mo.get_weborama_clicks_diff_percent(),
                 'days_stale': days_stale, 'is_stale': days_stale is None or days_stale >= STALE_DAYS_THRESHOLD,
                 'as_of_date': None,
             })
@@ -779,10 +785,19 @@ def dashboard():
             else:
                 days_stale = _days_since_moscow(mo.adriver_data_updated_at)
             verifier_diffs.append({
-                'id': mo.id, 'name': mo.name, 'type': 'Adriver/TargetADS/Adserving', 'diff': adr_diff,
+                'id': mo.id, 'name': mo.name, 'type': 'Adriver/TargetADS/Adserving',
+                'diff': adr_diff, 'clicks_diff': mo.get_adriver_clicks_diff_percent(),
                 'days_stale': days_stale, 'is_stale': days_stale is None or days_stale >= STALE_DAYS_THRESHOLD,
                 'as_of_date': mo.adriver_data_as_of_date,
             })
+
+    def _worst_abs_diff(v):
+        """Max magnitude across показы/клики - a big miss on either metric
+        is equally worth flagging, not just показы."""
+        return max(abs(v['diff']), abs(v['clicks_diff']) if v['clicks_diff'] is not None else 0)
+
+    for v in verifier_diffs:
+        v['is_signal'] = _worst_abs_diff(v) > VERIFIER_DIFF_SIGNAL_THRESHOLD
 
     # Fresh-data discrepancies are the real signal - rank those first, stale
     # ones (likely just "forgot to refresh") trail behind regardless of how
@@ -793,8 +808,8 @@ def dashboard():
         if fresh_diffs else None
     )
     verifier_top_diffs = (
-        sorted(fresh_diffs, key=lambda v: abs(v['diff']), reverse=True)[:5]
-        + sorted([v for v in verifier_diffs if v['is_stale']], key=lambda v: abs(v['diff']), reverse=True)[:3]
+        sorted(fresh_diffs, key=_worst_abs_diff, reverse=True)[:5]
+        + sorted([v for v in verifier_diffs if v['is_stale']], key=_worst_abs_diff, reverse=True)[:3]
     )
 
     # 3. IVT/GIVT/SIVT quality overview, broken down by which verifier the
@@ -5260,7 +5275,21 @@ def run_report_update(report, date_from=None, date_to=None):
         with app.test_request_context(
             f'/reports/{report.id}/run-old?date_from={date_from_str}&date_to={date_to_str}'
         ):
-            run_report_old(report.id)
+            # This internal scheduled call has no real logged-in session, so
+            # going through the decorated route (run_report_old) would hit
+            # @login_required and silently redirect to /login without ever
+            # running the actual update - the caller here never checked the
+            # return value, so that redirect looked like "success" in the
+            # logs while nothing was written. @wraps on both decorators
+            # exposes the original function via __wrapped__ - call that
+            # directly to skip the auth checks for this one trusted,
+            # scheduler-only path (the real HTTP route stays protected).
+            result = run_report_old.__wrapped__.__wrapped__(report.id)
+
+        if hasattr(result, 'status_code') and result.status_code in (301, 302, 303, 307, 308):
+            location = getattr(result, 'location', '?')
+            logging.error(f"❌ Report {report.id} update did not run (redirected to {location} instead) - treating as failure")
+            return False
 
         logging.info(f"✅ Scheduled update completed for report {report.id}")
         return True
