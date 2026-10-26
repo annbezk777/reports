@@ -948,7 +948,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         <td style="padding: 6px 8px; font-weight: 600; color: #78716c; background: rgba(250, 250, 249, 0.5); position: sticky; left: 0; z-index: 10; border-right: 1px solid #e7e5e4; text-transform: uppercase; font-size: 8px;">Выполнение</td>
 
                                         {% set perf_imp = monitoring.get_uniform_performance_percent(monitoring.fact_impressions, monitoring.plan_impressions) %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if perf_imp %}color: {% if perf_imp >= 100 %}#16a34a{% elif perf_imp >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_imp) if perf_imp else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if perf_imp %}color: {% if perf_imp > 115 or perf_imp < 85 %}#dc2626{% elif perf_imp >= 100 %}#16a34a{% else %}#f59e0b{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_imp) if perf_imp else '—' }}</td>
 
                                         {% set perf_clicks = monitoring.get_uniform_performance_percent(monitoring.fact_clicks, monitoring.plan_clicks) %}
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if perf_clicks %}color: {% if perf_clicks >= 100 %}#16a34a{% elif perf_clicks >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_clicks) if perf_clicks else '—' }}</td>
