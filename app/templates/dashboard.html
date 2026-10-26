@@ -224,7 +224,7 @@
                         Расхождения с верификаторами
                     </h3>
                     <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
-                        Weborama и Adriver/TargetADS/Adserving vs SAPE-факт, показы
+                        Weborama и Adriver/TargetADS/Adserving vs SAPE-факт, показы и клики
                     </p>
                 </div>
             </div>
@@ -237,8 +237,8 @@
                 {% endif %}
                 <div style="max-height: 190px; overflow-y: auto;">
                     {% for v in verifier_top_diffs %}
-                    {% set row_color = ('var(--text-light)' if v.is_stale else ('var(--purple-accent)' if v.diff|abs > 15 else 'var(--green-accent)')) %}
-                    {% set row_tint = ('var(--bg-light)' if v.is_stale else ('rgba(155,89,182,0.07)' if v.diff|abs > 15 else 'rgba(16,185,129,0.07)')) %}
+                    {% set row_color = ('var(--text-light)' if v.is_stale else ('var(--purple-accent)' if v.is_signal else 'var(--green-accent)')) %}
+                    {% set row_tint = ('var(--bg-light)' if v.is_stale else ('rgba(155,89,182,0.07)' if v.is_signal else 'rgba(16,185,129,0.07)')) %}
                     <div style="display: flex; align-items: center; justify-content: space-between; padding: 9px 10px 9px 12px; margin-bottom: 6px; border-radius: 10px; background: {{ row_tint }}; border-left: 3px {{ 'dashed' if v.is_stale else 'solid' }} {{ row_color }};">
                         <div>
                             <a href="{{ url_for('monitoring', open=v.id) }}" style="font-size: 13px; color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color='var(--primary-orange)';" onmouseout="this.style.color='var(--text-primary)';">{{ v.name }}</a>
@@ -260,7 +260,14 @@
                             </div>
                         </div>
                         {% if not v.is_stale %}
-                        <strong style="font-size: 13px; color: {{ row_color }}; flex-shrink: 0; margin-left: 8px;">{{ '+' if v.diff > 0 else '' }}{{ v.diff }}%</strong>
+                        <div style="text-align: right; flex-shrink: 0; margin-left: 8px;">
+                            <strong style="font-size: 13px; color: {{ row_color }};">{{ '+' if v.diff > 0 else '' }}{{ v.diff }}%</strong>
+                            <span style="font-size: 9px; color: var(--text-secondary); display: block;">показы</span>
+                            {% if v.clicks_diff is not none %}
+                            <strong style="font-size: 13px; color: {{ 'var(--purple-accent)' if v.clicks_diff|abs > 10 else 'var(--green-accent)' }};">{{ '+' if v.clicks_diff > 0 else '' }}{{ v.clicks_diff }}%</strong>
+                            <span style="font-size: 9px; color: var(--text-secondary); display: block;">клики</span>
+                            {% endif %}
+                        </div>
                         {% endif %}
                     </div>
                     {% endfor %}

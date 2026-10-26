@@ -665,6 +665,36 @@ class MonitoringCampaign(db.Model):
         return round((clk - sape_fact) / clk * 100, 1)
 
 
+class AdriverFileUpload(db.Model):
+    """Archive entry for every Adriver/Sizmek Excel file uploaded via a
+    monitoring's "Постклик" upload - the file itself used to get parsed
+    and discarded, so there was no way to go back and check what was
+    actually uploaded or who uploaded it. Visible to all traffic managers
+    on the dedicated Постклик page; account-manager role doesn't see it
+    (same as Отчёты/Аккаунты)."""
+    __tablename__ = 'adriver_file_uploads'
+
+    id = db.Column(db.Integer, primary_key=True)
+    monitoring_id = db.Column(db.Integer, db.ForeignKey('monitoring_campaigns.id'), nullable=False)
+
+    filename = db.Column(db.String(255), nullable=False)  # original filename, for display
+    file_path = db.Column(db.String(500), nullable=False)  # where it's stored under uploads/
+
+    uploaded_by = db.Column(db.String(255), nullable=True)  # email of the manager who uploaded it
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Parsed summary at upload time, cached here so the archive list doesn't
+    # need to re-open/re-parse every file just to show what it contained.
+    impressions = db.Column(db.Integer, nullable=True)
+    clicks = db.Column(db.Integer, nullable=True)
+    data_as_of_date = db.Column(db.Date, nullable=True)
+
+    monitoring = db.relationship('MonitoringCampaign', backref='adriver_file_uploads')
+
+    def __repr__(self):
+        return f'<AdriverFileUpload {self.filename} for monitoring {self.monitoring_id}>'
+
+
 class VerifierLink(db.Model):
     """A verifier (Weborama/Adriver) permalink attached to a monitoring.
 

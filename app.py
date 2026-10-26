@@ -55,7 +55,7 @@ class PrintLogger:
 sys.stdout = PrintLogger(logger, logging.INFO)
 
 # Initialize database
-from app.models import db, SapeAccount, Client, Campaign, ReportConfig, ReportLog, MonitoringCampaign, VerifierLink, VerifierLinkMapping
+from app.models import db, SapeAccount, Client, Campaign, ReportConfig, ReportLog, MonitoringCampaign, VerifierLink, VerifierLinkMapping, AdriverFileUpload
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -2937,6 +2937,27 @@ def upload_adriver_excel(monitoring_id):
             # Update last sync time
             monitoring.last_sync = datetime.utcnow()
 
+            # Keep the file itself (Постклик archive) - previously it was
+            # parsed and thrown away, so there was no way to go back and
+            # check what was actually uploaded or by whom.
+            upload_dir = os.path.join(app.root_path, 'uploads', 'adriver_postclick', str(monitoring_id))
+            os.makedirs(upload_dir, exist_ok=True)
+            stored_filename = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{secure_filename(file.filename)}"
+            stored_path = os.path.join(upload_dir, stored_filename)
+            import shutil as _shutil
+            _shutil.copy(temp_file_path, stored_path)
+
+            file_upload = AdriverFileUpload(
+                monitoring_id=monitoring_id,
+                filename=file.filename,
+                file_path=os.path.relpath(stored_path, app.root_path),
+                uploaded_by=session.get('user_email'),
+                impressions=monitoring.adriver_impressions,
+                clicks=monitoring.adriver_clicks,
+                data_as_of_date=monitoring.adriver_data_as_of_date,
+            )
+            db.session.add(file_upload)
+
             db.session.commit()
 
             logger.info(f"✅ Updated monitoring {monitoring_id} with Adriver data:")
@@ -2971,6 +2992,37 @@ def upload_adriver_excel(monitoring_id):
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/postclick')
+@login_required
+@block_account_manager
+def postclick():
+    """Постклик - archive of every Adriver/Sizmek Excel file uploaded
+    across all monitorings, with who uploaded it and when. Same
+    visibility as Отчёты/Аккаунты (hidden from account-manager role)."""
+    search = request.args.get('search', '').strip()
+
+    query = AdriverFileUpload.query.join(MonitoringCampaign)
+    if search:
+        query = query.filter(MonitoringCampaign.name.ilike(f'%{search}%'))
+
+    uploads = query.order_by(AdriverFileUpload.uploaded_at.desc()).all()
+
+    return render_template('postclick.html', uploads=uploads, search=search)
+
+
+@app.route('/postclick/<int:upload_id>/download')
+@login_required
+@block_account_manager
+def download_postclick_file(upload_id):
+    """Download the original Excel file for one Постклик archive entry."""
+    from flask import send_file
+    upload = AdriverFileUpload.query.get_or_404(upload_id)
+    full_path = os.path.join(app.root_path, upload.file_path)
+    if not os.path.exists(full_path):
+        abort(404)
+    return send_file(full_path, as_attachment=True, download_name=upload.filename)
 
 
 # ============================================================================

@@ -58,17 +58,17 @@ input, select, textarea, button {
     left: 0;
     top: 0;
     height: 100vh;
-    width: 260px;
+    width: 220px;
     background: var(--bg-white);
     border-right: 1px solid var(--border-color);
-    transition: transform 0.3s ease;
+    transition: width 0.3s ease;
     z-index: 40;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .sidebar.collapsed {
-    transform: translateX(-200px);
     width: 60px;
 }
 
@@ -148,7 +148,7 @@ input, select, textarea, button {
 
 .sidebar-toggle {
     position: fixed;
-    left: 240px;
+    left: 200px;
     top: 24px;
     width: 36px;
     height: 36px;
@@ -179,7 +179,7 @@ body:has(.sidebar.collapsed) .sidebar-toggle {
 
 /* Main Content */
 .main-content {
-    margin-left: 260px;
+    margin-left: 220px;
     transition: margin-left 0.3s ease;
     min-height: 100vh;
 }

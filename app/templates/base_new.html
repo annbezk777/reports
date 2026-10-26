@@ -14,7 +14,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=optional" rel="stylesheet">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=25102506">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=25102603">
 
     <!-- Prevent FOUC: Apply sidebar state BEFORE render -->
     <script>
@@ -147,6 +147,17 @@
                 </svg>
                 <span class="sidebar-nav-text">Мониторинг</span>
             </a>
+
+            {% if session.get('user_role') != 'account_manager' %}
+            <a href="{{ url_for('postclick') }}"
+               class="sidebar-nav-item {% if request.endpoint == 'postclick' %}active{% endif %}">
+                <svg class="sidebar-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v6m-3-3h6"/>
+                </svg>
+                <span class="sidebar-nav-text">Постклик архив</span>
+            </a>
+            {% endif %}
         </nav>
 
         <!-- User Profile (bottom) -->
