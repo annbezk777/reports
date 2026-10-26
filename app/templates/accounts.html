@@ -506,28 +506,40 @@ function applyFilters() {
     });
 }
 
-// Format relative time
+// Format relative time - always in Moscow time/calendar, regardless of
+// the viewer's own browser timezone (was using getHours()/getMinutes(),
+// which read in whatever timezone the browser itself is set to - and
+// "Сегодня"/"Вчера" was decided by raw elapsed-seconds/86400, which
+// undercounts a day boundary crossing when under 24h have passed (e.g.
+// synced 23h55m ago, calendar day already changed, still showed
+// "Сегодня" instead of "Вчера" - same class of bug already fixed
+// server-side for verifier staleness, see _days_since_moscow in app.py).
+const MOSCOW_TIME_FMT = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', hour12: false });
+const MOSCOW_DATE_KEY_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow' }); // YYYY-MM-DD, sortable/comparable
+
 function formatRelativeTime() {
-    const now = Date.now() / 1000;
+    const nowSeconds = Date.now() / 1000;
+    const todayKey = MOSCOW_DATE_KEY_FMT.format(new Date());
+    const yesterdayKey = MOSCOW_DATE_KEY_FMT.format(new Date(Date.now() - 86400000));
+
     document.querySelectorAll('.sync-time').forEach(el => {
         const timestamp = parseFloat(el.dataset.timestamp);
-        const diff = now - timestamp;
-        const diffDays = Math.floor(diff / 86400);
-        const diffHours = Math.floor(diff / 3600);
+        const syncDate = new Date(timestamp * 1000);
+        const diff = nowSeconds - timestamp;
         const diffMinutes = Math.floor(diff / 60);
+        const diffHours = Math.floor(diff / 3600);
+        const diffDays = Math.floor(diff / 86400);
+        const syncDayKey = MOSCOW_DATE_KEY_FMT.format(syncDate);
+        const timeStr = MOSCOW_TIME_FMT.format(syncDate);
 
         let relativeText = '';
-        if (diffDays === 0) {
-            if (diffHours === 0) {
-                if (diffMinutes < 5) relativeText = 'Только что';
-                else relativeText = `${diffMinutes} мин. назад`;
-            } else {
-                const date = new Date(timestamp * 1000);
-                relativeText = `Сегодня в ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-            }
-        } else if (diffDays === 1) {
-            const date = new Date(timestamp * 1000);
-            relativeText = `Вчера в ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        if (diffHours === 0 && syncDayKey === todayKey) {
+            if (diffMinutes < 5) relativeText = 'Только что';
+            else relativeText = `${diffMinutes} мин. назад`;
+        } else if (syncDayKey === todayKey) {
+            relativeText = `Сегодня в ${timeStr}`;
+        } else if (syncDayKey === yesterdayKey) {
+            relativeText = `Вчера в ${timeStr}`;
         } else if (diffDays < 7) {
             relativeText = `${diffDays} дн. назад`;
         } else if (diffDays < 30) {
