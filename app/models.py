@@ -446,29 +446,33 @@ class MonitoringCampaign(db.Model):
         return round(diff_percent, 1)
 
     def get_bounce_diff(self):
-        """Отказы: показать разницу со знаком < или > (<5.6 или >5.6)"""
-        if self.fact_bounce_rate is None or not self.plan_bounce_rate:
+        """Отказы: показать разницу со знаком < или > (<5.6 или >5.6)
+        0 здесь на практике всегда означает "нет постклик-данных" (ровно
+        тот же falsy-признак, по которому ФАКТ в таблице уже рисует "—"),
+        не реальный замер - поэтому falsy-проверка, а не is None, иначе
+        0 − план показывает выполнение из ниоткуда."""
+        if not self.fact_bounce_rate or not self.plan_bounce_rate:
             return None
         diff = self.fact_bounce_rate - self.plan_bounce_rate
         return round(diff, 1)
 
     def get_time_diff_seconds(self):
         """Время: показать разницу в секундах (+15с или -15с)"""
-        if self.fact_time_on_site is None or not self.plan_time_on_site:
+        if not self.fact_time_on_site or not self.plan_time_on_site:
             return None
         diff = self.fact_time_on_site - self.plan_time_on_site
         return round(diff, 0)
 
     def get_depth_diff(self):
         """Глубина: показать разницу со знаком < или > (<0.4 или >0.4)"""
-        if self.fact_page_depth is None or not self.plan_page_depth:
+        if not self.fact_page_depth or not self.plan_page_depth:
             return None
         diff = self.fact_page_depth - self.plan_page_depth
         return round(diff, 1)
 
     def get_robotness_diff(self):
         """Роботность: показать разницу (-6.8 или +6.8)"""
-        if self.fact_robotness is None or not self.plan_robotness:
+        if not self.fact_robotness or not self.plan_robotness:
             return None
         diff = self.fact_robotness - self.plan_robotness
         return round(diff, 1)
