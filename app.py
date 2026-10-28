@@ -3529,8 +3529,23 @@ def _fetch_and_apply_weborama_link(link):
     if date_from > date_to:
         raise WeboramaLinkFetchError('Период мониторинга ещё не наступил')
 
-    from app.api.weborama_client import fetch_insertions
-    results = fetch_insertions(link.permalink_url, date_from, date_to)
+    from app.api.weborama_client import fetch_insertions, WeboramaFetchError
+    try:
+        results = fetch_insertions(link.permalink_url, date_from, date_to)
+    except WeboramaFetchError as e:
+        # Weborama's own calendar can lag behind "yesterday" by a day -
+        # it disables any day it hasn't finished processing yet rather
+        # than returning partial data, so a plain "date_to = yesterday"
+        # request can fail every morning until it catches up. Step the
+        # end date back one day and retry once rather than leaving
+        # verifier_impressions stuck on whatever the last successful
+        # run happened to be, comparing stale data against a fresh SAPE
+        # fact that keeps moving forward.
+        if 'недоступен для выбора' in str(e) and date_to > date_from:
+            date_to = date_to - timedelta(days=1)
+            results = fetch_insertions(link.permalink_url, date_from, date_to)
+        else:
+            raise
 
     mapping_results = []
     for mapping in link.mappings:
