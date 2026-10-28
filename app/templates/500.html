@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>500 - Технические работы</title>
+
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=optional" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=14102001">
+
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--peach-bg);
+        }
+
+        .err500-wrap {
+            width: 100%;
+            max-width: 440px;
+            padding: 0 20px;
+            text-align: center;
+        }
+
+        .err500-card {
+            background: var(--bg-white);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: var(--shadow-sm);
+            padding: 40px 32px;
+        }
+
+        .err500-icon {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--peach-light) 0%, var(--peach-bg) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .err500-icon svg {
+            animation: err500-spin 3.5s linear infinite;
+            transform-origin: center;
+        }
+
+        @keyframes err500-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .err500-code {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-light);
+            letter-spacing: 0.05em;
+            margin: 0 0 16px;
+        }
+
+        .err500-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 10px;
+        }
+
+        .err500-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin: 0 0 20px;
+            line-height: 1.5;
+        }
+
+        .err500-technical {
+            font-size: 11px;
+            color: var(--text-light);
+            margin: 20px 0 0;
+            line-height: 1.5;
+            border-top: 1px solid var(--border-color);
+            padding-top: 16px;
+        }
+
+        .err500-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="err500-wrap">
+        <div class="err500-card">
+            <div class="err500-icon">
+                <svg width="32" height="32" fill="none" stroke="var(--primary-orange)" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+            </div>
+            <p class="err500-code">ОШИБКА 500</p>
+            <p class="err500-title">Ведутся технические работы</p>
+            <p class="err500-text">Сейчас проводится техническое обновление — в ближайшее время сервер заработает. Попробуйте обновить страницу через пару минут.</p>
+            <div class="err500-actions">
+                <a href="javascript:location.reload()" class="btn btn-primary">Обновить страницу</a>
+            </div>
+            <p class="err500-technical">Internal Server Error. The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.</p>
+        </div>
+    </div>
+</body>
+</html>

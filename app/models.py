@@ -395,6 +395,15 @@ class MonitoringCampaign(db.Model):
             return round((self.fact_conversions / self.fact_visits) * 100, 2)
         return None
 
+    def get_cr_diff(self):
+        """CR: показать разницу (+0.15 или -0.15)"""
+        fact_cr = self.get_fact_cr()
+        plan_cr = self.get_plan_cr()
+        if fact_cr is None or plan_cr is None:
+            return None
+        diff = fact_cr - plan_cr
+        return round(diff, 2)
+
     def get_fact_ctr(self):
         """Calculate actual CTR (Click-Through Rate) from clicks and impressions"""
         if self.fact_impressions and self.fact_impressions > 0 and self.fact_clicks:

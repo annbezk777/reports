@@ -75,8 +75,8 @@
         </div>
 
         <!-- Conversions -->
-        <div class="metric-card">
-            <div class="metric-label">
+        <div class="metric-card" style="text-align: center;">
+            <div class="metric-label" style="justify-content: center;">
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                 </svg>
@@ -86,7 +86,7 @@
                 {{ conversions_stats.fact if conversions_stats.fact else '—' }}
                 <span style="font-size: 16px; font-weight: 500; color: var(--text-secondary);">/ {{ conversions_stats.plan if conversions_stats.plan else '—' }}</span>
             </div>
-            <div class="metric-change" style="color: var(--text-secondary);">
+            <div class="metric-change" style="color: var(--text-secondary); justify-content: center;">
                 {% if conversions_stats.fact_cr is not none %}
                     CR факт {{ conversions_stats.fact_cr }}%{% if conversions_stats.plan_cr is not none %}, план {{ conversions_stats.plan_cr }}%{% endif %}
                 {% else %}
