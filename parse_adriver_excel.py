@@ -102,6 +102,12 @@ class AdriverExcelParser:
             # показать отдельно от "когда мы обновили поле в базе".
             ivt_data['data_as_of_date'] = self._find_last_date(rows, shared_strings, ns, header_row_idx, total_row_idx)
 
+            # Построчные данные по дням - для понедельной динамики. Файл
+            # уже содержит это построчно (между заголовком и "Всего"), не
+            # нужно ничего досчитывать - просто не выбрасывать после того,
+            # как нашли по ним последнюю дату.
+            ivt_data['daily_rows'] = self._extract_daily_rows(rows, shared_strings, ns, headers, header_row_idx, total_row_idx)
+
             return ivt_data
 
         finally:
@@ -139,6 +145,28 @@ class AdriverExcelParser:
             if last_date is None or d > last_date:
                 last_date = d
         return last_date
+
+    def _extract_daily_rows(self, rows, shared_strings, ns, headers, header_row_idx, total_row_idx):
+        """Per-day rows between the header and the 'Всего' row, parsed
+        through the same _extract_ivt_data mapping as the total row - so a
+        day's numbers use the exact same column lookups/parsing as the
+        campaign-wide total already does. Rows with an unparseable date
+        are skipped (stray subtotal/blank rows some exports include)."""
+        daily = []
+        for row in rows[header_row_idx + 1:total_row_idx]:
+            values = self._get_row_values(row, shared_strings, ns)
+            if not values:
+                continue
+            raw_date = values[0]
+            try:
+                d = datetime.strptime(str(raw_date).strip(), '%d.%m.%Y').date()
+            except (ValueError, TypeError):
+                continue
+            data = dict(zip(headers, values))
+            day_data = self._extract_ivt_data(data, verbose=False)
+            day_data['date'] = d
+            daily.append(day_data)
+        return daily
 
     def _find_total_row(self, rows, shared_strings, ns):
         """Find row with 'Всего' (Total)"""
@@ -193,9 +221,10 @@ class AdriverExcelParser:
         except:
             return 0.0
 
-    def _extract_ivt_data(self, data):
+    def _extract_ivt_data(self, data, verbose=True):
         """Extract IVT data from parsed row"""
-        print("📊 Extracted IVT Data:\n")
+        if verbose:
+            print("📊 Extracted IVT Data:\n")
 
         # Раздел 3.2 ТЗ по верификаторам: сравниваем SAPE с сырыми
         # (не очищенными от IVT) показами/кликами Adriver - берём колонку
@@ -219,11 +248,12 @@ class AdriverExcelParser:
         }
 
         # Print results
-        for key, value in ivt_data.items():
-            if 'percent' in key:
-                print(f"  {key}: {value}%")
-            else:
-                print(f"  {key}: {value:,}")
+        if verbose:
+            for key, value in ivt_data.items():
+                if 'percent' in key:
+                    print(f"  {key}: {value}%")
+                else:
+                    print(f"  {key}: {value:,}")
 
         return ivt_data
 

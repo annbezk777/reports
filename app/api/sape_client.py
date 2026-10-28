@@ -253,7 +253,8 @@ class SapeAPIClient:
                     "avgVisitDuration",           # Время на сайте (из Метрики)
                     "avgPostclickPageDepth",      # Глубина (из Метрики)
                     "avgPostclickRobot",          # % роботности (из Метрики)
-                    "passingIndex"                # PI (из Метрики)
+                    "passingIndex",               # PI (из Метрики)
+                    "goals"                       # Цели/конверсии (из Метрики) - список {name, count}
                 ]
 
             print(f"📤 SAPE API Request:")

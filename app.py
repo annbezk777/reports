@@ -55,7 +55,7 @@ class PrintLogger:
 sys.stdout = PrintLogger(logger, logging.INFO)
 
 # Initialize database
-from app.models import db, SapeAccount, Client, Campaign, ReportConfig, ReportLog, MonitoringCampaign, VerifierLink, VerifierLinkMapping, AdriverFileUpload
+from app.models import db, SapeAccount, Client, Campaign, ReportConfig, ReportLog, MonitoringCampaign, VerifierLink, VerifierLinkMapping, AdriverFileUpload, AdriverDailyStat, MonitoringWeeklyStat
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -2583,6 +2583,218 @@ def _refresh_adriver_fact_for_upload(monitoring, as_of_date):
         logger.error(f"⚠️ Failed to fetch upload-scoped SAPE fact for monitoring {monitoring.id}: {e}")
 
 
+def _store_adriver_daily_stats(monitoring_id, upload_id, daily_rows):
+    """Upsert the per-day rows an Adriver Excel upload just parsed into
+    AdriverDailyStat - a re-upload that covers an already-seen date
+    replaces that day's numbers rather than duplicating it, so this is
+    what the weekly dynamics table (task #22) reads to get Adriver's
+    показы/клики for an arbitrary week, the same way SAPE/TargetAds/
+    Weborama can already be queried for any date range directly."""
+    for row in daily_rows:
+        date = row.get('date')
+        if not date:
+            continue
+        existing = AdriverDailyStat.query.filter_by(monitoring_id=monitoring_id, date=date).first()
+        if existing is None:
+            existing = AdriverDailyStat(monitoring_id=monitoring_id, date=date)
+            db.session.add(existing)
+        existing.upload_id = upload_id
+        existing.impressions = row.get('impressions')
+        existing.clicks = row.get('clicks')
+        existing.ivt_impressions_percent = row.get('ivt_impressions_percent')
+        existing.givt_impressions_percent = row.get('givt_impressions_percent')
+        existing.sivt_impressions_percent = row.get('sivt_impressions_percent')
+        existing.givt_clicks_percent = row.get('givt_clicks_percent')
+
+
+def get_last_completed_week(today):
+    """(monday, sunday) of the week before today's own week - e.g. if
+    today is Monday, that's literally last week (yesterday was Sunday)."""
+    this_monday = today - timedelta(days=today.weekday())
+    last_monday = this_monday - timedelta(days=7)
+    last_sunday = this_monday - timedelta(days=1)
+    return last_monday, last_sunday
+
+
+def compute_monitoring_week_stats(monitoring, week_start, week_end):
+    """Compute and upsert one Mon-Sun week's fact numbers for a monitoring
+    (task #22 - понедельная динамика). Own SAPE/Metrika metrics plus every
+    verifier, each queried directly for [week_start, week_end]:
+    - SAPE/Metrika: get_stats() takes an arbitrary date range natively.
+    - TargetAds: get_daily_stats() same thing, already used this way.
+    - Weborama: fetch_insertions() drives the permalink's own calendar to
+      exactly this range - a real ~20-25s browser session per link, but
+      this only runs once a week (not daily), so that cost is fine.
+    - Adriver: no API to query by range - reads whatever was stored in
+      AdriverDailyStat from past Excel uploads landing in this week.
+
+    Frozen once written - re-running for an already-computed week
+    overwrites it (used for backfill/corrections), but the normal weekly
+    job only ever touches the week that just ended, never older ones.
+    week_start/week_end are always written as the canonical Monday/Sunday
+    even when the campaign itself started or ended mid-week - only the
+    actual API queries get clipped to the campaign's own date range."""
+    campaigns = monitoring.get_campaigns()
+    if not campaigns:
+        return None
+    account = monitoring.account
+    if not account or not account.api_token:
+        return None
+
+    # Clipped to the campaign's own period - stored as the week's
+    # label too (not the raw Mon-Sun args), so a campaign starting/ending
+    # mid-week shows "01-04 окт", not a calendar Monday from before it
+    # even started.
+    q_start = max(week_start, monitoring.date_from)
+    q_end = min(week_end, monitoring.date_to)
+    if q_start > q_end:
+        return None
+
+    stat = MonitoringWeeklyStat.query.filter_by(monitoring_id=monitoring.id, week_start=q_start).first()
+    if stat is None:
+        stat = MonitoringWeeklyStat(monitoring_id=monitoring.id, week_start=q_start, week_end=q_end)
+        db.session.add(stat)
+    else:
+        stat.week_end = q_end
+
+    # --- SAPE / Metrika ---
+    client = SapeAPIClient(login=account.login, token=account.api_token)
+    if not client.authenticate():
+        logger.error(f"⚠️ SAPE auth failed computing week {week_start} for monitoring {monitoring.id}")
+        return None
+
+    campaign_ids = [int(c.campaign_id) for c in campaigns]
+    stats = client.get_stats(
+        campaign_ids=campaign_ids,
+        date_from=datetime.combine(q_start, datetime.min.time()),
+        date_to=datetime.combine(q_end, datetime.min.time()),
+        fields=None
+    )
+    if stats:
+        total = stats.get('total', {})
+        stat.impressions = total.get('shows', 0)
+        stat.clicks = total.get('clicks', 0)
+        stat.ctr = round(stat.clicks / stat.impressions * 100, 2) if stat.impressions else None
+        stat.visits = total.get('visits', 0)
+        stat.vtr = total.get('vtr' if monitoring.is_video_format() else 'vr', 0.0)
+        stat.bounce_rate = total.get('avgPostclickBounceRate', 0.0)
+        stat.time_on_site = total.get('avgVisitDuration', 0.0)
+        stat.page_depth = total.get('avgPostclickPageDepth', 0.0)
+        stat.robotness = total.get('avgPostclickRobot', 0.0)
+        stat.pi = total.get('passingIndex', 0.0)
+        goals = total.get('goals')
+        if goals is not None:
+            stat.conversions = sum(g.get('count', 0) for g in goals)
+        stat.cr = round(stat.conversions / stat.visits * 100, 2) if (stat.conversions and stat.visits) else None
+
+    # --- IVT source: TargetAds (API) if configured, else Adriver (stored daily rows) ---
+    if monitoring.targetads_report_url:
+        try:
+            from app.api.targetads_client import TargetAdsClient, TargetAdsFetchError
+            project_id = TargetAdsClient.extract_project_id(monitoring.targetads_report_url)
+            source_filter = TargetAdsClient.extract_source_filter(monitoring.targetads_report_url) or 'Sape (FS)'
+            ta_client = TargetAdsClient()
+            ta_client.authenticate()
+            result = ta_client.get_daily_stats(
+                project_id,
+                datetime.combine(q_start, datetime.min.time()),
+                datetime.combine(q_end, datetime.min.time()),
+                source=source_filter
+            )
+            stat.adriver_impressions = result['total_impressions']
+            stat.adriver_clicks = result['total_clicks']
+            if result.get('ivt_share') is not None:
+                stat.ivt_impressions_percent = result['ivt_share']
+            if result.get('givt_share') is not None:
+                stat.givt_impressions_percent = result['givt_share']
+            if result.get('sivt_share') is not None:
+                stat.sivt_impressions_percent = result['sivt_share']
+        except Exception as e:
+            logger.error(f"⚠️ Weekly TargetAds fetch failed for monitoring {monitoring.id}, week {week_start}: {e}")
+    else:
+        daily_rows = AdriverDailyStat.query.filter(
+            AdriverDailyStat.monitoring_id == monitoring.id,
+            AdriverDailyStat.date >= q_start,
+            AdriverDailyStat.date <= q_end
+        ).all()
+        if daily_rows:
+            stat.adriver_impressions = sum(r.impressions or 0 for r in daily_rows)
+            stat.adriver_clicks = sum(r.clicks or 0 for r in daily_rows)
+            for field, attr in [
+                ('ivt_impressions_percent', 'ivt_impressions_percent'),
+                ('givt_impressions_percent', 'givt_impressions_percent'),
+                ('sivt_impressions_percent', 'sivt_impressions_percent'),
+                ('givt_clicks_percent', 'givt_clicks_percent'),
+            ]:
+                values = [getattr(r, attr) for r in daily_rows if getattr(r, attr) is not None]
+                if values:
+                    setattr(stat, field, round(sum(values) / len(values), 2))
+
+    # --- Weborama ---
+    weborama_links = [l for l in monitoring.verifier_links if l.verifier_type == 'weborama' and l.permalink_url]
+    if weborama_links:
+        from app.api.weborama_client import fetch_insertions
+        total_wcm_imp = 0
+        total_wcm_clk = 0
+        wcm_found = False
+        for link in weborama_links:
+            try:
+                results = fetch_insertions(link.permalink_url, q_start, q_end)
+                total_wcm_imp += sum(r['impressions'] for r in results.values())
+                total_wcm_clk += sum(r['clicks'] for r in results.values())
+                wcm_found = True
+            except Exception as e:
+                logger.error(f"⚠️ Weekly Weborama fetch failed for link {link.id}, week {week_start}: {e}")
+        if wcm_found:
+            stat.weborama_impressions = total_wcm_imp
+            stat.weborama_clicks = total_wcm_clk
+
+    stat.computed_at = datetime.utcnow()
+    db.session.commit()
+    return stat
+
+
+def scheduled_compute_weekly_monitoring_stats():
+    """Runs weekly (Monday) - computes the week that just ended for every
+    monitoring whose campaign period overlaps it. See
+    compute_monitoring_week_stats for how each source is queried."""
+    with app.app_context():
+        import time as _time
+        today = datetime.now(pytz.timezone('Europe/Moscow')).date()
+        week_start, week_end = get_last_completed_week(today)
+
+        monitorings = MonitoringCampaign.query.filter(
+            MonitoringCampaign.archived == False,
+            MonitoringCampaign.date_from <= week_end,
+            MonitoringCampaign.date_to >= week_start
+        ).all()
+
+        logging.info(f"\n{'='*60}")
+        logging.info(f"📅 WEEKLY DYNAMICS COMPUTE - week {week_start}..{week_end}, {len(monitorings)} monitorings")
+        logging.info(f"{'='*60}")
+
+        updated = 0
+        failed = 0
+        for monitoring in monitorings:
+            try:
+                result = compute_monitoring_week_stats(monitoring, week_start, week_end)
+                if result:
+                    updated += 1
+                    logging.info(f"✅ Week stats computed for monitoring {monitoring.id}: {monitoring.name}")
+                else:
+                    failed += 1
+                    logging.warning(f"⚠️ Could not compute week stats for monitoring {monitoring.id}")
+            except Exception as e:
+                logging.error(f"❌ Week stats failed for monitoring {monitoring.id}: {e}")
+                import traceback
+                traceback.print_exc()
+                failed += 1
+            _time.sleep(1)
+
+        logging.info(f"\n✅ WEEKLY DYNAMICS COMPUTE COMPLETED: {updated} updated, {failed} failed")
+        logging.info(f"{'='*60}\n")
+
+
 class TargetAdsRefreshError(Exception):
     pass
 
@@ -2731,6 +2943,13 @@ def refresh_monitoring_data(monitoring_id):
 
         # Robotness (%)
         monitoring.fact_robotness = total.get('avgPostclickRobot', 0.0)
+
+        # Conversions - sum of all Yandex Metrika goals SAPE returns for
+        # the campaign. None (not an empty list) means the field wasn't
+        # returned at all, so leave a manually-entered value untouched.
+        goals = total.get('goals')
+        if goals is not None:
+            monitoring.fact_conversions = sum(g.get('count', 0) for g in goals)
 
         # VTR/VR (%) - use 'vtr' for video formats, 'vr' for banners/TGB
         # Check if any campaign is video format
@@ -3025,6 +3244,9 @@ def upload_adriver_excel(monitoring_id):
                 data_as_of_date=monitoring.adriver_data_as_of_date,
             )
             db.session.add(file_upload)
+            db.session.flush()  # assign file_upload.id before using it below
+
+            _store_adriver_daily_stats(monitoring_id, file_upload.id, ivt_data.get('daily_rows', []))
 
             db.session.commit()
 

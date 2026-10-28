@@ -721,6 +721,105 @@ class AdriverFileUpload(db.Model):
         return f'<AdriverFileUpload {self.filename} for monitoring {self.monitoring_id}>'
 
 
+class AdriverDailyStat(db.Model):
+    """One day's Adriver numbers for a monitoring, parsed from an uploaded
+    Excel's per-day rows (the file already has these - see
+    AdriverExcelParser._extract_daily_rows - previously only the "Всего"
+    row was kept). Powers the weekly dynamics table (per-week Adriver
+    показы/клики), since SAPE/TargetAds/Weborama all support querying an
+    arbitrary date range directly, but Adriver only exists as whatever was
+    last uploaded - this is what gives it the same "any date range" shape.
+
+    Keyed by (monitoring_id, date): a newer upload covering an already-seen
+    date overwrites that day's row (corrections/re-uploads replace, not
+    duplicate)."""
+    __tablename__ = 'adriver_daily_stats'
+
+    id = db.Column(db.Integer, primary_key=True)
+    monitoring_id = db.Column(db.Integer, db.ForeignKey('monitoring_campaigns.id'), nullable=False)
+    upload_id = db.Column(db.Integer, db.ForeignKey('adriver_file_uploads.id'), nullable=True)
+
+    date = db.Column(db.Date, nullable=False)
+    impressions = db.Column(db.Integer, nullable=True)
+    clicks = db.Column(db.Integer, nullable=True)
+    ivt_impressions_percent = db.Column(db.Float, nullable=True)
+    givt_impressions_percent = db.Column(db.Float, nullable=True)
+    sivt_impressions_percent = db.Column(db.Float, nullable=True)
+    givt_clicks_percent = db.Column(db.Float, nullable=True)
+
+    monitoring = db.relationship('MonitoringCampaign', backref='adriver_daily_stats')
+
+    __table_args__ = (
+        db.UniqueConstraint('monitoring_id', 'date', name='uq_adriver_daily_monitoring_date'),
+    )
+
+    def __repr__(self):
+        return f'<AdriverDailyStat monitoring={self.monitoring_id} date={self.date}>'
+
+
+class MonitoringWeeklyStat(db.Model):
+    """One Mon-Sun week's fact numbers for a monitoring - own SAPE/Metrika
+    metrics plus every verifier (TargetAds, Weborama, Adriver). Computed
+    once a week (Monday, for the week that just ended) by
+    scheduled_compute_weekly_monitoring_stats, not recomputed daily -
+    historical weeks are frozen once written. Drives the collapsible
+    "понедельная динамика" table under each monitoring's main KPI table."""
+    __tablename__ = 'monitoring_weekly_stats'
+
+    id = db.Column(db.Integer, primary_key=True)
+    monitoring_id = db.Column(db.Integer, db.ForeignKey('monitoring_campaigns.id'), nullable=False)
+
+    week_start = db.Column(db.Date, nullable=False)  # Monday
+    week_end = db.Column(db.Date, nullable=False)    # Sunday
+
+    # Own (SAPE/Metrika) metrics
+    impressions = db.Column(db.Integer, nullable=True)
+    clicks = db.Column(db.Integer, nullable=True)
+    ctr = db.Column(db.Float, nullable=True)
+    visits = db.Column(db.Integer, nullable=True)
+    vtr = db.Column(db.Float, nullable=True)  # VTR for video, VR for banner/ТГБ
+    bounce_rate = db.Column(db.Float, nullable=True)
+    time_on_site = db.Column(db.Float, nullable=True)
+    page_depth = db.Column(db.Float, nullable=True)
+    robotness = db.Column(db.Float, nullable=True)
+    pi = db.Column(db.Float, nullable=True)
+    conversions = db.Column(db.Integer, nullable=True)
+    cr = db.Column(db.Float, nullable=True)
+
+    # IVT quality (TargetAds API or Adriver file, whichever the monitoring uses)
+    ivt_impressions_percent = db.Column(db.Float, nullable=True)
+    givt_impressions_percent = db.Column(db.Float, nullable=True)
+    sivt_impressions_percent = db.Column(db.Float, nullable=True)
+    givt_clicks_percent = db.Column(db.Float, nullable=True)
+
+    # Verifier показы/клики
+    adriver_impressions = db.Column(db.Integer, nullable=True)
+    adriver_clicks = db.Column(db.Integer, nullable=True)
+    weborama_impressions = db.Column(db.Integer, nullable=True)
+    weborama_clicks = db.Column(db.Integer, nullable=True)
+
+    computed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    monitoring = db.relationship('MonitoringCampaign', backref='weekly_stats')
+
+    __table_args__ = (
+        db.UniqueConstraint('monitoring_id', 'week_start', name='uq_weekly_stat_monitoring_week'),
+    )
+
+    def get_ctr(self):
+        if self.impressions and self.clicks:
+            return round(self.clicks / self.impressions * 100, 2)
+        return None
+
+    def get_cr(self):
+        if self.visits and self.conversions:
+            return round(self.conversions / self.visits * 100, 2)
+        return None
+
+    def __repr__(self):
+        return f'<MonitoringWeeklyStat monitoring={self.monitoring_id} week={self.week_start}>'
+
+
 class VerifierLink(db.Model):
     """A verifier (Weborama/Adriver) permalink attached to a monitoring.
 

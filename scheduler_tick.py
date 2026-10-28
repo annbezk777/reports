@@ -25,6 +25,13 @@ once, then exits:
   - scheduled_refresh_all_monitorings(): daily at 08:00 Moscow
   - scheduled_refresh_weborama_verifiers(): daily at 08:30 Moscow
   - scheduled_sync_all_accounts(): Mon-Fri at 09:00 Moscow
+  - scheduled_compute_weekly_monitoring_stats(): Mon at 09:30 Moscow - after
+    the other morning jobs so monitoring facts are fresh. Can run long
+    (each Weborama-linked monitoring is a real ~20-25s browser session per
+    verifier link) - that's fine once a week, but it does mean this tick
+    blocks the next few ticks of scheduled_update_reports() until it's
+    done; acceptable since that job just re-checks report schedules and
+    isn't time-critical to the minute.
 
 IMPORTANT: the web app's ENABLE_AUTO_SYNC must be "0" (not "1") once this
 timer is running, or both this script AND the in-process scheduler would
@@ -61,6 +68,9 @@ def run_tick():
 
     if now.isoweekday() <= 5 and now.hour == 9 and now.minute == 0:
         main.scheduled_sync_all_accounts()
+
+    if now.isoweekday() == 1 and now.hour == 9 and now.minute == 30:
+        main.scheduled_compute_weekly_monitoring_stats()
 
 
 if __name__ == '__main__':
