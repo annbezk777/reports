@@ -235,6 +235,7 @@ class MonitoringCampaign(db.Model):
     fact_impressions = db.Column(db.Integer, nullable=True)  # Фактические показы
     fact_clicks = db.Column(db.Integer, nullable=True)  # Фактические клики
     fact_visits = db.Column(db.Integer, nullable=True)  # Фактические визиты
+    fact_conversions = db.Column(db.Integer, nullable=True)  # Фактические конверсии
     fact_bounce_rate = db.Column(db.Float, nullable=True)  # Фактический % отказов
     fact_time_on_site = db.Column(db.Float, nullable=True)  # Фактическое время на сайте (сек.)
     fact_page_depth = db.Column(db.Float, nullable=True)  # Фактическая глубина просмотра
@@ -380,6 +381,18 @@ class MonitoringCampaign(db.Model):
         """Calculate actual PI (Passing Index) from visits and clicks"""
         if self.fact_clicks and self.fact_clicks > 0 and self.fact_visits:
             return round((self.fact_visits / self.fact_clicks) * 100, 2)
+        return None
+
+    def get_plan_cr(self):
+        """CR (Conversion Rate) план: конверсии от визитов"""
+        if self.plan_visits and self.plan_visits > 0 and self.plan_conversions:
+            return round((self.plan_conversions / self.plan_visits) * 100, 2)
+        return None
+
+    def get_fact_cr(self):
+        """CR (Conversion Rate) факт: конверсии от визитов"""
+        if self.fact_visits and self.fact_visits > 0 and self.fact_conversions:
+            return round((self.fact_conversions / self.fact_visits) * 100, 2)
         return None
 
     def get_fact_ctr(self):

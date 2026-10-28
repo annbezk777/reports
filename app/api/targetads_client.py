@@ -145,20 +145,18 @@ class TargetAdsClient:
         # media_table_chart_source (ungrouped) returns one aggregate row for
         # the whole period with share_givt/share_sivt/share_ivt as 0-1
         # fractions - IVT quality metrics, not available per-day. Rounded to
-        # 1 decimal (not 2) to match the IVT/GIVT/SIVT form fields' step="0.1" -
-        # a 2-decimal value like 1.27 fails the browser's native number-input
-        # validation against that step.
+        # 2 decimals to match the IVT/GIVT/SIVT form fields' step="0.01".
         ivt_shares = {'ivt_share': None, 'givt_share': None, 'sivt_share': None}
         table_rows = data.get('media_table_chart_source', {}).get('data', {}).get('dataset', [])
         table_cols = [c['name'] for c in data.get('media_table_chart_source', {}).get('data', {}).get('column', [])]
         if table_rows and table_cols:
             row = dict(zip(table_cols, table_rows[0]))
             if row.get('share_givt') is not None:
-                ivt_shares['givt_share'] = round(row['share_givt'] * 100, 1)
+                ivt_shares['givt_share'] = round(row['share_givt'] * 100, 2)
             if row.get('share_sivt') is not None:
-                ivt_shares['sivt_share'] = round(row['share_sivt'] * 100, 1)
+                ivt_shares['sivt_share'] = round(row['share_sivt'] * 100, 2)
             if row.get('share_ivt') is not None:
-                ivt_shares['ivt_share'] = round(row['share_ivt'] * 100, 1)
+                ivt_shares['ivt_share'] = round(row['share_ivt'] * 100, 2)
 
         return daily, ivt_shares, table_rows, table_cols
 

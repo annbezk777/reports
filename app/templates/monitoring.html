@@ -899,8 +899,8 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         </td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≤ %.0f%%' % monitoring.plan_bounce_rate) if monitoring.plan_bounce_rate else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≥ %.0f' % monitoring.plan_time_on_site) if monitoring.plan_time_on_site else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≥ %.0f' % monitoring.plan_page_depth) if monitoring.plan_page_depth else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≤ %.0f%%' % monitoring.plan_robotness) if monitoring.plan_robotness else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≥ %.1f' % monitoring.plan_page_depth) if monitoring.plan_page_depth else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≤ %.1f%%' % monitoring.plan_robotness) if monitoring.plan_robotness else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≥ %.0f%%' % monitoring.plan_pi) if monitoring.plan_pi else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e; border-left: 1px solid #e7e5e4;">{{ ('≤ %.1f%%' % monitoring.plan_ivt_impressions) if monitoring.plan_ivt_impressions else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 500; color: #57534e;">{{ ('≤ %.1f%%' % monitoring.plan_givt_impressions) if monitoring.plan_givt_impressions else '—' }}</td>
@@ -924,8 +924,8 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         </td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.0f%%' % monitoring.fact_bounce_rate) if monitoring.fact_bounce_rate else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.0f' % monitoring.fact_time_on_site) if monitoring.fact_time_on_site else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.0f' % monitoring.fact_page_depth) if monitoring.fact_page_depth else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.0f%%' % monitoring.fact_robotness) if monitoring.fact_robotness else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.1f' % monitoring.fact_page_depth) if monitoring.fact_page_depth else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.1f%%' % monitoring.fact_robotness) if monitoring.fact_robotness else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.0f%%' % monitoring.get_fact_pi()) if monitoring.get_fact_pi() else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917; border-left: 1px solid #e7e5e4;">{{ ('%.2f%%' % monitoring.fact_ivt_impressions) if monitoring.fact_ivt_impressions else '—' }}</td>
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_givt_impressions) if monitoring.fact_givt_impressions else '—' }}</td>
@@ -963,13 +963,15 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if vtr_diff is not none %}color: {% if vtr_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0f' % vtr_diff) if vtr_diff > 0 else ('%.0f' % vtr_diff)) if vtr_diff is not none else '—' }}</td>
 
                                         {% set bounce_diff = monitoring.get_bounce_diff() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if bounce_diff is not none %}color: {% if bounce_diff <= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % bounce_diff) if bounce_diff is not none else '—' }}</td>
+                                        {% set bounce_rel_pct = ((bounce_diff / monitoring.plan_bounce_rate * 100)|abs) if (bounce_diff is not none and monitoring.plan_bounce_rate) else None %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if bounce_diff is not none %}color: {% if bounce_diff <= 0 %}#16a34a{% elif bounce_rel_pct is not none and bounce_rel_pct <= 15 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % bounce_diff) if bounce_diff is not none else '—' }}</td>
 
                                         {% set time_diff = monitoring.get_time_diff_seconds() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if time_diff is not none %}color: {% if time_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0fс' % time_diff) if time_diff > 0 else ('%.0fс' % time_diff)) if time_diff is not none else '—' }}</td>
+                                        {% set time_rel_pct = ((time_diff / monitoring.plan_time_on_site * 100)|abs) if (time_diff is not none and monitoring.plan_time_on_site) else None %}
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if time_diff is not none %}color: {% if time_diff >= 0 %}#16a34a{% elif time_rel_pct is not none and time_rel_pct <= 15 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0fс' % time_diff) if time_diff > 0 else ('%.0fс' % time_diff)) if time_diff is not none else '—' }}</td>
 
                                         {% set depth_diff = monitoring.get_depth_diff() %}
-                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if depth_diff is not none %}color: {% if depth_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % depth_diff) if depth_diff > 0 else ('%.1f' % depth_diff)) if depth_diff is not none else '—' }}</td>
+                                        <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if depth_diff is not none %}color: {% if depth_diff >= 0 %}#16a34a{% else %}#f59e0b{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % depth_diff) if depth_diff > 0 else ('%.1f' % depth_diff)) if depth_diff is not none else '—' }}</td>
 
                                         {% set robotness_diff = monitoring.get_robotness_diff() %}
                                         <td style="padding: 6px 8px; text-align: right; font-size: 9px; font-weight: 600; {% if robotness_diff is not none %}color: {% if robotness_diff <= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % robotness_diff) if robotness_diff is not none else '—' }}</td>
@@ -1527,22 +1529,22 @@ function refreshAllMonitorings() {
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="fact_ivt_impressions">IVT показы (%)</label>
-                                    <input type="number" id="fact_ivt_impressions" name="fact_ivt_impressions" step="0.1" placeholder="5.0">
+                                    <input type="number" id="fact_ivt_impressions" name="fact_ivt_impressions" step="0.01" placeholder="5.0">
                                 </div>
 
                                 <div class="form-group">
                                     <label for="fact_givt_impressions">GIVT показы (%)</label>
-                                    <input type="number" id="fact_givt_impressions" name="fact_givt_impressions" step="0.1" placeholder="3.0">
+                                    <input type="number" id="fact_givt_impressions" name="fact_givt_impressions" step="0.01" placeholder="3.0">
                                 </div>
 
                                 <div class="form-group">
                                     <label for="fact_sivt_impressions">SIVT показы (%)</label>
-                                    <input type="number" id="fact_sivt_impressions" name="fact_sivt_impressions" step="0.1" placeholder="2.0">
+                                    <input type="number" id="fact_sivt_impressions" name="fact_sivt_impressions" step="0.01" placeholder="2.0">
                                 </div>
 
                                 <div class="form-group">
                                     <label for="fact_givt_clicks">GIVT клики (%)</label>
-                                    <input type="number" id="fact_givt_clicks" name="fact_givt_clicks" step="0.1" placeholder="2.0">
+                                    <input type="number" id="fact_givt_clicks" name="fact_givt_clicks" step="0.01" placeholder="2.0">
                                 </div>
 
                                 <div class="form-group">
@@ -1666,28 +1668,63 @@ function refreshAllMonitorings() {
                     </div>
                 </div>
 
+                <!-- Фактические показатели постклика (ручной ввод) -->
+                <h3 style="margin-top: 16px; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--text-primary);">Фактические показатели постклика</h3>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="fact_visits">Визиты, факт</label>
+                        <input type="number" id="fact_visits" name="fact_visits" step="1" placeholder="94927">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fact_conversions">Конверсии, факт</label>
+                        <input type="number" id="fact_conversions" name="fact_conversions" step="1" placeholder="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fact_bounce_rate">Отказы, факт (%)</label>
+                        <input type="number" id="fact_bounce_rate" name="fact_bounce_rate" step="1" placeholder="45">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fact_time_on_site">Время на сайте, факт (сек)</label>
+                        <input type="number" id="fact_time_on_site" name="fact_time_on_site" step="1" placeholder="60">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fact_page_depth">Глубина просмотра, факт</label>
+                        <input type="number" id="fact_page_depth" name="fact_page_depth" step="0.1" placeholder="2.0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fact_robotness">Роботность, факт (%)</label>
+                        <input type="number" id="fact_robotness" name="fact_robotness" step="0.1" placeholder="10.0">
+                    </div>
+                </div>
+
                 <!-- IVT показатели -->
                 <h3 style="margin-top: 16px; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--text-primary);">IVT показатели (плановые)</h3>
 
                 <div class="form-row">
                     <div class="form-group">
                         <label for="plan_ivt_impressions">IVT показы (%)</label>
-                        <input type="number" id="plan_ivt_impressions" name="plan_ivt_impressions" step="0.1" placeholder="5.0">
+                        <input type="number" id="plan_ivt_impressions" name="plan_ivt_impressions" step="0.01" placeholder="5.0">
                     </div>
 
                     <div class="form-group">
                         <label for="plan_givt_impressions">GIVT показы (%)</label>
-                        <input type="number" id="plan_givt_impressions" name="plan_givt_impressions" step="0.1" placeholder="3.0">
+                        <input type="number" id="plan_givt_impressions" name="plan_givt_impressions" step="0.01" placeholder="3.0">
                     </div>
 
                     <div class="form-group">
                         <label for="plan_sivt">SIVT показы (%)</label>
-                        <input type="number" id="plan_sivt" name="plan_sivt" step="0.1" placeholder="2.0">
+                        <input type="number" id="plan_sivt" name="plan_sivt" step="0.01" placeholder="2.0">
                     </div>
 
                     <div class="form-group">
                         <label for="plan_givt_clicks">GIVT клики (%)</label>
-                        <input type="number" id="plan_givt_clicks" name="plan_givt_clicks" step="0.1" placeholder="2.0">
+                        <input type="number" id="plan_givt_clicks" name="plan_givt_clicks" step="0.01" placeholder="2.0">
                     </div>
                 </div>
 
@@ -1825,9 +1862,9 @@ function openMonitoringModal(monitoringId = null) {
                 document.getElementById('plan_clicks').value = data.plan_clicks || '';
                 document.getElementById('plan_visits').value = data.plan_visits || '';
 
-                // Load VTR/VR from saved data (default: 70% for video VTR, 50% for banner/ТГБ VR)
+                // Load VTR/VR from saved data (default: 70% for video VTR, 10% for banner/ТГБ VR)
                 const isVrFormat = data.format_label === 'VR';
-                document.getElementById('plan_vtr').value = data.plan_vtr || (isVrFormat ? 50 : 70);
+                document.getElementById('plan_vtr').value = data.plan_vtr || (isVrFormat ? 10 : 70);
                 document.getElementById('plan_vtr_label').textContent = (data.format_label || 'VTR') + ' (%)';
 
                 document.getElementById('plan_conversions').value = data.plan_conversions || '';
@@ -1836,6 +1873,12 @@ function openMonitoringModal(monitoringId = null) {
                 document.getElementById('plan_page_depth').value = data.plan_page_depth || '';
                 document.getElementById('plan_robotness').value = data.plan_robotness || '';
                 document.getElementById('plan_pi').value = data.plan_pi || '';
+                document.getElementById('fact_visits').value = data.fact_visits || '';
+                document.getElementById('fact_conversions').value = data.fact_conversions || '';
+                document.getElementById('fact_bounce_rate').value = data.fact_bounce_rate ? Math.round(data.fact_bounce_rate) : '';
+                document.getElementById('fact_time_on_site').value = data.fact_time_on_site ? Math.round(data.fact_time_on_site) : '';
+                document.getElementById('fact_page_depth').value = data.fact_page_depth ? data.fact_page_depth.toFixed(1) : '';
+                document.getElementById('fact_robotness').value = data.fact_robotness ? data.fact_robotness.toFixed(1) : '';
                 document.getElementById('plan_ivt_impressions').value = data.plan_ivt_impressions || '';
                 document.getElementById('plan_givt_impressions').value = data.plan_givt_impressions || '';
                 document.getElementById('plan_sivt').value = data.plan_sivt || '';
@@ -2435,10 +2478,10 @@ document.getElementById('monitoringForm').addEventListener('submit', function(e)
     const planVtr = parseFloat(document.getElementById('plan_vtr').value) || 0;
 
     // 1. Если VTR/VR не выставлен, устанавливаем значение по умолчанию
-    // (70% для видео-формата VTR, 50% для баннер/ТГБ VR - это разные метрики)
+    // (70% для видео-формата VTR, 10% для баннер/ТГБ VR - это разные метрики)
     if (!planVtr || planVtr === 0) {
         const isVr = document.getElementById('plan_vtr_label').textContent.trim().startsWith('VR');
-        document.getElementById('plan_vtr').value = isVr ? 50 : 70;
+        document.getElementById('plan_vtr').value = isVr ? 10 : 70;
     }
 
     // 2. Автоматический расчёт plan_visits

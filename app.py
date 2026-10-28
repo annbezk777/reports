@@ -937,8 +937,24 @@ def dashboard():
         for mo in ending_soon
     ]
 
+    # 7. Conversions overview (план/факт) - CR считается от визитов, сумма
+    # по кампаниям, где заполнена соответствующая пара (конверсии + визиты),
+    # а не "конверсии / визиты любой кампании" - иначе кампании без плана
+    # визитов исказили бы общий CR.
+    plan_conv_total = sum(mo.plan_conversions for mo in active_monitorings if mo.plan_conversions)
+    fact_conv_total = sum(mo.fact_conversions for mo in active_monitorings if mo.fact_conversions)
+    plan_cr_visits = sum(mo.plan_visits for mo in active_monitorings if mo.plan_conversions and mo.plan_visits)
+    fact_cr_visits = sum(mo.fact_visits for mo in active_monitorings if mo.fact_conversions and mo.fact_visits)
+    conversions_stats = {
+        'plan': plan_conv_total,
+        'fact': fact_conv_total,
+        'plan_cr': round(plan_conv_total / plan_cr_visits * 100, 2) if plan_cr_visits else None,
+        'fact_cr': round(fact_conv_total / fact_cr_visits * 100, 2) if fact_cr_visits else None,
+    }
+
     return render_template('dashboard.html',
                          stats=stats,
+                         conversions_stats=conversions_stats,
                          chart_data=chart_data,
                          daily_chart_data=daily_chart_data,
                          recent_activity=recent_activity,
@@ -1784,10 +1800,12 @@ def copy_monitoring(monitoring_id):
         utm_campaign=original.utm_campaign,
         manager=original.manager,
         google_sheet_url=original.google_sheet_url,
+        asana_task_url=original.asana_task_url,
         # Reset all fact data
         fact_impressions=None,
         fact_clicks=None,
         fact_visits=None,
+        fact_conversions=None,
         fact_bounce_rate=None,
         fact_time_on_site=None,
         fact_page_depth=None,
@@ -2036,6 +2054,16 @@ def create_monitoring():
         plan_page_depth = request.form.get('plan_page_depth')
         plan_robotness = request.form.get('plan_robotness')
 
+        # Postclick facts (manual entry - usually overwritten by the next
+        # Yandex Metrika auto-refresh, but lets a manager fill them in
+        # when Metrika isn't configured or needs a manual correction)
+        fact_visits = request.form.get('fact_visits')
+        fact_conversions = request.form.get('fact_conversions')
+        fact_bounce_rate = request.form.get('fact_bounce_rate')
+        fact_time_on_site = request.form.get('fact_time_on_site')
+        fact_page_depth = request.form.get('fact_page_depth')
+        fact_robotness = request.form.get('fact_robotness')
+
         # Traffic quality & IVT
         plan_pi = request.form.get('plan_pi')
         plan_vtr = request.form.get('plan_vtr')
@@ -2066,6 +2094,12 @@ def create_monitoring():
             plan_time_on_site=float(plan_time_on_site) if plan_time_on_site else None,
             plan_page_depth=float(plan_page_depth) if plan_page_depth else None,
             plan_robotness=float(plan_robotness) if plan_robotness else None,
+            fact_visits=int(fact_visits) if fact_visits else None,
+            fact_conversions=int(fact_conversions) if fact_conversions else None,
+            fact_bounce_rate=float(fact_bounce_rate) if fact_bounce_rate else None,
+            fact_time_on_site=float(fact_time_on_site) if fact_time_on_site else None,
+            fact_page_depth=float(fact_page_depth) if fact_page_depth else None,
+            fact_robotness=float(fact_robotness) if fact_robotness else None,
             plan_pi=float(plan_pi) if plan_pi else None,
             plan_vtr=int(round(float(plan_vtr))) if plan_vtr else None,
             plan_ivt_impressions=float(plan_ivt) if plan_ivt else None,
@@ -2155,6 +2189,12 @@ def edit_monitoring(monitoring_id):
         plan_time_on_site = request.form.get('plan_time_on_site')
         plan_page_depth = request.form.get('plan_page_depth')
         plan_robotness = request.form.get('plan_robotness')
+        fact_visits = request.form.get('fact_visits')
+        fact_conversions = request.form.get('fact_conversions')
+        fact_bounce_rate = request.form.get('fact_bounce_rate')
+        fact_time_on_site = request.form.get('fact_time_on_site')
+        fact_page_depth = request.form.get('fact_page_depth')
+        fact_robotness = request.form.get('fact_robotness')
 
         monitoring.plan_visits = int(plan_visits) if plan_visits else None
         monitoring.plan_conversions = int(plan_conversions) if plan_conversions else None
@@ -2162,6 +2202,12 @@ def edit_monitoring(monitoring_id):
         monitoring.plan_time_on_site = float(plan_time_on_site) if plan_time_on_site else None
         monitoring.plan_page_depth = float(plan_page_depth) if plan_page_depth else None
         monitoring.plan_robotness = float(plan_robotness) if plan_robotness else None
+        monitoring.fact_visits = int(fact_visits) if fact_visits else None
+        monitoring.fact_conversions = int(fact_conversions) if fact_conversions else None
+        monitoring.fact_bounce_rate = float(fact_bounce_rate) if fact_bounce_rate else None
+        monitoring.fact_time_on_site = float(fact_time_on_site) if fact_time_on_site else None
+        monitoring.fact_page_depth = float(fact_page_depth) if fact_page_depth else None
+        monitoring.fact_robotness = float(fact_robotness) if fact_robotness else None
 
         # Traffic quality & Fraud monitoring
         plan_pi = request.form.get('plan_pi')
@@ -2351,6 +2397,12 @@ def get_monitoring_data(monitoring_id):
             'plan_page_depth': monitoring.plan_page_depth,
             'plan_robotness': monitoring.plan_robotness,
             'plan_pi': monitoring.plan_pi,
+            'fact_visits': monitoring.fact_visits,
+            'fact_conversions': monitoring.fact_conversions,
+            'fact_bounce_rate': monitoring.fact_bounce_rate,
+            'fact_time_on_site': monitoring.fact_time_on_site,
+            'fact_page_depth': monitoring.fact_page_depth,
+            'fact_robotness': monitoring.fact_robotness,
             'plan_vtr': monitoring.plan_vtr,
             'plan_ivt_impressions': monitoring.plan_ivt_impressions,
             'plan_givt_impressions': monitoring.plan_givt_impressions,
