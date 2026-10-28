@@ -2801,116 +2801,132 @@ def refresh_monitoring_data(monitoring_id):
 @login_required
 @block_account_manager
 def refresh_all_monitorings():
-    """Refresh actual data for all active monitorings from SAPE API"""
+    """Refresh actual data for currently-running monitorings from SAPE API.
+
+    Only touches monitorings whose period actually covers today
+    (date_from <= today <= date_to) - a campaign that hasn't started or
+    already ended has no new SAPE data to pull, so hitting it just burns
+    quota/time for nothing. Grouped by SAPE account and authenticated once
+    per account (not once per card) - several monitorings sharing one
+    account used to re-run the SAPE login handshake on every single card,
+    which multiplied how often a transient SAPE auth hiccup could hit.
+    """
     try:
-        # Get all active monitorings (not archived)
-        monitorings = MonitoringCampaign.query.filter_by(archived=False).all()
+        import time
+        from datetime import timedelta
+
+        today = datetime.now().date()
+        monitorings = MonitoringCampaign.query.filter(
+            MonitoringCampaign.archived == False,
+            MonitoringCampaign.date_from <= today,
+            MonitoringCampaign.date_to >= today
+        ).all()
 
         if not monitorings:
             return jsonify({'success': False, 'error': 'No active monitorings found'}), 404
 
-        logger.info(f"🔄 Starting refresh for {len(monitorings)} active monitorings...")
+        monitorings_by_account = {}
+        for monitoring in monitorings:
+            monitorings_by_account.setdefault(monitoring.account_id, []).append(monitoring)
+
+        logger.info(f"🔄 Starting refresh for {len(monitorings)} currently-running monitorings "
+                    f"across {len(monitorings_by_account)} accounts...")
 
         updated_count = 0
         failed_count = 0
 
-        for monitoring in monitorings:
-            try:
-                logger.info(f"🔄 Refreshing monitoring {monitoring.id}: {monitoring.name}")
-
-                # Get campaigns
-                campaigns = monitoring.get_campaigns()
-                if not campaigns:
-                    logger.warning(f"⚠️ No campaigns found for monitoring {monitoring.id}")
-                    failed_count += 1
-                    continue
-
-                # Get account
-                account = monitoring.account
-                if not account or not account.api_token:
-                    logger.warning(f"⚠️ Account not configured for monitoring {monitoring.id}")
-                    failed_count += 1
-                    continue
-
-                # Initialize SAPE client
-                client = SapeAPIClient(login=account.login, token=account.api_token)
-
-                if not client.authenticate():
-                    logger.error(f"❌ SAPE authentication failed for monitoring {monitoring.id}")
-                    failed_count += 1
-                    continue
-
-                # Get data from date_from to yesterday
-                from datetime import timedelta
-                yesterday = datetime.now() - timedelta(days=1)
-                date_to = min(yesterday, datetime.combine(monitoring.date_to, datetime.min.time()))
-                date_from = datetime.combine(monitoring.date_from, datetime.min.time())
-
-                # Get campaign IDs
-                campaign_ids = [int(c.campaign_id) for c in campaigns]
-
-                # Request stats
-                stats = client.get_stats(
-                    campaign_ids=campaign_ids,
-                    date_from=date_from,
-                    date_to=date_to,
-                    fields=None
-                )
-
-                if not stats:
-                    logger.error(f"❌ Failed to get stats from SAPE for monitoring {monitoring.id}")
-                    failed_count += 1
-                    continue
-
-                # Extract totals
-                total = stats.get('total', {})
-
-                # Update monitoring with actual data
-                monitoring.fact_impressions = total.get('shows', 0)
-                monitoring.fact_clicks = total.get('clicks', 0)
-                monitoring.fact_visits = total.get('visits', 0)
-                monitoring.fact_bounce_rate = total.get('avgPostclickBounceRate', 0.0)
-                monitoring.fact_time_on_site = total.get('avgVisitDuration', 0.0)
-                monitoring.fact_page_depth = total.get('avgPostclickPageDepth', 0.0)
-                monitoring.fact_robotness = total.get('avgPostclickRobot', 0.0)
-
-                # VTR/VR
-                is_video = monitoring.is_video_format()
-                if is_video:
-                    vtr_value = total.get('vtr', 0.0)
-                    monitoring.fact_vtr = int(round(vtr_value)) if vtr_value else None
-                else:
-                    vr_value = total.get('vr', 0.0)
-                    monitoring.fact_vtr = int(round(vr_value)) if vr_value else None
-
-                _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
-                _refresh_adriver_fact(monitoring, client, date_to)
-
-                if monitoring.targetads_report_url:
-                    try:
-                        _refresh_targetads_fact(monitoring)
-                    except TargetAdsRefreshError as e:
-                        logger.error(f"⚠️ TargetAds refresh failed for monitoring {monitoring.id}: {e}")
-                    except Exception as e:
-                        logger.error(f"⚠️ Unexpected error refreshing TargetAds for monitoring {monitoring.id}: {e}")
-
-                monitoring.last_sync = datetime.utcnow()
-
-                db.session.commit()
-
-                logger.info(f"✅ Monitoring {monitoring.id} refreshed: {monitoring.fact_impressions:,} impressions")
-                updated_count += 1
-
-                # Add delay between requests to avoid rate limiting
-                import time
-                time.sleep(2)
-
-            except Exception as e:
-                logger.error(f"❌ Error refreshing monitoring {monitoring.id}: {e}")
-                failed_count += 1
-                import traceback
-                traceback.print_exc()
+        for account_id, account_monitorings in monitorings_by_account.items():
+            account = account_monitorings[0].account
+            if not account or not account.api_token:
+                logger.warning(f"⚠️ Account not configured for account_id {account_id} "
+                                f"({len(account_monitorings)} monitorings)")
+                failed_count += len(account_monitorings)
                 continue
+
+            client = SapeAPIClient(login=account.login, token=account.api_token)
+            if not client.authenticate():
+                logger.error(f"❌ SAPE authentication failed for account {account.login} "
+                             f"({len(account_monitorings)} monitorings)")
+                failed_count += len(account_monitorings)
+                continue
+
+            for monitoring in account_monitorings:
+                try:
+                    logger.info(f"🔄 Refreshing monitoring {monitoring.id}: {monitoring.name}")
+
+                    campaigns = monitoring.get_campaigns()
+                    if not campaigns:
+                        logger.warning(f"⚠️ No campaigns found for monitoring {monitoring.id}")
+                        failed_count += 1
+                        continue
+
+                    # Get data from date_from to yesterday
+                    yesterday = datetime.now() - timedelta(days=1)
+                    date_to = min(yesterday, datetime.combine(monitoring.date_to, datetime.min.time()))
+                    date_from = datetime.combine(monitoring.date_from, datetime.min.time())
+
+                    campaign_ids = [int(c.campaign_id) for c in campaigns]
+
+                    stats = client.get_stats(
+                        campaign_ids=campaign_ids,
+                        date_from=date_from,
+                        date_to=date_to,
+                        fields=None
+                    )
+
+                    if not stats:
+                        logger.error(f"❌ Failed to get stats from SAPE for monitoring {monitoring.id}")
+                        failed_count += 1
+                        continue
+
+                    # Extract totals
+                    total = stats.get('total', {})
+
+                    # Update monitoring with actual data
+                    monitoring.fact_impressions = total.get('shows', 0)
+                    monitoring.fact_clicks = total.get('clicks', 0)
+                    monitoring.fact_visits = total.get('visits', 0)
+                    monitoring.fact_bounce_rate = total.get('avgPostclickBounceRate', 0.0)
+                    monitoring.fact_time_on_site = total.get('avgVisitDuration', 0.0)
+                    monitoring.fact_page_depth = total.get('avgPostclickPageDepth', 0.0)
+                    monitoring.fact_robotness = total.get('avgPostclickRobot', 0.0)
+
+                    # VTR/VR
+                    is_video = monitoring.is_video_format()
+                    if is_video:
+                        vtr_value = total.get('vtr', 0.0)
+                        monitoring.fact_vtr = int(round(vtr_value)) if vtr_value else None
+                    else:
+                        vr_value = total.get('vr', 0.0)
+                        monitoring.fact_vtr = int(round(vr_value)) if vr_value else None
+
+                    _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
+                    _refresh_adriver_fact(monitoring, client, date_to)
+
+                    if monitoring.targetads_report_url:
+                        try:
+                            _refresh_targetads_fact(monitoring)
+                        except TargetAdsRefreshError as e:
+                            logger.error(f"⚠️ TargetAds refresh failed for monitoring {monitoring.id}: {e}")
+                        except Exception as e:
+                            logger.error(f"⚠️ Unexpected error refreshing TargetAds for monitoring {monitoring.id}: {e}")
+
+                    monitoring.last_sync = datetime.utcnow()
+
+                    db.session.commit()
+
+                    logger.info(f"✅ Monitoring {monitoring.id} refreshed: {monitoring.fact_impressions:,} impressions")
+                    updated_count += 1
+
+                    # Add delay between requests to avoid rate limiting
+                    time.sleep(2)
+
+                except Exception as e:
+                    logger.error(f"❌ Error refreshing monitoring {monitoring.id}: {e}")
+                    failed_count += 1
+                    import traceback
+                    traceback.print_exc()
+                    continue
 
         logger.info(f"✅ Refresh completed: {updated_count} updated, {failed_count} failed")
 
@@ -5491,21 +5507,33 @@ def scheduled_update_reports():
 
 def scheduled_refresh_all_monitorings():
     """
-    Scheduled task to refresh all active monitoring campaigns
-    Runs daily at 09:00 and updates yesterday's data from SAPE API
+    Scheduled task to refresh currently-running monitoring campaigns.
+    Runs daily at 09:00 and updates yesterday's data from SAPE API.
+
+    Only touches monitorings whose period actually covers today
+    (date_from <= today <= date_to) - a campaign that hasn't started or
+    already ended has no new SAPE data to pull. Grouped by SAPE account and
+    authenticated once per account (not once per card) - several
+    monitorings sharing one account used to re-run the SAPE login
+    handshake on every single card, which multiplied how often a transient
+    SAPE auth hiccup could knock a monitoring out for the whole day. A
+    single retry on auth (SAPE occasionally flakes on one attempt) covers
+    most of those transient failures without a human needing to notice
+    and re-click "Обновить все" the next morning.
     """
     with app.app_context():
+        import time
+        from datetime import timedelta
+
         now = datetime.now(pytz.timezone('Europe/Moscow'))
 
         logging.info(f"\n{'='*60}")
         logging.info(f"⏰ SCHEDULED MONITORING REFRESH - {now.strftime('%Y-%m-%d %H:%M:%S')}")
         logging.info(f"{'='*60}")
 
-        # Find all active monitorings (not archived) whose campaign hasn't
-        # ended yet - once date_to has passed there's nothing new to pull,
-        # so stop touching the card automatically (saves API quota too).
         active_monitorings = MonitoringCampaign.query.filter(
             MonitoringCampaign.archived == False,
+            MonitoringCampaign.date_from <= now.date(),
             MonitoringCampaign.date_to >= now.date()
         ).all()
 
@@ -5513,101 +5541,107 @@ def scheduled_refresh_all_monitorings():
             logging.info("ℹ️ No active monitorings found")
             return
 
-        logging.info(f"📋 Found {len(active_monitorings)} active monitorings")
+        monitorings_by_account = {}
+        for monitoring in active_monitorings:
+            monitorings_by_account.setdefault(monitoring.account_id, []).append(monitoring)
+
+        logging.info(f"📋 Found {len(active_monitorings)} currently-running monitorings "
+                     f"across {len(monitorings_by_account)} accounts")
 
         monitorings_updated = 0
         monitorings_failed = 0
 
-        for monitoring in active_monitorings:
-            try:
-                logging.info(f"🔄 Refreshing monitoring {monitoring.id}: {monitoring.name}")
-
-                # Get campaigns
-                campaigns = monitoring.get_campaigns()
-                if not campaigns:
-                    logging.warning(f"⚠️ No campaigns found for monitoring {monitoring.id}")
-                    monitorings_failed += 1
-                    continue
-
-                # Get account
-                account = monitoring.account
-                if not account or not account.api_token:
-                    logging.warning(f"⚠️ Account not configured for monitoring {monitoring.id}")
-                    monitorings_failed += 1
-                    continue
-
-                # Initialize SAPE client
-                client = SapeAPIClient(login=account.login, token=account.api_token)
-
-                if not client.authenticate():
-                    logging.error(f"❌ SAPE authentication failed for monitoring {monitoring.id}")
-                    monitorings_failed += 1
-                    continue
-
-                # Get data from date_from to yesterday
-                from datetime import timedelta
-                yesterday = datetime.now() - timedelta(days=1)
-                date_to = min(yesterday, datetime.combine(monitoring.date_to, datetime.min.time()))
-                date_from = datetime.combine(monitoring.date_from, datetime.min.time())
-
-                # Get campaign IDs
-                campaign_ids = [int(c.campaign_id) for c in campaigns]
-
-                # Request stats
-                stats = client.get_stats(
-                    campaign_ids=campaign_ids,
-                    date_from=date_from,
-                    date_to=date_to,
-                    fields=None
-                )
-
-                if not stats:
-                    logging.error(f"❌ Failed to get stats from SAPE for monitoring {monitoring.id}")
-                    monitorings_failed += 1
-                    continue
-
-                # Extract totals
-                total = stats.get('total', {})
-
-                # Update monitoring with actual data
-                monitoring.fact_impressions = total.get('shows', 0)
-                monitoring.fact_clicks = total.get('clicks', 0)
-                monitoring.fact_visits = total.get('visits', 0)
-                monitoring.fact_bounce_rate = total.get('avgPostclickBounceRate', 0.0)
-                monitoring.fact_time_on_site = total.get('avgVisitDuration', 0.0)
-                monitoring.fact_page_depth = total.get('avgPostclickPageDepth', 0.0)
-                monitoring.fact_robotness = total.get('avgPostclickRobot', 0.0)
-
-                _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
-                _refresh_adriver_fact(monitoring, client, date_to)
-
-                if monitoring.targetads_report_url:
-                    try:
-                        _refresh_targetads_fact(monitoring)
-                    except TargetAdsRefreshError as e:
-                        logging.error(f"⚠️ TargetAds refresh failed for monitoring {monitoring.id}: {e}")
-                    except Exception as e:
-                        logging.error(f"⚠️ Unexpected error refreshing TargetAds for monitoring {monitoring.id}: {e}")
-
-                monitoring.last_sync = datetime.utcnow()
-
-                db.session.commit()
-
-                logging.info(f"✅ Monitoring {monitoring.id} refreshed: {monitoring.fact_impressions:,} impressions, {monitoring.fact_clicks:,} clicks, {monitoring.fact_visits:,} visits")
-                monitorings_updated += 1
-
-                # Add delay between requests to avoid rate limiting
-                import time
-                time.sleep(2)  # 2 seconds delay between each monitoring update
-
-            except Exception as e:
-                logging.error(f"❌ Error refreshing monitoring {monitoring.id}: {e}")
-                monitorings_failed += 1
-                import traceback
-                traceback.print_exc()
-                # Continue with next monitoring after error
-                time.sleep(1)  # Short delay before next attempt
+        for account_id, account_monitorings in monitorings_by_account.items():
+            account = account_monitorings[0].account
+            if not account or not account.api_token:
+                logging.warning(f"⚠️ Account not configured for account_id {account_id} "
+                                 f"({len(account_monitorings)} monitorings)")
+                monitorings_failed += len(account_monitorings)
                 continue
+
+            client = SapeAPIClient(login=account.login, token=account.api_token)
+            authenticated = client.authenticate()
+            if not authenticated:
+                logging.warning(f"⚠️ SAPE auth failed for account {account.login}, retrying once...")
+                time.sleep(3)
+                authenticated = client.authenticate()
+
+            if not authenticated:
+                logging.error(f"❌ SAPE authentication failed for account {account.login} "
+                              f"after retry ({len(account_monitorings)} monitorings)")
+                monitorings_failed += len(account_monitorings)
+                continue
+
+            for monitoring in account_monitorings:
+                try:
+                    logging.info(f"🔄 Refreshing monitoring {monitoring.id}: {monitoring.name}")
+
+                    campaigns = monitoring.get_campaigns()
+                    if not campaigns:
+                        logging.warning(f"⚠️ No campaigns found for monitoring {monitoring.id}")
+                        monitorings_failed += 1
+                        continue
+
+                    # Get data from date_from to yesterday
+                    yesterday = datetime.now() - timedelta(days=1)
+                    date_to = min(yesterday, datetime.combine(monitoring.date_to, datetime.min.time()))
+                    date_from = datetime.combine(monitoring.date_from, datetime.min.time())
+
+                    campaign_ids = [int(c.campaign_id) for c in campaigns]
+
+                    stats = client.get_stats(
+                        campaign_ids=campaign_ids,
+                        date_from=date_from,
+                        date_to=date_to,
+                        fields=None
+                    )
+
+                    if not stats:
+                        logging.error(f"❌ Failed to get stats from SAPE for monitoring {monitoring.id}")
+                        monitorings_failed += 1
+                        continue
+
+                    # Extract totals
+                    total = stats.get('total', {})
+
+                    # Update monitoring with actual data
+                    monitoring.fact_impressions = total.get('shows', 0)
+                    monitoring.fact_clicks = total.get('clicks', 0)
+                    monitoring.fact_visits = total.get('visits', 0)
+                    monitoring.fact_bounce_rate = total.get('avgPostclickBounceRate', 0.0)
+                    monitoring.fact_time_on_site = total.get('avgVisitDuration', 0.0)
+                    monitoring.fact_page_depth = total.get('avgPostclickPageDepth', 0.0)
+                    monitoring.fact_robotness = total.get('avgPostclickRobot', 0.0)
+
+                    _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
+                    _refresh_adriver_fact(monitoring, client, date_to)
+
+                    if monitoring.targetads_report_url:
+                        try:
+                            _refresh_targetads_fact(monitoring)
+                        except TargetAdsRefreshError as e:
+                            logging.error(f"⚠️ TargetAds refresh failed for monitoring {monitoring.id}: {e}")
+                        except Exception as e:
+                            logging.error(f"⚠️ Unexpected error refreshing TargetAds for monitoring {monitoring.id}: {e}")
+
+                    monitoring.last_sync = datetime.utcnow()
+
+                    db.session.commit()
+
+                    logging.info(f"✅ Monitoring {monitoring.id} refreshed: {monitoring.fact_impressions:,} impressions, {monitoring.fact_clicks:,} clicks, {monitoring.fact_visits:,} visits")
+                    monitorings_updated += 1
+
+                    # Add delay between requests to avoid rate limiting
+                    time.sleep(2)  # 2 seconds delay between each monitoring update
+
+                except Exception as e:
+                    logging.error(f"❌ Error refreshing monitoring {monitoring.id}: {e}")
+                    monitorings_failed += 1
+                    import traceback
+                    traceback.print_exc()
+                    # Continue with next monitoring after error
+                    time.sleep(1)  # Short delay before next attempt
+                    continue
 
         logging.info(f"\n✅ SCHEDULED MONITORING REFRESH COMPLETED:")
         logging.info(f"   Monitorings updated: {monitorings_updated}")
