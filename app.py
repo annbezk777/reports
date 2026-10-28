@@ -2607,6 +2607,39 @@ def _store_adriver_daily_stats(monitoring_id, upload_id, daily_rows):
         existing.givt_clicks_percent = row.get('givt_clicks_percent')
 
 
+def _refresh_weekly_adriver_stats(monitoring_id, daily_rows):
+    """When an Adriver Excel upload lands after a week's dynamics row was
+    already frozen (see MonitoringWeeklyStat), that week's adriver_*
+    fields would otherwise stay stale until someone manually re-runs
+    compute_monitoring_week_stats for it. Patches just the Adriver side
+    straight from AdriverDailyStat for every already-computed week the
+    upload's dates overlap - same aggregation compute_monitoring_week_stats
+    itself does for the no-TargetAds branch, but without re-hitting SAPE/
+    Weborama synchronously inside this upload request."""
+    dates = [row['date'] for row in daily_rows if row.get('date')]
+    if not dates:
+        return
+    affected = MonitoringWeeklyStat.query.filter(
+        MonitoringWeeklyStat.monitoring_id == monitoring_id,
+        MonitoringWeeklyStat.week_start <= max(dates),
+        MonitoringWeeklyStat.week_end >= min(dates),
+    ).all()
+    for stat in affected:
+        week_rows = AdriverDailyStat.query.filter(
+            AdriverDailyStat.monitoring_id == monitoring_id,
+            AdriverDailyStat.date >= stat.week_start,
+            AdriverDailyStat.date <= stat.week_end,
+        ).all()
+        if not week_rows:
+            continue
+        stat.adriver_impressions = sum(r.impressions or 0 for r in week_rows)
+        stat.adriver_clicks = sum(r.clicks or 0 for r in week_rows)
+        for field in ('ivt_impressions_percent', 'givt_impressions_percent', 'sivt_impressions_percent', 'givt_clicks_percent'):
+            values = [getattr(r, field) for r in week_rows if getattr(r, field) is not None]
+            if values:
+                setattr(stat, field, round(sum(values) / len(values), 2))
+
+
 def get_last_completed_week(today):
     """(monday, sunday) of the week before today's own week - e.g. if
     today is Monday, that's literally last week (yesterday was Sunday)."""
@@ -3268,7 +3301,9 @@ def upload_adriver_excel(monitoring_id):
             db.session.add(file_upload)
             db.session.flush()  # assign file_upload.id before using it below
 
-            _store_adriver_daily_stats(monitoring_id, file_upload.id, ivt_data.get('daily_rows', []))
+            daily_rows = ivt_data.get('daily_rows', [])
+            _store_adriver_daily_stats(monitoring_id, file_upload.id, daily_rows)
+            _refresh_weekly_adriver_stats(monitoring_id, daily_rows)
 
             db.session.commit()
 
