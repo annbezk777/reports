@@ -2733,16 +2733,38 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
     # --- Weborama ---
     weborama_links = [l for l in monitoring.verifier_links if l.verifier_type == 'weborama' and l.permalink_url]
     if weborama_links:
-        from app.api.weborama_client import fetch_insertions
+        from app.api.weborama_client import fetch_insertions, WeboramaFetchError
         total_wcm_imp = 0
         total_wcm_clk = 0
         wcm_found = False
         for link in weborama_links:
             try:
-                results = fetch_insertions(link.permalink_url, q_start, q_end)
-                total_wcm_imp += sum(r['impressions'] for r in results.values())
-                total_wcm_clk += sum(r['clicks'] for r in results.values())
-                wcm_found = True
+                try:
+                    results = fetch_insertions(link.permalink_url, q_start, q_end)
+                except WeboramaFetchError as e:
+                    if 'недоступен для выбора' in str(e) and q_end > q_start:
+                        results = fetch_insertions(link.permalink_url, q_start, q_end - timedelta(days=1))
+                    else:
+                        raise
+                # A permalink's dashboard can list several insertions at
+                # once (e.g. other creatives sharing the same account
+                # scope) - summing every row blindly would double-count
+                # against what the SAPE side's week actually covers. Each
+                # mapping already records exactly which row is "ours" (or,
+                # if insertion_name is blank, deliberately wants the
+                # whole-page total) - same matching _fetch_and_apply_weborama_link
+                # uses for the daily refresh, kept in sync here.
+                for mapping in link.mappings:
+                    if mapping.insertion_name:
+                        matched = results.get(mapping.insertion_name)
+                        if matched:
+                            total_wcm_imp += matched['impressions']
+                            total_wcm_clk += matched['clicks']
+                            wcm_found = True
+                    else:
+                        total_wcm_imp += sum(r['impressions'] for r in results.values())
+                        total_wcm_clk += sum(r['clicks'] for r in results.values())
+                        wcm_found = True
             except Exception as e:
                 logger.error(f"⚠️ Weekly Weborama fetch failed for link {link.id}, week {week_start}: {e}")
         if wcm_found:
