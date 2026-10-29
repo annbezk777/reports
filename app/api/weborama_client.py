@@ -14,14 +14,15 @@ via the calendar, read the resulting per-insertion table. Each row's name
 tells us video vs banner directly (e.g. "Sape_Banner_X" / "Sape_Video_X").
 """
 import re
-from playwright.sync_api import sync_playwright
+import time
+from playwright.sync_api import sync_playwright, Error as PlaywrightError
 
 
 class WeboramaFetchError(Exception):
     pass
 
 
-def fetch_insertions(permalink_url, date_from, date_to):
+def fetch_insertions(permalink_url, date_from, date_to, _retries=2):
     """
     permalink_url: a https://adap-interface.wbrm.ru/.../permalink/link/hash/<hash> URL
     date_from, date_to: datetime.date objects - any month, the calendar is
@@ -31,12 +32,41 @@ def fetch_insertions(permalink_url, date_from, date_to):
     Returns a dict keyed by the exact insertion name as shown in Weborama
     -> {'impressions': int, 'clicks': int, 'insertion_name': str, 'format_guess': 'banner'|'video'|None}
     """
+    last_error = None
+    for attempt in range(_retries + 1):
+        try:
+            return _fetch_insertions_once(permalink_url, date_from, date_to)
+        except PlaywrightError as e:
+            # Transient - a navigation timeout or net::ERR_EMPTY_RESPONSE,
+            # not a real "this permalink/period has no data" case (that's
+            # WeboramaFetchError, raised separately and never retried
+            # here - see _click_calendar_day/_set_date_range). Weborama's
+            # own site loads fine in a real browser even right after one
+            # of these, so it reads as the server being momentarily slow
+            # to answer rather than anything actually broken - worth one
+            # quiet retry before giving up.
+            last_error = e
+            if attempt < _retries:
+                time.sleep(3)
+    raise WeboramaFetchError(f'Не удалось загрузить пермалинк после {_retries + 1} попыток: {last_error}')
+
+
+def _fetch_insertions_once(permalink_url, date_from, date_to):
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={'width': 1600, 'height': 1000})
         try:
-            page.goto(permalink_url, wait_until='networkidle', timeout=60000)
-            page.wait_for_timeout(1200)
+            # 'networkidle' never fires on this page - the Angular
+            # dashboard keeps background polling going indefinitely, so
+            # Playwright's "no network activity for 500ms" condition is
+            # never met and goto() used to hang until its own 60s
+            # timeout on every single call, success or not (confirmed:
+            # the same URL reaches 'domcontentloaded' in ~3s). Wait for
+            # DOM parse instead and let the explicit element/timeout
+            # waits below do the rest, same as a human just watching the
+            # page settle rather than waiting for total network silence.
+            page.goto(permalink_url, wait_until='domcontentloaded', timeout=30000)
+            page.wait_for_timeout(1500)
 
             # Most permalinks need a click into "Insertions" to reach the
             # per-insertion table. Some (e.g. ones scoped to a single
