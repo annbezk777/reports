@@ -800,10 +800,17 @@ class MonitoringWeeklyStat(db.Model):
     # True when some Weborama link's pixel (compare_date_from) went live
     # mid-week, so weborama_impressions/clicks only cover part of this
     # week while `impressions`/`clicks` above are still the SAPE side's
-    # full 7 days - diffing the two would show a huge, meaningless
-    # percentage, so the template hides the diff badge (not the number
-    # itself) whenever this is set.
+    # full 7 days. weborama_coverage_start is the date the covered part
+    # actually starts from (the latest compare_date_from among this
+    # week's links) - the template shows it in a tooltip, and the diff
+    # badge is computed against weborama_scoped_impressions/clicks (SAPE
+    # fact for the SAME [weborama_coverage_start, week_end] window) rather
+    # than the full-week impressions/clicks above, so the % stays honest
+    # instead of comparing mismatched date ranges.
     weborama_partial_week = db.Column(db.Boolean, nullable=True)
+    weborama_coverage_start = db.Column(db.Date, nullable=True)
+    weborama_scoped_impressions = db.Column(db.Integer, nullable=True)
+    weborama_scoped_clicks = db.Column(db.Integer, nullable=True)
 
     computed_at = db.Column(db.DateTime, default=datetime.utcnow)
 

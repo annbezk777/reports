@@ -2771,6 +2771,7 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
         total_wcm_clk = 0
         wcm_found = False
         wcm_partial = False
+        wcm_coverage_start = None
         for link in weborama_links:
             # A pixel installed after the campaign's own start (common -
             # verification tags often land a few days late) means Weborama
@@ -2786,6 +2787,7 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
                 continue
             if link_start > q_start:
                 wcm_partial = True
+                wcm_coverage_start = max(wcm_coverage_start, link_start) if wcm_coverage_start else link_start
             try:
                 try:
                     results = fetch_insertions(link.permalink_url, link_start, q_end)
@@ -2819,6 +2821,28 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
             stat.weborama_impressions = total_wcm_imp
             stat.weborama_clicks = total_wcm_clk
             stat.weborama_partial_week = wcm_partial
+            stat.weborama_coverage_start = wcm_coverage_start
+            if wcm_partial:
+                # Diffing total_wcm_imp against the SAPE side's full
+                # 7-day `stat.impressions` would compare mismatched
+                # windows again - fetch SAPE scoped to the exact same
+                # [wcm_coverage_start, q_end] the Weborama numbers above
+                # actually cover, same campaigns as the week's main SAPE
+                # call, so the % the template shows is a fair comparison
+                # instead of being hidden outright.
+                try:
+                    scoped_stats = client.get_stats(
+                        campaign_ids=campaign_ids,
+                        date_from=datetime.combine(wcm_coverage_start, datetime.min.time()),
+                        date_to=datetime.combine(q_end, datetime.min.time()),
+                        fields=None
+                    )
+                    if scoped_stats:
+                        scoped_total = scoped_stats.get('total', {})
+                        stat.weborama_scoped_impressions = scoped_total.get('shows', 0)
+                        stat.weborama_scoped_clicks = scoped_total.get('clicks', 0)
+                except Exception as e:
+                    logger.error(f"⚠️ Scoped SAPE fetch for partial Weborama week failed, monitoring {monitoring.id}, week {week_start}: {e}")
 
     stat.computed_at = datetime.utcnow()
     db.session.commit()
