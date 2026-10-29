@@ -2771,12 +2771,24 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
         total_wcm_clk = 0
         wcm_found = False
         for link in weborama_links:
+            # A pixel installed after the campaign's own start (common -
+            # verification tags often land a few days late) means Weborama
+            # genuinely has nothing before link.compare_date_from; querying
+            # the full week anyway either errors out or, for a week that
+            # only partially overlaps, silently compares a partial-week
+            # Weborama count against the SAPE side's full week. Clip to
+            # the pixel's own start first, same as the daily refresh
+            # (_fetch_and_apply_weborama_link) already does, and skip the
+            # link entirely for weeks that end before the pixel went live.
+            link_start = max(q_start, link.compare_date_from) if link.compare_date_from else q_start
+            if link_start > q_end:
+                continue
             try:
                 try:
-                    results = fetch_insertions(link.permalink_url, q_start, q_end)
+                    results = fetch_insertions(link.permalink_url, link_start, q_end)
                 except WeboramaFetchError as e:
-                    if 'недоступен для выбора' in str(e) and q_end > q_start:
-                        results = fetch_insertions(link.permalink_url, q_start, q_end - timedelta(days=1))
+                    if 'недоступен для выбора' in str(e) and q_end > link_start:
+                        results = fetch_insertions(link.permalink_url, link_start, q_end - timedelta(days=1))
                     else:
                         raise
                 # A permalink's dashboard can list several insertions at
@@ -3401,6 +3413,18 @@ def add_verifier_link(monitoring_id):
     # SAPE campaigns (e.g. a banner + a video insertion).
     if verifier_type == 'weborama':
         db.session.add(VerifierLinkMapping(verifier_link_id=link.id))
+
+    # The card header badge (task #24) only reads monitoring.verifier_badge,
+    # which is otherwise set exclusively by parsing Asana's "Верификатор:"
+    # note - a link added straight from this UI (no matching Asana note,
+    # or added before the note was synced) left the card showing no
+    # verifier at all despite one being live. Backfill it here so the two
+    # stay in sync without requiring a manual Asana edit + resync.
+    monitoring = MonitoringCampaign.query.get(monitoring_id)
+    if not monitoring.verifier_badge:
+        badge = {'weborama': 'W', 'adriver': 'A'}.get(verifier_type)
+        if badge:
+            monitoring.verifier_badge = badge
 
     db.session.commit()
 
