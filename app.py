@@ -2770,6 +2770,7 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
         total_wcm_imp = 0
         total_wcm_clk = 0
         wcm_found = False
+        wcm_partial = False
         for link in weborama_links:
             # A pixel installed after the campaign's own start (common -
             # verification tags often land a few days late) means Weborama
@@ -2783,6 +2784,8 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
             link_start = max(q_start, link.compare_date_from) if link.compare_date_from else q_start
             if link_start > q_end:
                 continue
+            if link_start > q_start:
+                wcm_partial = True
             try:
                 try:
                     results = fetch_insertions(link.permalink_url, link_start, q_end)
@@ -2815,6 +2818,7 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
         if wcm_found:
             stat.weborama_impressions = total_wcm_imp
             stat.weborama_clicks = total_wcm_clk
+            stat.weborama_partial_week = wcm_partial
 
     stat.computed_at = datetime.utcnow()
     db.session.commit()
@@ -3668,6 +3672,31 @@ def _fetch_and_apply_weborama_link(link):
             })
 
     link.last_fetched_at = datetime.utcnow()
+
+    # Keep the SAPE-fact side in lockstep, scoped to this one link - if
+    # the two sides are refreshed on separate schedules (this used to only
+    # happen from the manual "Обновить из Weborama" button) they can each
+    # land on a different "yesterday" whenever one run is late or skipped
+    # (e.g. the daily auto-refresh failing on Weborama's calendar lag -
+    # see fetch_insertions' retry above), silently comparing a 12-day
+    # verifier total against a 13-day SAPE one and inflating the
+    # discrepancy % by a full day's traffic for no real reason. Best
+    # effort - a failure here shouldn't block the Weborama numbers that
+    # already succeeded above.
+    account = monitoring.account
+    if account and account.api_token:
+        try:
+            sape_client = SapeAPIClient(login=account.login, token=account.api_token)
+            if sape_client.authenticate():
+                _refresh_verifier_campaign_facts(
+                    monitoring, sape_client,
+                    datetime.combine(date_from, datetime.min.time()),
+                    datetime.combine(date_to, datetime.min.time()),
+                    only_link_id=link.id,
+                )
+        except Exception as e:
+            logger.error(f"⚠️ Failed to sync SAPE fact alongside Weborama fetch for link {link.id}: {e}")
+
     db.session.commit()
 
     return {
@@ -3696,24 +3725,9 @@ def fetch_weborama_link(link_id):
         return jsonify({'success': False, 'error': f'Ошибка получения данных из Weborama: {e}'}), 502
 
     logger.info(f"✅ Fetched verifier link {link_id} from Weborama ({result['date_from']}..{result['date_to']}): {result['mappings']}")
-
-    # Keep the SAPE-fact side in sync too, scoped to this one link - its
-    # compare_date_from (if set) drives both sides, so refreshing only the
-    # Weborama half here would leave the discrepancy % comparing against a
-    # stale SAPE fact from before the date was last changed.
-    monitoring = link.monitoring
-    account = monitoring.account
-    if account and account.api_token:
-        try:
-            client = SapeAPIClient(login=account.login, token=account.api_token)
-            if client.authenticate():
-                yesterday = (datetime.now() - timedelta(days=1)).date()
-                date_from = datetime.combine(monitoring.date_from, datetime.min.time())
-                date_to = datetime.combine(min(monitoring.date_to, yesterday), datetime.min.time())
-                _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to, only_link_id=link.id)
-                db.session.commit()
-        except Exception as e:
-            logger.error(f"⚠️ Failed to refresh SAPE fact alongside Weborama fetch for link {link_id}: {e}")
+    # SAPE-fact side is kept in sync inside _fetch_and_apply_weborama_link
+    # itself now (used to be duplicated here) so every caller - this
+    # button, the daily scheduled refresh - gets it for free.
 
     return jsonify({'success': True, **result})
 

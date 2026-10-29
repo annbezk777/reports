@@ -797,6 +797,13 @@ class MonitoringWeeklyStat(db.Model):
     adriver_clicks = db.Column(db.Integer, nullable=True)
     weborama_impressions = db.Column(db.Integer, nullable=True)
     weborama_clicks = db.Column(db.Integer, nullable=True)
+    # True when some Weborama link's pixel (compare_date_from) went live
+    # mid-week, so weborama_impressions/clicks only cover part of this
+    # week while `impressions`/`clicks` above are still the SAPE side's
+    # full 7 days - diffing the two would show a huge, meaningless
+    # percentage, so the template hides the diff badge (not the number
+    # itself) whenever this is set.
+    weborama_partial_week = db.Column(db.Boolean, nullable=True)
 
     computed_at = db.Column(db.DateTime, default=datetime.utcnow)
 
