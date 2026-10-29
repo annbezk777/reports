@@ -328,6 +328,19 @@ class MonitoringCampaign(db.Model):
     rolled_from_id = db.Column(db.Integer, db.ForeignKey('monitoring_campaigns.id'), nullable=True)
     rolled_to_id = db.Column(db.Integer, db.ForeignKey('monitoring_campaigns.id'), nullable=True)
 
+    # Post-close verdicts (nullable = not set yet) - both only make sense
+    # once a card is frozen, but are tracked as two separate fields set by
+    # two different roles at two different times:
+    # - completed: the plan-vs-fact call, made by whoever closes the month
+    #   (same privileged account that can call finish-month at all - see
+    #   ADMIN_EMAIL check on that route).
+    # - churned: whether the client left, set independently and later by
+    #   the account-manager role (otherwise view-only everywhere else in
+    #   monitoring) - the one deliberate write exception for that role,
+    #   and only while the card is already frozen.
+    completed = db.Column(db.Boolean, nullable=True)
+    churned = db.Column(db.Boolean, nullable=True)
+
     # Relationships
     account = db.relationship('SapeAccount', backref='monitoring_campaigns', lazy=True)
     report_config = db.relationship('ReportConfig', backref='monitoring_campaigns', lazy=True)

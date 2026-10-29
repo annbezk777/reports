@@ -66,7 +66,19 @@ def _fetch_insertions_once(permalink_url, date_from, date_to):
             # waits below do the rest, same as a human just watching the
             # page settle rather than waiting for total network silence.
             page.goto(permalink_url, wait_until='domcontentloaded', timeout=30000)
-            page.wait_for_timeout(1500)
+
+            # A fixed 1.5s guess isn't enough for every permalink shape -
+            # a 3-dimension "tree" dashboard (project/channel/campaign,
+            # heavier to compute) can take 6+ seconds after
+            # domcontentloaded before the calendar/table even exist in
+            # the DOM, which used to fail with "День N недоступен для
+            # выбора"-adjacent "Не найден элемент выбора дат" even though
+            # the page was simply still rendering. Wait for the thing we
+            # actually need (up to 15s) instead of a blind sleep.
+            try:
+                page.wait_for_selector('text=Calendar From', timeout=15000)
+            except Exception:
+                pass  # fall through - _set_date_range raises its own clear error if it's really missing
 
             # Most permalinks need a click into "Insertions" to reach the
             # per-insertion table. Some (e.g. ones scoped to a single

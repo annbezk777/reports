@@ -626,12 +626,12 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                 {% else %}
                     <a href="{{ url_for('monitoring', tab='active') }}" class="tab-button" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Активные</a>
                 {% endif %}
+                {% if tab == 'frozen' %}
+                    <span class="tab-button tab-active" style="width: 100px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Завершённые</span>
+                {% else %}
+                    <a href="{{ url_for('monitoring', tab='frozen') }}" class="tab-button" style="width: 100px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Завершённые</a>
+                {% endif %}
                 {% if session.get('user_role') != 'account_manager' %}
-                    {% if tab == 'frozen' %}
-                        <span class="tab-button tab-active" style="width: 100px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Завершённые</span>
-                    {% else %}
-                        <a href="{{ url_for('monitoring', tab='frozen') }}" class="tab-button" style="width: 100px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Завершённые</a>
-                    {% endif %}
                     {% if tab == 'archive' %}
                         <span class="tab-button tab-active" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Архив</span>
                     {% else %}
@@ -718,6 +718,31 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
         </button>
         {% endif %}
     </div>
+
+    {% if tab == 'frozen' and monitorings %}
+    {% set completed_count = monitorings | selectattr('completed', 'equalto', True) | list | length %}
+    {% set not_completed_count = monitorings | selectattr('completed', 'equalto', False) | list | length %}
+    {% set completed_total = completed_count + not_completed_count %}
+    {% set churned_count = monitorings | selectattr('churned', 'equalto', True) | list | length %}
+    {% set not_churned_count = monitorings | selectattr('churned', 'equalto', False) | list | length %}
+    {% set churned_total = churned_count + not_churned_count %}
+    <div style="display: flex; gap: 24px; padding: 12px 16px; margin-bottom: 16px; background: var(--bg-light); border-radius: 8px; font-size: 12px;">
+        <div>
+            <span style="color: var(--text-secondary);">Выполнено:</span>
+            <strong style="color: var(--text-primary); margin-left: 4px;">
+                {% if completed_total %}{{ (completed_count / completed_total * 100)|round|int }}%{% else %}—{% endif %}
+            </strong>
+            <span style="color: var(--text-secondary); font-size: 11px;">({{ completed_count }}/{{ completed_total }} с отметкой, всего {{ monitorings|length }})</span>
+        </div>
+        <div>
+            <span style="color: var(--text-secondary);">Отвал:</span>
+            <strong style="color: var(--text-primary); margin-left: 4px;">
+                {% if churned_total %}{{ (churned_count / churned_total * 100)|round|int }}%{% else %}—{% endif %}
+            </strong>
+            <span style="color: var(--text-secondary); font-size: 11px;">({{ churned_count }}/{{ churned_total }} с отметкой)</span>
+        </div>
+    </div>
+    {% endif %}
 
     {% if session.get('user_role') != 'account_manager' %}
     <!-- Bulk Action Bar -->
@@ -879,6 +904,22 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                             style="flex-shrink: 0; padding: 0; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center;">
                                         <svg width="9" height="9" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                     </button>
+                                    {% endif %}
+                                    {% if monitoring.frozen and monitoring.completed is not none %}
+                                    <span class="meta-dot" style="color: #D1D5DB;">•</span>
+                                    <span style="color: {{ '#16a34a' if monitoring.completed else '#dc2626' }}; font-weight: 500;">{{ 'Выполнено' if monitoring.completed else 'Не выполнено' }}</span>
+                                    {% endif %}
+                                    {% if monitoring.frozen %}
+                                    <span class="meta-dot" style="color: #D1D5DB;">•</span>
+                                    {% if session.get('user_role') == 'account_manager' or session.get('user_email') == admin_email %}
+                                    <select onchange="setChurnStatus({{ monitoring.id }}, this.value)" style="font-size: 11px; padding: 2px 6px; border: 1px solid var(--border-color); border-radius: 6px; background: white; color: {{ '#dc2626' if monitoring.churned else ('#16a34a' if monitoring.churned is not none else 'var(--text-secondary)') }};">
+                                        <option value="" {% if monitoring.churned is none %}selected{% endif %}>Отвал: —</option>
+                                        <option value="true" {% if monitoring.churned == True %}selected{% endif %}>Отвал</option>
+                                        <option value="false" {% if monitoring.churned == False %}selected{% endif %}>Не отвал</option>
+                                    </select>
+                                    {% elif monitoring.churned is not none %}
+                                    <span style="color: {{ '#dc2626' if monitoring.churned else '#16a34a' }}; font-weight: 500;">{{ 'Отвал' if monitoring.churned else 'Не отвал' }}</span>
+                                    {% endif %}
                                     {% endif %}
                                     {% if monitoring.rolled_to_id %}
                                     <span class="meta-dot" style="color: #D1D5DB;">•</span>
@@ -1272,7 +1313,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     </svg>
                                     Скопировать
                                 </a>
-                                {% if not monitoring.archived %}
+                                {% if not monitoring.archived and session.get('user_email') == admin_email %}
                                 <div class="kebab-divider"></div>
                                 <button onclick="openFinishMonthModal({{ monitoring.id }}, '{{ monitoring.name }}', {{ 'true' if monitoring.report_config_id else 'false' }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
                                     <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1544,6 +1585,27 @@ function toggleWeeklyDynamics(monitoringId) {
 }
 
 // Refresh monitoring data via API
+function setChurnStatus(monitoringId, value) {
+    const churned = value === '' ? null : value;
+    fetch(`/monitoring/${monitoringId}/churn-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ churned })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) {
+                alert('Ошибка: ' + (data.error || 'неизвестная ошибка'));
+                window.location.reload();
+            }
+        })
+        .catch(err => {
+            console.error('churn-status error:', err);
+            alert('Ошибка при обращении к серверу');
+            window.location.reload();
+        });
+}
+
 function refreshMonitoring(monitoringId) {
     const button = event.currentTarget;
     const icon = button.querySelector('svg');
@@ -2047,6 +2109,16 @@ function refreshAllMonitorings() {
 
             <div style="margin-top: 16px; padding: 10px 12px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; font-size: 12px; color: #92400e;" id="finishAdriverReminder">
                 Если верификатор — Adriver (ручная выгрузка), убедитесь, что финальный Excel уже загружен до нажатия кнопки.
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;">
+                <label style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px; display: block;">
+                    Выполнение плана <span class="required">*</span>
+                </label>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" id="finishCompletedYes" onclick="setFinishCompleted(true)" class="btn btn-secondary" style="flex: 1; padding: 8px;">Выполнено</button>
+                    <button type="button" id="finishCompletedNo" onclick="setFinishCompleted(false)" class="btn btn-secondary" style="flex: 1; padding: 8px;">Не выполнено</button>
+                </div>
             </div>
 
             <div class="form-group" style="margin-top: 16px; display: flex; align-items: center; gap: 8px;">
@@ -2901,6 +2973,20 @@ function _endOfCurrentMonth() {
     return d.toISOString().slice(0, 10);
 }
 
+let finishMonthCompleted = null;
+
+function setFinishCompleted(value) {
+    finishMonthCompleted = value;
+    const yesBtn = document.getElementById('finishCompletedYes');
+    const noBtn = document.getElementById('finishCompletedNo');
+    yesBtn.style.background = value === true ? '#16a34a' : '';
+    yesBtn.style.color = value === true ? 'white' : '';
+    yesBtn.style.borderColor = value === true ? '#16a34a' : '';
+    noBtn.style.background = value === false ? '#dc2626' : '';
+    noBtn.style.color = value === false ? 'white' : '';
+    noBtn.style.borderColor = value === false ? '#dc2626' : '';
+}
+
 function openFinishMonthModal(monitoringId, monitoringName, hasReport) {
     finishMonthMonitoringId = monitoringId;
     document.getElementById('finishMonthMonitoringName').textContent = monitoringName;
@@ -2913,6 +2999,7 @@ function openFinishMonthModal(monitoringId, monitoringName, hasReport) {
     document.getElementById('finishMonthError').style.display = 'none';
     document.getElementById('finishMonthSubmitBtn').disabled = false;
     document.getElementById('finishMonthSubmitBtn').textContent = 'Завершить';
+    setFinishCompleted(null);
 
     document.getElementById('finishMonthModal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -2940,8 +3027,13 @@ function submitFinishMonth() {
         errorBox.style.display = 'block';
         return;
     }
+    if (finishMonthCompleted === null) {
+        errorBox.textContent = 'Укажите, выполнена кампания или нет';
+        errorBox.style.display = 'block';
+        return;
+    }
     const rollover = document.getElementById('finishRollover').checked;
-    const payload = { freeze_as_of: freezeAsOf, rollover };
+    const payload = { freeze_as_of: freezeAsOf, rollover, completed: finishMonthCompleted };
     if (rollover) {
         const nf = document.getElementById('finishNewDateFrom').value;
         const nt = document.getElementById('finishNewDateTo').value;

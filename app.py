@@ -1699,9 +1699,12 @@ def monitoring():
     """List of monitoring campaigns"""
     # Get manager filter from URL or session
     manager_filter = request.args.get('manager', None)
-    # Account-manager is view-only and doesn't get the archive/frozen views;
-    # Трафик-менеджер still can (can restore from archive) even though only
-    # the admin can delete - those are two different permissions (see #17).
+    # Account-manager is view-only and doesn't get the plain "Архив" view
+    # (ended/removed campaigns aren't their concern); Трафик-менеджер still
+    # can (can restore from archive) even though only the admin can delete
+    # - those are two different permissions (see #17). "Завершённые" is the
+    # one exception - account-manager DOES need it, to mark отвал/не отвал
+    # on finished campaigns (see set_monitoring_churn_status).
     is_account_manager = session.get('user_role') == ROLE_ACCOUNT_MANAGER
 
     # tab replaces the old binary show_archived=true/false - "Завершённые"
@@ -1716,7 +1719,9 @@ def monitoring():
     tab = request.args.get('tab')
     if not tab:
         tab = 'archive' if request.args.get('show_archived', 'false').lower() == 'true' else 'active'
-    if tab not in ('active', 'frozen', 'archive') or is_account_manager:
+    if tab not in ('active', 'frozen', 'archive'):
+        tab = 'active'
+    if is_account_manager and tab == 'archive':
         tab = 'active'
     show_archived = tab != 'active'  # kept for template compat (meta row, etc.)
 
@@ -1906,8 +1911,7 @@ def copy_monitoring(monitoring_id):
 
 
 @app.route('/monitoring/<int:monitoring_id>/finish-month', methods=['POST'])
-@login_required
-@block_account_manager
+@admin_required
 def finish_monitoring_month(monitoring_id):
     """"Завершить месяц": do a final data refresh, freeze the card into a
     read-only historical snapshot (_reject_if_frozen then blocks any
@@ -1921,7 +1925,11 @@ def finish_monitoring_month(monitoring_id):
     freeze_as_of is an explicit cutoff, not monitoring.date_to - ~16% of
     active monitorings span more than one calendar month (flight dates
     like 16.10-16.11), so "the month" has to be told apart from "the
-    whole remaining flight"."""
+    whole remaining flight".
+
+    Deliberately admin-only (not every traffic manager) - this is a
+    judgment call on whether the campaign actually delivered, made by
+    whoever owns that call for the whole team, not a routine action."""
     monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
 
     if monitoring.frozen:
@@ -1936,6 +1944,11 @@ def finish_monitoring_month(monitoring_id):
         freeze_as_of = datetime.strptime(freeze_as_of_str, '%Y-%m-%d').date()
     except ValueError:
         return jsonify({'success': False, 'error': 'Некорректная дата отсечки'}), 400
+
+    completed_str = data.get('completed')
+    if completed_str not in ('true', 'false', True, False):
+        return jsonify({'success': False, 'error': 'Укажите, выполнена кампания или нет'}), 400
+    completed = completed_str in ('true', True)
 
     yesterday = (datetime.now() - timedelta(days=1)).date()
     if freeze_as_of > yesterday:
@@ -1978,6 +1991,7 @@ def finish_monitoring_month(monitoring_id):
     monitoring.frozen = True
     monitoring.frozen_at = datetime.utcnow()
     monitoring.frozen_period = freeze_as_of.strftime('%Y-%m')
+    monitoring.completed = completed
 
     report = monitoring.report_config
     report_freezing = False
@@ -2124,6 +2138,32 @@ def finish_monitoring_month(monitoring_id):
         'new_monitoring_id': new_monitoring_id,
         'new_report_id': new_report_id,
     })
+
+
+@app.route('/monitoring/<int:monitoring_id>/churn-status', methods=['POST'])
+@login_required
+def set_monitoring_churn_status(monitoring_id):
+    """Account-manager marks a finished campaign as отвал/не отвал - the
+    one deliberate write exception for that otherwise view-only role (see
+    block_account_manager), and only on a card that's already frozen
+    (Завершить месяц) - there's nothing to mark churn on for a still-
+    running campaign. Admin can also set/correct it."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+    user_role = session.get('user_role')
+    if user_role != ROLE_ACCOUNT_MANAGER and session.get('user_email') != ADMIN_EMAIL:
+        abort(404)
+    if not monitoring.frozen:
+        return jsonify({'success': False, 'error': 'Отметка доступна только для завершённых карточек'}), 400
+
+    data = request.get_json(silent=True) or {}
+    churned = data.get('churned')
+    if churned not in ('true', 'false', True, False, None):
+        return jsonify({'success': False, 'error': 'Некорректное значение'}), 400
+    monitoring.churned = None if churned is None else (churned in ('true', True))
+    db.session.commit()
+
+    return jsonify({'success': True, 'churned': monitoring.churned})
 
 
 @app.route('/monitoring/<int:monitoring_id>/delete', methods=['POST'])
@@ -3114,8 +3154,9 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
                             total_wcm_clk += matched['clicks']
                             wcm_found = True
                     else:
-                        total_wcm_imp += sum(r['impressions'] for r in results.values())
-                        total_wcm_clk += sum(r['clicks'] for r in results.values())
+                        imp, clk = _sum_distinct_weborama_rows(results)
+                        total_wcm_imp += imp
+                        total_wcm_clk += clk
                         wcm_found = True
             except Exception as e:
                 logger.error(f"⚠️ Weekly Weborama fetch failed for link {link.id}, week {week_start}: {e}")
@@ -3943,6 +3984,31 @@ class WeboramaLinkFetchError(Exception):
     pass
 
 
+def _sum_distinct_weborama_rows(results):
+    """Sum impressions/clicks across every row fetch_insertions() returned,
+    for a mapping that deliberately has no insertion_name (wants the
+    permalink's whole-page total). A flat Insertions/Sites table has one
+    row per distinct creative, so a plain sum is correct there - but some
+    permalinks (a "tree" dashboard grouped by project/channel/campaign)
+    return several rows that are really the SAME underlying total shown
+    at different tree depths, which a blind sum would double- or
+    triple-count. Rows with byte-identical (impressions, clicks) are
+    collapsed to one before summing - a real flat list of distinct
+    creatives essentially never has two rows with exactly equal numbers,
+    so this is safe either way."""
+    seen = set()
+    total_impressions = 0
+    total_clicks = 0
+    for r in results.values():
+        key = (r['impressions'], r['clicks'])
+        if key in seen:
+            continue
+        seen.add(key)
+        total_impressions += r['impressions']
+        total_clicks += r['clicks']
+    return total_impressions, total_clicks
+
+
 def _fetch_and_apply_weborama_link(link):
     """Fetches link.permalink_url ONCE and applies the result to every one
     of this link's mappings - a single Weborama page load already returns
@@ -4012,8 +4078,7 @@ def _fetch_and_apply_weborama_link(link):
             # just one meaningful number, or the user doesn't need the
             # split). Stays blank afterward so future refreshes keep
             # summing everything rather than locking onto one row.
-            total_impressions = sum(r['impressions'] for r in results.values())
-            total_clicks = sum(r['clicks'] for r in results.values())
+            total_impressions, total_clicks = _sum_distinct_weborama_rows(results)
             mapping.verifier_impressions = total_impressions
             mapping.verifier_clicks = total_clicks
             mapping.last_fetched_at = datetime.utcnow()
