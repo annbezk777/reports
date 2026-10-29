@@ -621,16 +621,35 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
         <!-- Tabs -->
         <div>
             <div style="display: flex; gap: 8px;">
-                {% if show_archived %}
-                    <a href="{{ url_for('monitoring') }}" class="tab-button" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Активные</a>
-                    <span class="tab-button tab-active" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Архив</span>
-                {% else %}
+                {% if tab == 'active' %}
                     <span class="tab-button tab-active" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Активные</span>
-                    {% if session.get('user_role') != 'account_manager' %}
-                    <a href="{{ url_for('monitoring', show_archived='true') }}" class="tab-button" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Архив</a>
+                {% else %}
+                    <a href="{{ url_for('monitoring', tab='active') }}" class="tab-button" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Активные</a>
+                {% endif %}
+                {% if session.get('user_role') != 'account_manager' %}
+                    {% if tab == 'frozen' %}
+                        <span class="tab-button tab-active" style="width: 100px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Завершённые</span>
+                    {% else %}
+                        <a href="{{ url_for('monitoring', tab='frozen') }}" class="tab-button" style="width: 100px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Завершённые</a>
+                    {% endif %}
+                    {% if tab == 'archive' %}
+                        <span class="tab-button tab-active" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Архив</span>
+                    {% else %}
+                        <a href="{{ url_for('monitoring', tab='archive') }}" class="tab-button" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Архив</a>
                     {% endif %}
                 {% endif %}
             </div>
+            {% if tab == 'frozen' %}
+            <div style="margin-top: 8px;">
+                <select onchange="window.location.href='{{ url_for('monitoring', tab='frozen') }}' + (this.value ? '&month=' + this.value : '')"
+                        style="width: 160px; height: 30px; font-size: 11px; border: 1px solid var(--border-color); border-radius: 6px; padding: 0 6px; background: white;">
+                    <option value="">Все месяцы</option>
+                    {% for m in frozen_months %}
+                    <option value="{{ m }}" {% if m == month_filter %}selected{% endif %}>{{ (m ~ '-01')|format_month }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
             <span onclick="selectAllMonitorings()"
                   onmouseover="this.style.color='var(--primary-orange)'"
                   onmouseout="this.style.color='var(--text-secondary)'"
@@ -745,6 +764,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
         {% if monitorings %}
             {% for monitoring in monitorings %}
             <div class="report-card monitoring-card"
+                 id="monitoring-{{ monitoring.id }}"
                  data-name="{{ monitoring.name|lower }}"
                  data-manager="{{ monitoring.manager|lower if monitoring.manager else 'unassigned' }}"
                  data-account-manager="{{ monitoring.account_manager|lower if monitoring.account_manager else 'unassigned' }}"
@@ -842,20 +862,31 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 
                                 <!-- Sync status -->
                                 <div class="meta-field" style="display: flex; align-items: center; gap: 4px;">
-                                    {% if monitoring.last_sync %}
+                                    {% if monitoring.frozen %}
+                                    <span class="sync-dot" style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #78716c; flex-shrink: 0;"></span>
+                                    <span style="color: var(--text-secondary);">Зафиксировано: <strong style="color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums;">{{ (monitoring.frozen_at|to_moscow).strftime('%d.%m.%Y в %H:%M') }}</strong></span>
+                                    {% elif monitoring.last_sync %}
                                     <span class="sync-dot" style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10b981; flex-shrink: 0;"></span>
                                     <span style="color: var(--text-secondary);">Данные обновлены: <strong style="color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums;">{{ (monitoring.last_sync|to_moscow).strftime('%d.%m.%Y в %H:%M') }}</strong></span>
                                     {% else %}
                                     <span class="sync-dot" style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #d6d3d1; flex-shrink: 0;"></span>
                                     <span style="color: var(--text-secondary);">Данные пока не подгружены по API</span>
                                     {% endif %}
-                                    {% if session.get('user_role') != 'account_manager' %}
+                                    {% if session.get('user_role') != 'account_manager' and not monitoring.frozen %}
                                     <button onclick="refreshMonitoring({{ monitoring.id }})"
                                             class="btn btn-secondary"
                                             title="Обновить сейчас"
                                             style="flex-shrink: 0; padding: 0; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center;">
                                         <svg width="9" height="9" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                     </button>
+                                    {% endif %}
+                                    {% if monitoring.rolled_to_id %}
+                                    <span class="meta-dot" style="color: #D1D5DB;">•</span>
+                                    <a href="{{ url_for('monitoring', tab='active') }}#monitoring-{{ monitoring.rolled_to_id }}" style="color: var(--primary-orange); text-decoration: none;">→ Продолжение: {{ monitoring.rolled_to.name if monitoring.rolled_to else '' }}</a>
+                                    {% endif %}
+                                    {% if monitoring.rolled_from_id %}
+                                    <span class="meta-dot" style="color: #D1D5DB;">•</span>
+                                    <a href="{{ url_for('monitoring', tab='frozen') }}#monitoring-{{ monitoring.rolled_from_id }}" style="color: var(--text-secondary); text-decoration: none;">← из {{ monitoring.rolled_from.name if monitoring.rolled_from else '' }}</a>
                                     {% endif %}
                                 </div>
 
@@ -1213,6 +1244,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                 </svg>
                             </button>
                             <div class="kebab-dropdown" id="monitoring-kebab-{{ monitoring.id }}">
+                                {% if not monitoring.frozen %}
                                 <button onclick="openMonitoringModal({{ monitoring.id }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
                                     <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -1227,12 +1259,28 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     Adriver .xlsx
                                 </button>
                                 <div class="kebab-divider"></div>
+                                {% else %}
+                                <button onclick="openMonitoringModal({{ monitoring.id }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                    Просмотреть
+                                </button>
+                                <div class="kebab-divider"></div>
+                                {% endif %}
                                 <a href="{{ url_for('copy_monitoring', monitoring_id=monitoring.id) }}" class="kebab-item" onclick="return confirm('Создать копию мониторинга?')" style="width: 100%; text-align: left; text-decoration: none; color: inherit; display: flex; align-items: center; gap: 12px;">
                                     <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                                     </svg>
                                     Скопировать
                                 </a>
+                                {% if not monitoring.archived %}
+                                <div class="kebab-divider"></div>
+                                <button onclick="openFinishMonthModal({{ monitoring.id }}, '{{ monitoring.name }}', {{ 'true' if monitoring.report_config_id else 'false' }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    Завершить месяц
+                                </button>
+                                {% endif %}
                                 <div class="kebab-divider"></div>
                                 {% if show_archived %}
                                 <form action="{{ url_for('unarchive_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;">
@@ -1969,6 +2017,70 @@ function refreshAllMonitorings() {
                 <button type="submit" class="btn btn-primary">Загрузить</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Finish Month Modal -->
+<div id="finishMonthModal" class="modal" style="display: none;" onclick="event.target === this && closeFinishMonthModal()">
+    <div class="modal-overlay"></div>
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2>Завершить месяц</h2>
+            <button onclick="closeFinishMonthModal()" class="modal-close">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <div class="form-group">
+                <label style="font-size: 14px; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px; display: block;">Мониторинг</label>
+                <div id="finishMonthMonitoringName" style="padding: 10px 12px; background: var(--bg-light); border-radius: 8px; font-size: 14px; color: var(--text-primary); font-weight: 500;"></div>
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;">
+                <label for="finishFreezeAsOf" style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px; display: block;">
+                    Дата отсечки <span class="required">*</span>
+                </label>
+                <input type="date" id="finishFreezeAsOf" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                    Данные будут зафиксированы по эту дату включительно - по ней же делается финальное обновление SAPE/верификаторов.
+                </div>
+            </div>
+
+            <div style="margin-top: 16px; padding: 10px 12px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; font-size: 12px; color: #92400e;" id="finishAdriverReminder">
+                Если верификатор — Adriver (ручная выгрузка), убедитесь, что финальный Excel уже загружен до нажатия кнопки.
+            </div>
+
+            <div class="form-group" style="margin-top: 16px; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="finishRollover" onchange="toggleFinishRolloverFields()" style="width: 16px; height: 16px;">
+                <label for="finishRollover" style="font-size: 14px; color: var(--text-primary); cursor: pointer;">Кампания продолжается</label>
+            </div>
+
+            <div id="finishRolloverFields" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-light); border-radius: 8px;">
+                <div style="display: flex; gap: 12px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="finishNewDateFrom" style="font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; display: block;">Новый период с</label>
+                        <input type="date" id="finishNewDateFrom" style="width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px;">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label for="finishNewDateTo" style="font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; display: block;">по</label>
+                        <input type="date" id="finishNewDateTo" style="width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px;">
+                    </div>
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
+                    План, кабинет, кампании и ссылки верификаторов будут скопированы на новую карточку; факт начнётся с нуля.
+                </div>
+            </div>
+
+            <div id="finishReportWarning" style="display: none; margin-top: 16px; padding: 10px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12px; color: #1e40af;">
+                К этому мониторингу привязан отчёт — он тоже будет завершён (и продлён, если кампания продолжается). Если отчёт используется ещё другими активными мониторингами, он останется активным.
+            </div>
+
+            <div id="finishMonthError" style="display: none; margin-top: 12px; padding: 10px 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; font-size: 13px; color: #991b1b;"></div>
+        </div>
+
+        <div class="modal-footer">
+            <button type="button" onclick="closeFinishMonthModal()" class="btn btn-secondary">Отмена</button>
+            <button type="button" onclick="submitFinishMonth()" class="btn btn-primary" id="finishMonthSubmitBtn">Завершить</button>
+        </div>
     </div>
 </div>
 
@@ -2779,6 +2891,96 @@ function closeUploadModal() {
     const modal = document.getElementById('uploadModal');
     modal.style.display = 'none';
     document.body.style.overflow = '';
+}
+
+let finishMonthMonitoringId = null;
+
+function _endOfCurrentMonth() {
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return d.toISOString().slice(0, 10);
+}
+
+function openFinishMonthModal(monitoringId, monitoringName, hasReport) {
+    finishMonthMonitoringId = monitoringId;
+    document.getElementById('finishMonthMonitoringName').textContent = monitoringName;
+    document.getElementById('finishFreezeAsOf').value = _endOfCurrentMonth();
+    document.getElementById('finishRollover').checked = false;
+    document.getElementById('finishNewDateFrom').value = '';
+    document.getElementById('finishNewDateTo').value = '';
+    document.getElementById('finishRolloverFields').style.display = 'none';
+    document.getElementById('finishReportWarning').style.display = hasReport ? 'block' : 'none';
+    document.getElementById('finishMonthError').style.display = 'none';
+    document.getElementById('finishMonthSubmitBtn').disabled = false;
+    document.getElementById('finishMonthSubmitBtn').textContent = 'Завершить';
+
+    document.getElementById('finishMonthModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeFinishMonthModal() {
+    document.getElementById('finishMonthModal').style.display = 'none';
+    document.body.style.overflow = '';
+    finishMonthMonitoringId = null;
+}
+
+function toggleFinishRolloverFields() {
+    const on = document.getElementById('finishRollover').checked;
+    document.getElementById('finishRolloverFields').style.display = on ? 'block' : 'none';
+}
+
+function submitFinishMonth() {
+    if (!finishMonthMonitoringId) return;
+    const errorBox = document.getElementById('finishMonthError');
+    errorBox.style.display = 'none';
+
+    const freezeAsOf = document.getElementById('finishFreezeAsOf').value;
+    if (!freezeAsOf) {
+        errorBox.textContent = 'Укажите дату отсечки';
+        errorBox.style.display = 'block';
+        return;
+    }
+    const rollover = document.getElementById('finishRollover').checked;
+    const payload = { freeze_as_of: freezeAsOf, rollover };
+    if (rollover) {
+        const nf = document.getElementById('finishNewDateFrom').value;
+        const nt = document.getElementById('finishNewDateTo').value;
+        if (nf) payload.new_date_from = nf;
+        if (nt) payload.new_date_to = nt;
+    }
+
+    const btn = document.getElementById('finishMonthSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Завершаю...';
+
+    fetch(`/monitoring/${finishMonthMonitoringId}/finish-month`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                let msg = `Месяц завершён (${data.frozen_period}).`;
+                if (data.report_frozen) msg += ' Связанный отчёт тоже завершён.';
+                if (data.report_kept_active) msg += ` Связанный отчёт остался активным (ещё ${data.other_active_monitorings} активных мониторингов на нём).`;
+                if (data.new_monitoring_id) msg += ' Создана карточка-продолжение.';
+                alert(msg);
+                window.location.href = "{{ url_for('monitoring', tab='frozen') }}";
+            } else {
+                errorBox.textContent = data.error || 'Неизвестная ошибка';
+                errorBox.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'Завершить';
+            }
+        })
+        .catch(err => {
+            console.error('finish-month error:', err);
+            errorBox.textContent = 'Ошибка при обращении к серверу';
+            errorBox.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Завершить';
+        });
 }
 
 // Handle upload form submission

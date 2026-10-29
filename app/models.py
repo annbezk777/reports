@@ -130,8 +130,19 @@ class ReportConfig(db.Model):
     active = db.Column(db.Boolean, default=True)
     archived = db.Column(db.Boolean, default=False)  # Archived reports hidden from main view
 
+    # "Завершить месяц" cascade from the linked MonitoringCampaign - same
+    # meaning/fields as MonitoringCampaign.frozen (see there for why this
+    # is distinct from plain `archived`).
+    frozen = db.Column(db.Boolean, default=False)
+    frozen_at = db.Column(db.DateTime, nullable=True)
+    frozen_period = db.Column(db.String(7), nullable=True)
+    rolled_from_id = db.Column(db.Integer, db.ForeignKey('report_configs.id'), nullable=True)
+    rolled_to_id = db.Column(db.Integer, db.ForeignKey('report_configs.id'), nullable=True)
+
     # Relationships
     logs = db.relationship('ReportLog', backref='report_config', lazy=True, cascade='all, delete-orphan')
+    rolled_from = db.relationship('ReportConfig', remote_side=[id], foreign_keys=[rolled_from_id], post_update=True)
+    rolled_to = db.relationship('ReportConfig', remote_side=[id], foreign_keys=[rolled_to_id], post_update=True)
 
     def __repr__(self):
         return f'<ReportConfig for Campaign ID {self.campaign_id}>'
@@ -297,9 +308,31 @@ class MonitoringCampaign(db.Model):
     last_sync = db.Column(db.DateTime, nullable=True)  # Последнее обновление данных
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # "Завершить месяц" - a static, read-only historical snapshot. Distinct
+    # from plain `archived` (which could mean anything - campaign ended,
+    # removed, a draft): frozen=True is ONLY ever set by the finish-month
+    # flow, and blocks all further edits (see _reject_if_frozen). Always
+    # implies archived=True too, so it's automatically excluded from every
+    # scheduled refresh job (they already filter archived==False).
+    frozen = db.Column(db.Boolean, default=False)
+    frozen_at = db.Column(db.DateTime, nullable=True)  # when the button was actually clicked
+    # The month this snapshot represents (YYYY-MM), derived from the
+    # explicit freeze_as_of cutoff chosen at finish-month time - NOT from
+    # frozen_at, which can lag into the next calendar month if closed late
+    # and would otherwise misfile the snapshot under the wrong month.
+    frozen_period = db.Column(db.String(7), nullable=True)
+
+    # Month-to-month continuation chain, set only when "Завершить месяц"
+    # is used with rollover - lets a frozen card link forward to the live
+    # card that continues it, and vice versa.
+    rolled_from_id = db.Column(db.Integer, db.ForeignKey('monitoring_campaigns.id'), nullable=True)
+    rolled_to_id = db.Column(db.Integer, db.ForeignKey('monitoring_campaigns.id'), nullable=True)
+
     # Relationships
     account = db.relationship('SapeAccount', backref='monitoring_campaigns', lazy=True)
     report_config = db.relationship('ReportConfig', backref='monitoring_campaigns', lazy=True)
+    rolled_from = db.relationship('MonitoringCampaign', remote_side=[id], foreign_keys=[rolled_from_id], post_update=True)
+    rolled_to = db.relationship('MonitoringCampaign', remote_side=[id], foreign_keys=[rolled_to_id], post_update=True)
 
     def __repr__(self):
         return f'<MonitoringCampaign {self.name}>'

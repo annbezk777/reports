@@ -247,6 +247,20 @@ def block_account_manager(f):
     return decorated_function
 
 
+def _reject_if_frozen(obj):
+    """A monitoring/report that "Завершить месяц" froze (see
+    finish_monitoring_month) is meant to be a genuinely static historical
+    record, not just hidden from the active list like plain `archived` -
+    every write path that could still mutate one needs this same check,
+    not just the UI hiding the buttons (a direct POST would otherwise
+    still get through). Returns a 403 JSON response to short-circuit the
+    caller with, or None if the object isn't frozen and the caller should
+    proceed normally."""
+    if getattr(obj, 'frozen', False):
+        return jsonify({'success': False, 'error': 'Карточка зафиксирована (месяц завершён), редактирование недоступно'}), 403
+    return None
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Login page"""
@@ -1685,18 +1699,45 @@ def monitoring():
     """List of monitoring campaigns"""
     # Get manager filter from URL or session
     manager_filter = request.args.get('manager', None)
-    # Account-manager is view-only and doesn't get the archive view;
-    # Трафик-менеджер still can (can restore from it) even though only the
-    # admin can delete - those are two different permissions (see task #17).
-    show_archived = (
-        request.args.get('show_archived', 'false').lower() == 'true'
-        and session.get('user_role') != ROLE_ACCOUNT_MANAGER
-    )
+    # Account-manager is view-only and doesn't get the archive/frozen views;
+    # Трафик-менеджер still can (can restore from archive) even though only
+    # the admin can delete - those are two different permissions (see #17).
+    is_account_manager = session.get('user_role') == ROLE_ACCOUNT_MANAGER
 
+    # tab replaces the old binary show_archived=true/false - "Завершённые"
+    # (frozen=True, a static historical snapshot from "Завершить месяц")
+    # is a NEW third state, split out from the old catch-all "Архив" so a
+    # locked historical record isn't mixed in with plain ended/removed
+    # campaigns. Old links with just ?show_archived=true still work,
+    # mapped onto the old "archive" bucket (which keeps showing exactly
+    # what it always did - frozen rows are a new flag that didn't exist
+    # on any pre-existing archived row, so nothing moves out from under
+    # anyone by this change).
+    tab = request.args.get('tab')
+    if not tab:
+        tab = 'archive' if request.args.get('show_archived', 'false').lower() == 'true' else 'active'
+    if tab not in ('active', 'frozen', 'archive') or is_account_manager:
+        tab = 'active'
+    show_archived = tab != 'active'  # kept for template compat (meta row, etc.)
+
+    month_filter = request.args.get('month', None) if tab == 'frozen' else None
     account_manager_filter = request.args.get('account_manager', None)
 
     # Build query
-    query = MonitoringCampaign.query.filter(MonitoringCampaign.archived == show_archived)
+    if tab == 'active':
+        query = MonitoringCampaign.query.filter(MonitoringCampaign.archived == False)
+    elif tab == 'frozen':
+        query = MonitoringCampaign.query.filter(
+            MonitoringCampaign.archived == True,
+            MonitoringCampaign.frozen == True
+        )
+        if month_filter:
+            query = query.filter(MonitoringCampaign.frozen_period == month_filter)
+    else:  # archive
+        query = MonitoringCampaign.query.filter(
+            MonitoringCampaign.archived == True,
+            db.or_(MonitoringCampaign.frozen == False, MonitoringCampaign.frozen.is_(None))
+        )
 
     # Apply manager filter
     if manager_filter:
@@ -1717,12 +1758,33 @@ def monitoring():
     # Get all accounts for the form
     accounts = SapeAccount.query.filter_by(active=True).order_by(SapeAccount.name).all()
 
-    # Distinct account managers across ALL monitorings in this archived/active
-    # view so the dropdown always shows every option, not just filtered ones.
+    # Distinct account managers across every monitoring in this tab (not
+    # narrowed by manager/account-manager filters), so the dropdown always
+    # shows every option, not just whatever's left after filtering.
+    if tab == 'active':
+        tab_base_query = MonitoringCampaign.query.filter(MonitoringCampaign.archived == False)
+    elif tab == 'frozen':
+        tab_base_query = MonitoringCampaign.query.filter(MonitoringCampaign.archived == True, MonitoringCampaign.frozen == True)
+    else:
+        tab_base_query = MonitoringCampaign.query.filter(
+            MonitoringCampaign.archived == True,
+            db.or_(MonitoringCampaign.frozen == False, MonitoringCampaign.frozen.is_(None))
+        )
     all_account_managers = sorted(set(
-        m.account_manager for m in MonitoringCampaign.query.filter_by(archived=show_archived).all()
-        if m.account_manager
+        m.account_manager for m in tab_base_query.all() if m.account_manager
     ))
+
+    # Months available on the "Завершённые" tab's filter dropdown.
+    frozen_months = []
+    if tab == 'frozen':
+        frozen_months = sorted({
+            m.frozen_period for m in
+            MonitoringCampaign.query.filter(
+                MonitoringCampaign.archived == True,
+                MonitoringCampaign.frozen == True,
+                MonitoringCampaign.frozen_period.isnot(None)
+            ).all()
+        }, reverse=True)
 
     return render_template('monitoring.html',
                          monitorings=all_monitorings,
@@ -1730,6 +1792,9 @@ def monitoring():
                          account_manager_filter=account_manager_filter,
                          all_account_managers=all_account_managers,
                          show_archived=show_archived,
+                         tab=tab,
+                         month_filter=month_filter,
+                         frozen_months=frozen_months,
                          accounts=accounts,
                          admin_email=ADMIN_EMAIL)
 
@@ -1760,9 +1825,22 @@ def archive_monitoring(monitoring_id):
 def unarchive_monitoring(monitoring_id):
     """Unarchive monitoring campaign"""
     monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    if monitoring.frozen and session.get('user_email') != ADMIN_EMAIL:
+        # A frozen (finished-month) card is a locked historical record -
+        # restoring it back to editable is intentionally a heavier action
+        # than plain unarchive, so only the admin can do it (same bar as
+        # permanent delete).
+        flash('Восстановить зафиксированную карточку может только администратор', 'error')
+        return redirect(url_for('monitoring'))
     monitoring.archived = False
+    was_frozen = monitoring.frozen
+    monitoring.frozen = False
+    monitoring.frozen_at = None
+    # rolled_from_id/rolled_to_id stay as-is - that link is already a fact
+    # of history (this card really was continued/preceded by that one),
+    # restoring editability doesn't undo it.
     db.session.commit()
-    flash('Мониторинг восстановлен из архива', 'success')
+    flash('Мониторинг восстановлен из зафиксированного месяца' if was_frozen else 'Мониторинг восстановлен из архива', 'success')
     return redirect(url_for('monitoring'))
 
 
@@ -1825,6 +1903,227 @@ def copy_monitoring(monitoring_id):
 
     flash(f'Создана копия мониторинга "{original.name}".', 'success')
     return redirect(url_for('monitoring'))
+
+
+@app.route('/monitoring/<int:monitoring_id>/finish-month', methods=['POST'])
+@login_required
+@block_account_manager
+def finish_monitoring_month(monitoring_id):
+    """"Завершить месяц": do a final data refresh, freeze the card into a
+    read-only historical snapshot (_reject_if_frozen then blocks any
+    further edit/refresh), and - if the campaign continues - clone a live
+    card for the next period with the plan carried over. Cascades to the
+    linked ReportConfig the same way, but only when this is the LAST
+    still-active monitoring pointing at it (a report can in principle be
+    shared by several monitorings - see plan doc) so a shared report isn't
+    cut off while a sibling campaign is still running on it.
+
+    freeze_as_of is an explicit cutoff, not monitoring.date_to - ~16% of
+    active monitorings span more than one calendar month (flight dates
+    like 16.10-16.11), so "the month" has to be told apart from "the
+    whole remaining flight"."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+    if monitoring.frozen:
+        return jsonify({'success': False, 'error': 'Карточка уже завершена'}), 400
+
+    data = request.get_json(silent=True) or {}
+
+    freeze_as_of_str = (data.get('freeze_as_of') or '').strip()
+    if not freeze_as_of_str:
+        return jsonify({'success': False, 'error': 'Не указана дата отсечки'}), 400
+    try:
+        freeze_as_of = datetime.strptime(freeze_as_of_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Некорректная дата отсечки'}), 400
+
+    yesterday = (datetime.now() - timedelta(days=1)).date()
+    if freeze_as_of > yesterday:
+        return jsonify({'success': False, 'error': 'Дата отсечки не может быть позже вчерашнего дня — иначе финальное обновление не захватит реальные цифры'}), 400
+    if freeze_as_of < monitoring.date_from:
+        return jsonify({'success': False, 'error': 'Дата отсечки раньше начала периода мониторинга'}), 400
+
+    rollover = bool(data.get('rollover'))
+    new_date_from = None
+    new_date_to = None
+    original_date_to = monitoring.date_to  # captured BEFORE we rewrite date_to below
+    if rollover:
+        new_date_from_str = (data.get('new_date_from') or '').strip()
+        new_date_to_str = (data.get('new_date_to') or '').strip()
+        try:
+            new_date_from = (datetime.strptime(new_date_from_str, '%Y-%m-%d').date()
+                              if new_date_from_str else freeze_as_of + timedelta(days=1))
+            new_date_to = (datetime.strptime(new_date_to_str, '%Y-%m-%d').date()
+                            if new_date_to_str else original_date_to)
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Некорректные даты нового периода'}), 400
+        if new_date_from > new_date_to:
+            return jsonify({'success': False, 'error': 'Дата начала нового периода позже даты окончания'}), 400
+
+    # Rewrite date_to to the cutoff BEFORE the final refresh -
+    # refresh_monitoring_data computes date_to = min(yesterday,
+    # monitoring.date_to) itself, so this is enough to scope the refresh
+    # without forking that function.
+    monitoring.date_to = freeze_as_of
+    db.session.commit()
+
+    try:
+        refresh_monitoring_data(monitoring_id)
+    except Exception as e:
+        logger.error(f"⚠️ Final refresh before freezing monitoring {monitoring_id} failed: {e}")
+        # Don't block closing the month over one flaky API call - freeze
+        # whatever numbers are already on the record.
+
+    monitoring.archived = True
+    monitoring.frozen = True
+    monitoring.frozen_at = datetime.utcnow()
+    monitoring.frozen_period = freeze_as_of.strftime('%Y-%m')
+
+    report = monitoring.report_config
+    report_freezing = False
+    report_kept_active = False
+    other_active_count = 0
+    if report and not report.frozen:
+        other_active_count = MonitoringCampaign.query.filter(
+            MonitoringCampaign.report_config_id == report.id,
+            MonitoringCampaign.id != monitoring.id,
+            MonitoringCampaign.archived == False
+        ).count()
+        if other_active_count == 0:
+            report.archived = True
+            report.schedule_enabled = False
+            report.frozen = True
+            report.frozen_at = datetime.utcnow()
+            report.frozen_period = monitoring.frozen_period
+            report_freezing = True
+        else:
+            report_kept_active = True
+
+    new_monitoring_id = None
+    new_report_id = None
+    if rollover:
+        new_monitoring = MonitoringCampaign(
+            name=monitoring.name,
+            account_id=monitoring.account_id,
+            campaign_ids=monitoring.campaign_ids,
+            date_from=new_date_from,
+            date_to=new_date_to,
+            plan_impressions=monitoring.plan_impressions,
+            plan_clicks=monitoring.plan_clicks,
+            plan_visits=monitoring.plan_visits,
+            plan_conversions=monitoring.plan_conversions,
+            plan_bounce_rate=monitoring.plan_bounce_rate,
+            plan_page_depth=monitoring.plan_page_depth,
+            plan_robotness=monitoring.plan_robotness,
+            plan_time_on_site=monitoring.plan_time_on_site,
+            plan_pi=monitoring.plan_pi,
+            plan_ivt_impressions=monitoring.plan_ivt_impressions,
+            plan_givt_impressions=monitoring.plan_givt_impressions,
+            plan_sivt=monitoring.plan_sivt,
+            plan_givt_clicks=monitoring.plan_givt_clicks,
+            plan_vtr=monitoring.plan_vtr,
+            metrika_counter_id=monitoring.metrika_counter_id,
+            metrika_goal_id=monitoring.metrika_goal_id,
+            utm_source=monitoring.utm_source,
+            utm_campaign=monitoring.utm_campaign,
+            manager=monitoring.manager,
+            account_manager=monitoring.account_manager,
+            verifier_badge=monitoring.verifier_badge,
+            targetads_report_url=monitoring.targetads_report_url,
+            google_sheet_url=monitoring.google_sheet_url,
+            asana_task_url=monitoring.asana_task_url,
+            asana_kpi_comment=monitoring.asana_kpi_comment,
+            active=True,
+            archived=False,
+            frozen=False,
+        )
+        db.session.add(new_monitoring)
+        db.session.flush()  # assign new_monitoring.id before using it below
+
+        monitoring.rolled_to_id = new_monitoring.id
+        new_monitoring.rolled_from_id = monitoring.id
+
+        # Carry over Weborama/Adriver permalinks so the trafficker doesn't
+        # have to re-enter them every month - but reset anything that was
+        # actually FETCHED (numbers, pixel-activation override), since
+        # those belong to the OLD period, not the new one.
+        for link in monitoring.verifier_links:
+            new_link = VerifierLink(
+                monitoring_id=new_monitoring.id,
+                verifier_type=link.verifier_type,
+                label=link.label,
+                permalink_url=link.permalink_url,
+                compare_date_from=None,
+            )
+            db.session.add(new_link)
+            db.session.flush()
+            for mapping in link.mappings:
+                db.session.add(VerifierLinkMapping(
+                    verifier_link_id=new_link.id,
+                    sape_campaign_id=mapping.sape_campaign_id,
+                    sape_campaign_ids=mapping.sape_campaign_ids,
+                    insertion_name=mapping.insertion_name,
+                ))
+
+        if report:
+            if report_freezing:
+                # The report closed along with this monitoring - clone it
+                # too (mirrors copy_report's own field list/reset choices:
+                # schedule stays off and the Google Sheet is cleared, same
+                # as a manual "Копировать").
+                new_report = ReportConfig(
+                    campaign_id=report.campaign_id,
+                    campaign_ids=report.campaign_ids,
+                    campaign_mode=report.campaign_mode,
+                    google_sheet_url='',
+                    worksheet_name=None,
+                    data_start_row=None,
+                    date_column=None,
+                    impressions_column=None,
+                    reach_column=None,
+                    clicks_column=None,
+                    ctr_column=None,
+                    spent_column=None,
+                    completes_column=None,
+                    campaign_settings=report.campaign_settings,
+                    campaign_frequencies=report.campaign_frequencies,
+                    frequency_variance=report.frequency_variance,
+                    total_reach_coefficient=report.total_reach_coefficient,
+                    schedule_enabled=False,
+                    schedule_days=report.schedule_days,
+                    schedule_time=report.schedule_time,
+                    manager=report.manager,
+                    account_manager=report.account_manager,
+                    name=report.name or (report.campaign.name if report.campaign else None),
+                    active=True,
+                    archived=False,
+                    frozen=False,
+                )
+                db.session.add(new_report)
+                db.session.flush()
+                report.rolled_to_id = new_report.id
+                new_report.rolled_from_id = report.id
+                new_monitoring.report_config_id = new_report.id
+                new_report_id = new_report.id
+            else:
+                # Report is shared with another still-active monitoring
+                # and stays live - the continuing card just keeps pointing
+                # at the SAME report, nothing to clone.
+                new_monitoring.report_config_id = report.id
+
+        new_monitoring_id = new_monitoring.id
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'frozen_period': monitoring.frozen_period,
+        'report_frozen': report_freezing,
+        'report_kept_active': report_kept_active,
+        'other_active_monitorings': other_active_count,
+        'new_monitoring_id': new_monitoring_id,
+        'new_report_id': new_report_id,
+    })
 
 
 @app.route('/monitoring/<int:monitoring_id>/delete', methods=['POST'])
@@ -2163,6 +2462,9 @@ def edit_monitoring(monitoring_id):
     """Update monitoring campaign"""
     try:
         monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+        if monitoring.frozen:
+            flash('Карточка зафиксирована (месяц завершён), редактирование недоступно', 'error')
+            return redirect(url_for('monitoring'))
 
         # Update fields
         monitoring.name = request.form.get('name')
@@ -2967,6 +3269,9 @@ def refresh_monitoring_data(monitoring_id):
     """Refresh actual data for monitoring from SAPE API"""
     try:
         monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+        rejection = _reject_if_frozen(monitoring)
+        if rejection:
+            return rejection
 
         # Get campaigns
         campaigns = monitoring.get_campaigns()
@@ -3266,6 +3571,9 @@ def upload_adriver_excel(monitoring_id):
     try:
         # Get monitoring
         monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+        rejection = _reject_if_frozen(monitoring)
+        if rejection:
+            return rejection
 
         # Check if file was uploaded
         if 'excel_file' not in request.files:
@@ -3420,7 +3728,10 @@ def download_postclick_file(upload_id):
 @login_required
 @block_account_manager
 def add_verifier_link(monitoring_id):
-    MonitoringCampaign.query.get_or_404(monitoring_id)
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    rejection = _reject_if_frozen(monitoring)
+    if rejection:
+        return rejection
     data = request.get_json(silent=True) or {}
 
     verifier_type = data.get('verifier_type')
@@ -3464,6 +3775,9 @@ def add_verifier_link(monitoring_id):
 @block_account_manager
 def update_verifier_link(link_id):
     link = VerifierLink.query.get_or_404(link_id)
+    rejection = _reject_if_frozen(link.monitoring)
+    if rejection:
+        return rejection
     data = request.get_json(silent=True) or {}
 
     if 'label' in data:
@@ -3487,6 +3801,9 @@ def update_verifier_link(link_id):
 @block_account_manager
 def delete_verifier_link(link_id):
     link = VerifierLink.query.get_or_404(link_id)
+    rejection = _reject_if_frozen(link.monitoring)
+    if rejection:
+        return rejection
     db.session.delete(link)
     db.session.commit()
     return jsonify({'success': True})
@@ -3496,7 +3813,10 @@ def delete_verifier_link(link_id):
 @login_required
 @block_account_manager
 def add_verifier_mapping(link_id):
-    VerifierLink.query.get_or_404(link_id)
+    link = VerifierLink.query.get_or_404(link_id)
+    rejection = _reject_if_frozen(link.monitoring)
+    if rejection:
+        return rejection
     mapping = VerifierLinkMapping(verifier_link_id=link_id)
     db.session.add(mapping)
     db.session.commit()
@@ -3510,6 +3830,9 @@ def add_verifier_mapping(link_id):
 @block_account_manager
 def update_verifier_mapping(mapping_id):
     mapping = VerifierLinkMapping.query.get_or_404(mapping_id)
+    rejection = _reject_if_frozen(mapping.verifier_link.monitoring)
+    if rejection:
+        return rejection
     data = request.get_json(silent=True) or {}
 
     if 'sape_campaign_ids' in data:
@@ -3539,6 +3862,9 @@ def update_verifier_mapping(mapping_id):
 @block_account_manager
 def delete_verifier_mapping(mapping_id):
     mapping = VerifierLinkMapping.query.get_or_404(mapping_id)
+    rejection = _reject_if_frozen(mapping.verifier_link.monitoring)
+    if rejection:
+        return rejection
     db.session.delete(mapping)
     db.session.commit()
     return jsonify({'success': True})
@@ -3553,6 +3879,9 @@ def upload_verifier_link_excel(link_id):
     IVT) plus the IVT/GIVT/SIVT breakdown already parsed by
     AdriverExcelParser but previously discarded."""
     link = VerifierLink.query.get_or_404(link_id)
+    rejection = _reject_if_frozen(link.monitoring)
+    if rejection:
+        return rejection
 
     if link.verifier_type != 'adriver':
         return jsonify({'success': False, 'error': 'Excel-загрузка доступна только для Adriver'}), 400
@@ -3736,6 +4065,9 @@ def _fetch_and_apply_weborama_link(link):
 @block_account_manager
 def fetch_weborama_link(link_id):
     link = VerifierLink.query.get_or_404(link_id)
+    rejection = _reject_if_frozen(link.monitoring)
+    if rejection:
+        return rejection
 
     if link.verifier_type != 'weborama':
         return jsonify({'success': False, 'error': 'Доступно только для Weborama'}), 400
@@ -4252,6 +4584,10 @@ def execute_run_report(report_id):
         with app.app_context():
             try:
                 report = ReportConfig.query.get_or_404(report_id)
+
+                if report.frozen:
+                    yield f"data: {json.dumps({'type': 'complete', 'success': False, 'error': 'Отчёт зафиксирован (месяц завершён), обновление недоступно'})}\n\n"
+                    return
 
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Подготовка к формированию отчета...'})}\n\n"
 
@@ -5314,6 +5650,10 @@ def edit_report(report_id):
     report = ReportConfig.query.get_or_404(report_id)
 
     if request.method == 'POST':
+        if report.frozen:
+            flash('Отчёт зафиксирован (месяц завершён), редактирование недоступно', 'error')
+            return redirect(url_for('reports'))
+
         # Get form data
         report_name = request.form.get('report_name')
         manager = request.form.get('manager', '').strip() or None
