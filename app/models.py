@@ -761,7 +761,7 @@ class AdriverFileUpload(db.Model):
     clicks = db.Column(db.Integer, nullable=True)
     data_as_of_date = db.Column(db.Date, nullable=True)
 
-    monitoring = db.relationship('MonitoringCampaign', backref='adriver_file_uploads')
+    monitoring = db.relationship('MonitoringCampaign', backref=db.backref('adriver_file_uploads', cascade='all, delete-orphan'))
 
     def __repr__(self):
         return f'<AdriverFileUpload {self.filename} for monitoring {self.monitoring_id}>'
@@ -793,7 +793,7 @@ class AdriverDailyStat(db.Model):
     sivt_impressions_percent = db.Column(db.Float, nullable=True)
     givt_clicks_percent = db.Column(db.Float, nullable=True)
 
-    monitoring = db.relationship('MonitoringCampaign', backref='adriver_daily_stats')
+    monitoring = db.relationship('MonitoringCampaign', backref=db.backref('adriver_daily_stats', cascade='all, delete-orphan'))
 
     __table_args__ = (
         db.UniqueConstraint('monitoring_id', 'date', name='uq_adriver_daily_monitoring_date'),
@@ -860,7 +860,7 @@ class MonitoringWeeklyStat(db.Model):
 
     computed_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    monitoring = db.relationship('MonitoringCampaign', backref='weekly_stats')
+    monitoring = db.relationship('MonitoringCampaign', backref=db.backref('weekly_stats', cascade='all, delete-orphan'))
 
     __table_args__ = (
         db.UniqueConstraint('monitoring_id', 'week_start', name='uq_weekly_stat_monitoring_week'),
