@@ -3131,13 +3131,27 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
                 wcm_partial = True
                 wcm_coverage_start = max(wcm_coverage_start, link_start) if wcm_coverage_start else link_start
             try:
+                week_end_for_fetch = q_end
                 try:
-                    results = fetch_insertions(link.permalink_url, link_start, q_end)
+                    results = fetch_insertions(link.permalink_url, link_start, week_end_for_fetch)
                 except WeboramaFetchError as e:
-                    if 'недоступен для выбора' in str(e) and q_end > link_start:
-                        results = fetch_insertions(link.permalink_url, link_start, q_end - timedelta(days=1))
-                    else:
+                    if 'недоступен для выбора' not in str(e):
                         raise
+                    results = None
+                    last_error = e
+                    for _ in range(4):
+                        if week_end_for_fetch <= link_start:
+                            break
+                        week_end_for_fetch = week_end_for_fetch - timedelta(days=1)
+                        try:
+                            results = fetch_insertions(link.permalink_url, link_start, week_end_for_fetch)
+                            break
+                        except WeboramaFetchError as retry_e:
+                            if 'недоступен для выбора' not in str(retry_e):
+                                raise
+                            last_error = retry_e
+                    if results is None:
+                        raise last_error
                 # A permalink's dashboard can list several insertions at
                 # once (e.g. other creatives sharing the same account
                 # scope) - summing every row blindly would double-count
@@ -4037,19 +4051,32 @@ def _fetch_and_apply_weborama_link(link):
     try:
         results = fetch_insertions(link.permalink_url, date_from, date_to)
     except WeboramaFetchError as e:
-        # Weborama's own calendar can lag behind "yesterday" by a day -
-        # it disables any day it hasn't finished processing yet rather
-        # than returning partial data, so a plain "date_to = yesterday"
-        # request can fail every morning until it catches up. Step the
-        # end date back one day and retry once rather than leaving
-        # verifier_impressions stuck on whatever the last successful
-        # run happened to be, comparing stale data against a fresh SAPE
-        # fact that keeps moving forward.
-        if 'недоступен для выбора' in str(e) and date_to > date_from:
-            date_to = date_to - timedelta(days=1)
-            results = fetch_insertions(link.permalink_url, date_from, date_to)
-        else:
+        # Weborama's own calendar can lag behind "yesterday" by MORE than
+        # one day (seen 2 days running in practice) - it disables any day
+        # it hasn't finished processing yet rather than returning partial
+        # data, so a plain "date_to = yesterday" request can fail for
+        # several mornings straight until it catches up. Step the end
+        # date back up to 4 days rather than giving up after a single
+        # retry and leaving verifier_impressions stuck on whatever the
+        # last successful run happened to be, comparing stale data
+        # against a fresh SAPE fact that keeps moving forward.
+        if 'недоступен для выбора' not in str(e):
             raise
+        last_error = e
+        results = None
+        for _ in range(4):
+            if date_to <= date_from:
+                break
+            date_to = date_to - timedelta(days=1)
+            try:
+                results = fetch_insertions(link.permalink_url, date_from, date_to)
+                break
+            except WeboramaFetchError as retry_e:
+                if 'недоступен для выбора' not in str(retry_e):
+                    raise
+                last_error = retry_e
+        if results is None:
+            raise last_error
 
     mapping_results = []
     for mapping in link.mappings:
