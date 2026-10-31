@@ -93,7 +93,17 @@ def _fetch_insertions_once(permalink_url, date_from, date_to):
 
             _set_date_range(page, date_from, date_to)
 
-            page.wait_for_timeout(1500)
+            # Same story as the Calendar From wait above - a fixed 1.5s
+            # guess after Apply isn't always enough for the grid to
+            # finish re-rendering (worse during Weborama's own busier
+            # hours, e.g. the scheduled job's 08:30 MSK slot), which was
+            # surfacing as a false "Не нашлась таблица Insertions" even
+            # though the data was there, just not rendered yet. Wait for
+            # the actual rows (up to 15s) instead.
+            try:
+                page.wait_for_selector('.x-grid-data-row', timeout=15000)
+            except Exception:
+                pass  # fall through - _read_grid_rows raises its own clear error if rows are genuinely absent
             return _read_grid_rows(page)
         finally:
             browser.close()
