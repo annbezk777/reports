@@ -2985,13 +2985,30 @@ def _refresh_weekly_adriver_stats(monitoring_id, daily_rows):
                 setattr(stat, field, round(sum(values) / len(values), 2))
 
 
-def get_last_completed_week(today):
-    """(monday, sunday) of the week before today's own week - e.g. if
-    today is Monday, that's literally last week (yesterday was Sunday)."""
+def get_last_completed_week_chunks(today):
+    """Mon-Sun week before today's own week - e.g. if today is Monday,
+    that's literally last week (yesterday was Sunday) - split into
+    per-month chunks if it straddles a month boundary.
+
+    A month's first "week" runs from the 1st to the nearest Sunday, and
+    its last "week" runs from that week's Monday to the month's last
+    day - neither has to be a full Mon-Sun span. So a calendar week that
+    crosses the seam (e.g. Mon 26.10-Sun 01.11) is reported as TWO
+    chunks: [26.10-31.10] closing out October, [01.11-01.11] opening
+    November - never as one week attributed to a single month.
+
+    Returns a list of (chunk_start, chunk_end) date pairs - almost
+    always just one, two only when the week straddles a month boundary."""
+    import calendar
     this_monday = today - timedelta(days=today.weekday())
     last_monday = this_monday - timedelta(days=7)
     last_sunday = this_monday - timedelta(days=1)
-    return last_monday, last_sunday
+    if (last_monday.year, last_monday.month) == (last_sunday.year, last_sunday.month):
+        return [(last_monday, last_sunday)]
+    last_day_of_start_month = calendar.monthrange(last_monday.year, last_monday.month)[1]
+    month_end = last_monday.replace(day=last_day_of_start_month)
+    next_month_start = month_end + timedelta(days=1)
+    return [(last_monday, month_end), (next_month_start, last_sunday)]
 
 
 def compute_monitoring_week_stats(monitoring, week_start, week_end):
@@ -3209,44 +3226,59 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
     return stat
 
 
-def scheduled_compute_weekly_monitoring_stats():
-    """Runs weekly (Monday) - computes the week that just ended for every
-    monitoring whose campaign period overlaps it. See
-    compute_monitoring_week_stats for how each source is queried."""
+def scheduled_compute_weekly_monitoring_stats(today=None):
+    """Runs weekly (Monday) - computes the week(s) that just ended for
+    every monitoring whose campaign period overlaps them. Normally one
+    Mon-Sun chunk; two when that week straddles a month boundary (see
+    get_last_completed_week_chunks). See compute_monitoring_week_stats
+    for how each source is queried.
+
+    today: override for backfilling a past week manually (e.g. the
+    first run after this job finally got wired into the scheduler) -
+    pass the Monday *after* the week you want computed, same as if
+    that had been "today" when the job normally fires. Defaults to the
+    real current date."""
     with app.app_context():
         import time as _time
-        today = datetime.now(pytz.timezone('Europe/Moscow')).date()
-        week_start, week_end = get_last_completed_week(today)
+        if today is None:
+            today = datetime.now(pytz.timezone('Europe/Moscow')).date()
+        chunks = get_last_completed_week_chunks(today)
 
-        monitorings = MonitoringCampaign.query.filter(
-            MonitoringCampaign.archived == False,
-            MonitoringCampaign.date_from <= week_end,
-            MonitoringCampaign.date_to >= week_start
-        ).all()
+        total_updated = 0
+        total_failed = 0
+        for week_start, week_end in chunks:
+            monitorings = MonitoringCampaign.query.filter(
+                MonitoringCampaign.archived == False,
+                MonitoringCampaign.date_from <= week_end,
+                MonitoringCampaign.date_to >= week_start
+            ).all()
 
-        logging.info(f"\n{'='*60}")
-        logging.info(f"📅 WEEKLY DYNAMICS COMPUTE - week {week_start}..{week_end}, {len(monitorings)} monitorings")
-        logging.info(f"{'='*60}")
+            logging.info(f"\n{'='*60}")
+            logging.info(f"📅 WEEKLY DYNAMICS COMPUTE - week {week_start}..{week_end}, {len(monitorings)} monitorings")
+            logging.info(f"{'='*60}")
 
-        updated = 0
-        failed = 0
-        for monitoring in monitorings:
-            try:
-                result = compute_monitoring_week_stats(monitoring, week_start, week_end)
-                if result:
-                    updated += 1
-                    logging.info(f"✅ Week stats computed for monitoring {monitoring.id}: {monitoring.name}")
-                else:
+            updated = 0
+            failed = 0
+            for monitoring in monitorings:
+                try:
+                    result = compute_monitoring_week_stats(monitoring, week_start, week_end)
+                    if result:
+                        updated += 1
+                        logging.info(f"✅ Week stats computed for monitoring {monitoring.id}: {monitoring.name}")
+                    else:
+                        failed += 1
+                        logging.warning(f"⚠️ Could not compute week stats for monitoring {monitoring.id}")
+                except Exception as e:
+                    logging.error(f"❌ Week stats failed for monitoring {monitoring.id}: {e}")
+                    import traceback
+                    traceback.print_exc()
                     failed += 1
-                    logging.warning(f"⚠️ Could not compute week stats for monitoring {monitoring.id}")
-            except Exception as e:
-                logging.error(f"❌ Week stats failed for monitoring {monitoring.id}: {e}")
-                import traceback
-                traceback.print_exc()
-                failed += 1
-            _time.sleep(1)
+                _time.sleep(1)
 
-        logging.info(f"\n✅ WEEKLY DYNAMICS COMPUTE COMPLETED: {updated} updated, {failed} failed")
+            total_updated += updated
+            total_failed += failed
+
+        logging.info(f"\n✅ WEEKLY DYNAMICS COMPUTE COMPLETED: {total_updated} updated, {total_failed} failed")
         logging.info(f"{'='*60}\n")
 
 
@@ -6605,6 +6637,21 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
             max_instances=1
         )
 
+        # Add weekly monitoring dynamics (task #22) at Monday 09:35 - after
+        # the daily monitoring refresh (08:00) and Weborama verifier
+        # refresh (08:30) above, so the week being closed out already has
+        # that day's fresh fact instead of yesterday's.
+        scheduler.add_job(
+            func=scheduled_compute_weekly_monitoring_stats,
+            trigger=CronTrigger(day_of_week='mon', hour=9, minute=35),
+            id='weekly_monitoring_dynamics',
+            name='Понедельная динамика мониторинга',
+            replace_existing=True,
+            misfire_grace_time=3600,
+            coalesce=True,
+            max_instances=1
+        )
+
         # Start scheduler
         scheduler.start()
         logging.info("✅ Scheduler started:")
@@ -6612,6 +6659,7 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
         logging.info("   - Hourly report schedule check (every hour at :00)")
         logging.info("   - Daily monitoring refresh at 08:00 Moscow time (every day)")
         logging.info("   - Daily Weborama verifier refresh at 08:30 Moscow time (every day)")
+        logging.info("   - Weekly monitoring dynamics at Monday 09:35 Moscow time")
 
         # Check if we need to sync on startup (if last sync was >24h ago)
         if should_sync_on_startup():
