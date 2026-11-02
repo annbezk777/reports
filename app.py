@@ -1985,7 +1985,10 @@ def finish_monitoring_month(monitoring_id):
     except Exception as e:
         logger.error(f"⚠️ Final refresh before freezing monitoring {monitoring_id} failed: {e}")
         # Don't block closing the month over one flaky API call - freeze
-        # whatever numbers are already on the record.
+        # whatever numbers are already on the record. Roll back first so a
+        # failure mid-refresh (e.g. "database is locked") doesn't leave the
+        # session in a broken state that crashes the very next query below.
+        db.session.rollback()
 
     monitoring.archived = True
     monitoring.frozen = True

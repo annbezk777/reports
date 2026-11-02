@@ -924,7 +924,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     {% endif %}
                                     {% if monitoring.rolled_to_id %}
                                     <span class="meta-dot" style="color: #D1D5DB;">•</span>
-                                    <a href="{{ url_for('monitoring', tab='active') }}#monitoring-{{ monitoring.rolled_to_id }}" style="color: var(--primary-orange); text-decoration: none;">→ Продолжение: {{ monitoring.rolled_to.name if monitoring.rolled_to else '' }}</a>
+                                    <a href="{{ url_for('monitoring', tab='active') }}#monitoring-{{ monitoring.rolled_to_id }}" style="color: var(--primary-orange); text-decoration: none;">→ пролонгация</a>
                                     {% endif %}
                                     {% if monitoring.rolled_from_id %}
                                     <span class="meta-dot" style="color: #D1D5DB;">•</span>
@@ -2995,9 +2995,9 @@ function closeUploadModal() {
 
 let finishMonthMonitoringId = null;
 
-function _endOfCurrentMonth() {
-    const now = new Date();
-    const d = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+function _yesterday() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
     return d.toISOString().slice(0, 10);
 }
 
@@ -3018,7 +3018,7 @@ function setFinishCompleted(value) {
 function openFinishMonthModal(monitoringId, monitoringName, hasReport) {
     finishMonthMonitoringId = monitoringId;
     document.getElementById('finishMonthMonitoringName').textContent = monitoringName;
-    document.getElementById('finishFreezeAsOf').value = _endOfCurrentMonth();
+    document.getElementById('finishFreezeAsOf').value = _yesterday();
     document.getElementById('finishRollover').checked = false;
     document.getElementById('finishNewDateFrom').value = '';
     document.getElementById('finishNewDateTo').value = '';
@@ -3086,7 +3086,7 @@ function submitFinishMonth() {
                 if (data.report_kept_active) msg += ` Связанный отчёт остался активным (ещё ${data.other_active_monitorings} активных мониторингов на нём).`;
                 if (data.new_monitoring_id) msg += ' Создана карточка-продолжение.';
                 alert(msg);
-                window.location.href = "{{ url_for('monitoring', tab='frozen') }}";
+                window.location.href = "{{ url_for('monitoring', tab='active') }}";
             } else {
                 errorBox.textContent = data.error || 'Неизвестная ошибка';
                 errorBox.style.display = 'block';
