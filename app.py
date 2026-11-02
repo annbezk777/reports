@@ -2919,6 +2919,58 @@ def _store_adriver_daily_stats(monitoring_id, upload_id, daily_rows):
         existing.givt_clicks_percent = row.get('givt_clicks_percent')
 
 
+def _recompute_adriver_card_totals(monitoring):
+    """Derive the card-level Adriver total (показы/клики + IVT/GIVT/SIVT%)
+    from the FULL accumulated AdriverDailyStat history for this monitoring,
+    not just the file that was just uploaded.
+
+    Before this, a re-upload that only covers e.g. last week (filling in a
+    gap after an earlier file already covered the rest of the month)
+    overwrote the card's total with that one file's own total - silently
+    dropping the earlier weeks' contribution even though their daily rows
+    were still sitting in AdriverDailyStat untouched. That file-sized total
+    was then compared against a SAPE fact scoped to the FULL campaign
+    period, producing a wildly inflated discrepancy %.
+
+    Returns True if there was any daily data to aggregate (and so the
+    monitoring's fields were updated), False otherwise - callers can fall
+    back to the single upload's own raw total in the latter case (e.g. a
+    malformed file whose daily rows failed to parse but still had a
+    readable "Всего" row)."""
+    daily_rows = AdriverDailyStat.query.filter(
+        AdriverDailyStat.monitoring_id == monitoring.id,
+        AdriverDailyStat.date >= monitoring.date_from,
+        AdriverDailyStat.date <= monitoring.date_to,
+    ).all()
+    if not daily_rows:
+        return False
+
+    monitoring.adriver_impressions = sum(r.impressions or 0 for r in daily_rows)
+    monitoring.adriver_clicks = sum(r.clicks or 0 for r in daily_rows)
+    for field in ('ivt_impressions_percent', 'givt_impressions_percent', 'sivt_impressions_percent', 'givt_clicks_percent'):
+        values = [getattr(r, field) for r in daily_rows if getattr(r, field) is not None]
+        if values:
+            setattr(monitoring, _ADRIVER_CARD_FACT_FIELD[field], round(sum(values) / len(values), 2))
+
+    # The true "we have real data through this date" cutoff is the latest
+    # day actually present in the daily history - not just whatever the
+    # most recently uploaded file happened to claim (an out-of-order
+    # re-upload of an earlier gap must not drag this backwards).
+    monitoring.adriver_data_as_of_date = max(r.date for r in daily_rows)
+    return True
+
+
+# AdriverDailyStat's per-day percent columns map to differently-named
+# fields on MonitoringCampaign (fact_* prefix, givt_clicks_percent -> plain
+# fact_givt_clicks) - see _recompute_adriver_card_totals.
+_ADRIVER_CARD_FACT_FIELD = {
+    'ivt_impressions_percent': 'fact_ivt_impressions',
+    'givt_impressions_percent': 'fact_givt_impressions',
+    'sivt_impressions_percent': 'fact_sivt_impressions',
+    'givt_clicks_percent': 'fact_givt_clicks',
+}
+
+
 def _refresh_weekly_adriver_stats(monitoring_id, daily_rows):
     """When an Adriver Excel upload lands after a week's dynamics row was
     already frozen (see MonitoringWeeklyStat), that week's adriver_*
@@ -3728,29 +3780,14 @@ def upload_adriver_excel(monitoring_id):
             if not ivt_data:
                 return jsonify({'success': False, 'error': 'Failed to parse Excel file. Please ensure it contains IVT data.'}), 400
 
-            # Update monitoring with IVT data
-            monitoring.fact_ivt_impressions = ivt_data.get('ivt_impressions_percent', 0)
-            monitoring.fact_givt_impressions = ivt_data.get('givt_impressions_percent', 0)
-            monitoring.fact_sivt_impressions = ivt_data.get('sivt_impressions_percent', 0)
-            monitoring.fact_givt_clicks = ivt_data.get('givt_clicks_percent', 0)
-            monitoring.adriver_impressions = ivt_data.get('impressions')
-            monitoring.adriver_clicks = ivt_data.get('clicks')
             monitoring.adriver_data_updated_at = datetime.utcnow()
-            monitoring.adriver_data_as_of_date = ivt_data.get('data_as_of_date')
-
-            # Scope the SAPE comparison fact to the same end date as the
-            # file, so the discrepancy % isn't comparing SAPE's fact
-            # (refreshed daily through yesterday) against a file that may
-            # cover an earlier day - see _refresh_adriver_fact_for_upload.
-            if monitoring.adriver_data_as_of_date:
-                _refresh_adriver_fact_for_upload(monitoring, monitoring.adriver_data_as_of_date)
-
-            # Update last sync time
-            monitoring.last_sync = datetime.utcnow()
 
             # Keep the file itself (Постклик archive) - previously it was
             # parsed and thrown away, so there was no way to go back and
-            # check what was actually uploaded or by whom.
+            # check what was actually uploaded or by whom. impressions/
+            # clicks/data_as_of_date here are this ONE file's own numbers,
+            # for the archive record - not the card's cumulative total
+            # (see _recompute_adriver_card_totals below for that).
             upload_dir = os.path.join(app.root_path, 'uploads', 'adriver_postclick', str(monitoring_id))
             os.makedirs(upload_dir, exist_ok=True)
             stored_filename = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{secure_filename(file.filename)}"
@@ -3763,16 +3800,46 @@ def upload_adriver_excel(monitoring_id):
                 filename=file.filename,
                 file_path=os.path.relpath(stored_path, app.root_path),
                 uploaded_by=session.get('user_email'),
-                impressions=monitoring.adriver_impressions,
-                clicks=monitoring.adriver_clicks,
-                data_as_of_date=monitoring.adriver_data_as_of_date,
+                impressions=ivt_data.get('impressions'),
+                clicks=ivt_data.get('clicks'),
+                data_as_of_date=ivt_data.get('data_as_of_date'),
             )
             db.session.add(file_upload)
             db.session.flush()  # assign file_upload.id before using it below
 
+            # Store this file's day-by-day rows FIRST (upserts into
+            # AdriverDailyStat, re-uploads replace just the overlapping
+            # days) so the card-level recompute right after sees the full
+            # accumulated history across every file ever uploaded for this
+            # monitoring, not just this one.
             daily_rows = ivt_data.get('daily_rows', [])
             _store_adriver_daily_stats(monitoring_id, file_upload.id, daily_rows)
+
+            if not _recompute_adriver_card_totals(monitoring):
+                # No daily rows could be parsed/stored at all (malformed
+                # file) - fall back to this file's own "Всего" row rather
+                # than leaving the card's total untouched/stale.
+                logger.warning(f"⚠️ Monitoring {monitoring_id}: Adriver upload had no parseable daily rows, falling back to the file's own total")
+                monitoring.fact_ivt_impressions = ivt_data.get('ivt_impressions_percent', 0)
+                monitoring.fact_givt_impressions = ivt_data.get('givt_impressions_percent', 0)
+                monitoring.fact_sivt_impressions = ivt_data.get('sivt_impressions_percent', 0)
+                monitoring.fact_givt_clicks = ivt_data.get('givt_clicks_percent', 0)
+                monitoring.adriver_impressions = ivt_data.get('impressions')
+                monitoring.adriver_clicks = ivt_data.get('clicks')
+                monitoring.adriver_data_as_of_date = ivt_data.get('data_as_of_date')
+
+            # Scope the SAPE comparison fact to the true latest date we
+            # actually have Adriver data through, so the discrepancy %
+            # isn't comparing SAPE's fact (refreshed daily through
+            # yesterday) against a shorter Adriver history - see
+            # _refresh_adriver_fact_for_upload.
+            if monitoring.adriver_data_as_of_date:
+                _refresh_adriver_fact_for_upload(monitoring, monitoring.adriver_data_as_of_date)
+
             _refresh_weekly_adriver_stats(monitoring_id, daily_rows)
+
+            # Update last sync time
+            monitoring.last_sync = datetime.utcnow()
 
             db.session.commit()
 
