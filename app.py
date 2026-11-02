@@ -6329,20 +6329,40 @@ def run_report_update(report, date_from=None, date_to=None):
         return False
 
 
+# In-memory per-process retry cooldown for scheduled_update_reports - not
+# persisted to the DB on purpose. A failed/overdue report should be retried
+# again soon, but not literally every single minute while e.g. SAPE is
+# down - this throttles retries without needing a migration, and a worker
+# restart just means one retry happens a bit earlier than usual (harmless).
+_report_retry_cooldown = {}  # {report_id: last attempt datetime (Europe/Moscow, aware)}
+_REPORT_RETRY_COOLDOWN_MINUTES = 30
+
+
 def scheduled_update_reports():
     """
-    Scheduled task to update reports based on their schedule settings
-    Runs every hour and checks which reports should be updated
+    Scheduled task to update reports based on their schedule settings.
+    Runs every minute.
+
+    A report is "due" once today's scheduled time has passed and it
+    hasn't successfully updated since then - not just at the exact
+    matching minute. That exact-minute design used to mean a report
+    was silently skipped for the rest of its scheduled day (often a
+    full week, for weekly schedules) if this check happened to be busy
+    or SAPE was slow right at that one minute - see the 2026-11-02
+    incident where 3 reports' exact minute ticked by while a slower
+    Monday account sync + several SAPE timeouts kept this job from
+    running for ~4 minutes straight through. "Due since" with a cooldown
+    (see _report_retry_cooldown) fixes that and also retries real
+    failures (e.g. a SAPE timeout) a bit later instead of giving up for
+    the week.
     """
     with app.app_context():
         now = datetime.now(pytz.timezone('Europe/Moscow'))
         current_day = now.isoweekday()  # 1=Monday, 7=Sunday
-        current_hour = now.hour
-        current_minute = now.minute
 
         logging.info(f"\n{'='*60}")
         logging.info(f"⏰ SCHEDULED REPORT CHECK - {now.strftime('%Y-%m-%d %H:%M:%S')}")
-        logging.info(f"   Current day: {current_day} ({['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][current_day-1]}), Time: {current_hour:02d}:{current_minute:02d}")
+        logging.info(f"   Current day: {current_day} ({['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][current_day-1]}), Time: {now.hour:02d}:{now.minute:02d}")
         logging.info(f"{'='*60}")
 
         # Find all enabled scheduled reports
@@ -6390,24 +6410,38 @@ def scheduled_update_reports():
                 reports_skipped += 1
                 continue
 
-            # Check if current time matches scheduled time exactly (job runs every minute)
-            if current_hour == scheduled_hour and current_minute == scheduled_minute:
-                logging.info(f"✅ Matched schedule for report {report.id} ({report.name or 'Unnamed'})")
-                logging.info(f"   Scheduled: {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][current_day-1]} {scheduled_hour:02d}:{scheduled_minute:02d}")
-
-                # Update the report
-                success = run_report_update(report)
-                if success:
-                    reports_updated += 1
-                else:
-                    logging.error(f"❌ Failed to update report {report.id}")
-
-                # Add delay after updating a report
-                import time
-                time.sleep(2)  # 2 seconds delay after each report update
-            else:
-                logging.debug(f"⏭️ Skipping report {report.id}: Time mismatch (scheduled {scheduled_hour:02d}:{scheduled_minute:02d}, current {current_hour:02d}:{current_minute:02d})")
+            scheduled_dt_today = now.replace(hour=scheduled_hour, minute=scheduled_minute, second=0, microsecond=0)
+            if now < scheduled_dt_today:
                 reports_skipped += 1
+                continue  # not due yet today
+
+            # Already updated since it became due today? report.last_update
+            # is UTC-naive; compare in UTC to avoid a tz mixup.
+            if report.last_update:
+                last_update_utc = pytz.UTC.localize(report.last_update)
+                if last_update_utc >= scheduled_dt_today.astimezone(pytz.UTC):
+                    reports_skipped += 1
+                    continue
+
+            # Due, but don't hammer a possibly-down API every single minute
+            last_attempt = _report_retry_cooldown.get(report.id)
+            if last_attempt and (now - last_attempt) < timedelta(minutes=_REPORT_RETRY_COOLDOWN_MINUTES):
+                logging.debug(f"⏭️ Skipping report {report.id}: retried {(now - last_attempt).seconds // 60}m ago, cooldown is {_REPORT_RETRY_COOLDOWN_MINUTES}m")
+                reports_skipped += 1
+                continue
+
+            logging.info(f"✅ Report {report.id} ({report.name or 'Unnamed'}) is due - scheduled {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][current_day-1]} {scheduled_hour:02d}:{scheduled_minute:02d}, now {now.strftime('%H:%M:%S')}")
+            _report_retry_cooldown[report.id] = now
+
+            success = run_report_update(report)
+            if success:
+                reports_updated += 1
+            else:
+                logging.error(f"❌ Failed to update report {report.id} - will retry in {_REPORT_RETRY_COOLDOWN_MINUTES}m")
+
+            # Add delay after updating a report
+            import time
+            time.sleep(2)  # 2 seconds delay after each report update
 
         logging.info(f"\n✅ SCHEDULED REPORT UPDATE COMPLETED:")
         logging.info(f"   Reports updated: {reports_updated}")
