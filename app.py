@@ -4849,7 +4849,18 @@ def run_report_old(report_id):
                         logging.info(f"ℹ️ Report {report.id}: worksheet tab renamed '{report.worksheet_name}' → '{obj.title}', updating saved name")
                     report.worksheet_gid = obj.id
                     report.worksheet_name = obj.title
-                    db.session.commit()
+                    try:
+                        db.session.commit()
+                    except Exception as e:
+                        # Self-heal is a nice-to-have, not required for this
+                        # run's actual report update to succeed - a SQLite
+                        # "database is locked" collision with another
+                        # concurrent writer (e.g. the weekly stats job) must
+                        # not take down the rest of this request. Roll back
+                        # so the session is usable again for what follows,
+                        # and just try the gid/name update again next run.
+                        logging.warning(f"⚠️ Report {report.id}: failed to persist worksheet rename self-heal, will retry next run: {e}")
+                        db.session.rollback()
                 worksheet_cache[worksheet_name] = {
                     'object': obj,
                     'data': obj.get('A1:DZ300') if obj else None
