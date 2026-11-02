@@ -1135,6 +1135,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                         {% set weekly_stats = monitoring.weekly_stats|sort(attribute='week_start') %}
                         <div class="campaigns-footer" style="padding: 8px 16px; background: rgba(250, 250, 249, 0.6); border-top: 1px solid rgba(231, 229, 228, 0.6); font-size: 10px; display: flex; justify-content: space-between; align-items: center;">
                             {% if weekly_stats %}
+                            <div style="display: inline-flex; align-items: center; gap: 6px;">
                             <button onclick="toggleWeeklyDynamics({{ monitoring.id }})"
                                     style="display: inline-flex; align-items: center; gap: 5px; background: none; border: none; font-size: 10px; font-weight: 400; color: var(--text-secondary); cursor: pointer; padding: 0; transition: color 0.2s;"
                                     onmouseover="this.style.color='var(--text-primary)';"
@@ -1145,6 +1146,15 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                                 </svg>
                             </button>
+                            {% if session.get('user_role') != 'account_manager' and not monitoring.frozen %}
+                            <button onclick="refreshLastWeekStats(event, {{ monitoring.id }})"
+                                    class="btn btn-secondary"
+                                    title="Обновить статистику за прошлую неделю"
+                                    style="flex-shrink: 0; padding: 0; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;">
+                                <svg width="8" height="8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            </button>
+                            {% endif %}
+                            </div>
                             {% else %}
                             <span></span>
                             {% endif %}
@@ -1256,8 +1266,8 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.givt_impressions_percent) if w.givt_impressions_percent else '—' }}</td>
                                         <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.sivt_impressions_percent) if w.sivt_impressions_percent else '—' }}</td>
                                         <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.givt_clicks_percent) if w.givt_clicks_percent else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.adriver_impressions).replace(',', ' ') if w.adriver_impressions else '—' }}{{ verifier_diff_badge(w.adriver_impressions, w.impressions) }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.adriver_clicks).replace(',', ' ') if w.adriver_clicks else '—' }}{{ verifier_diff_badge(w.adriver_clicks, w.clicks) }}</td>
+                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.adriver_impressions).replace(',', ' ') if w.adriver_impressions else '—' }}{{ verifier_diff_badge(w.adriver_impressions, w.adriver_scoped_impressions if w.adriver_partial_week else w.impressions) }}{% if w.adriver_partial_week and w.adriver_coverage_start %}<span title="Выгрузка покрывает {{ w.adriver_coverage_start.strftime('%d.%m.%Y') }}{% if w.adriver_coverage_end %}–{{ w.adriver_coverage_end.strftime('%d.%m.%Y') }}{% endif %}, расхождение считается по этим датам" style="margin-left:2px;color:#a8a29e;cursor:help;">ⓘ</span>{% endif %}</td>
+                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.adriver_clicks).replace(',', ' ') if w.adriver_clicks else '—' }}{{ verifier_diff_badge(w.adriver_clicks, w.adriver_scoped_clicks if w.adriver_partial_week else w.clicks) }}</td>
                                         <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; border-left: 1px solid #e7e5e4; white-space: nowrap;">{{ "{:,}".format(w.weborama_impressions).replace(',', ' ') if w.weborama_impressions else '—' }}{{ verifier_diff_badge(w.weborama_impressions, w.weborama_scoped_impressions if w.weborama_partial_week else w.impressions) }}{% if w.weborama_partial_week and w.weborama_coverage_start %}<span title="Расчёт с {{ w.weborama_coverage_start.strftime('%d.%m.%Y') }} (дата активации пикселя)" style="margin-left:2px;color:#a8a29e;cursor:help;">ⓘ</span>{% endif %}</td>
                                         <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.weborama_clicks).replace(',', ' ') if w.weborama_clicks else '—' }}{{ verifier_diff_badge(w.weborama_clicks, w.weborama_scoped_clicks if w.weborama_partial_week else w.clicks) }}</td>
                                     </tr>
@@ -1671,6 +1681,43 @@ function refreshMonitoring(monitoringId) {
     })
     .catch(error => {
         console.error('Error refreshing monitoring:', error);
+        alert('Ошибка обновления данных. Попробуйте позже.');
+        reset();
+    });
+}
+
+function refreshLastWeekStats(evt, monitoringId) {
+    evt.stopPropagation();  // don't also trigger toggleWeeklyDynamics on the parent row
+    const button = evt.currentTarget;
+    const icon = button.querySelector('svg');
+
+    button.disabled = true;
+    button.style.opacity = '0.4';
+    button.style.cursor = 'not-allowed';
+    if (icon) icon.style.animation = 'spin 1s linear infinite';
+
+    const reset = () => {
+        button.disabled = false;
+        button.style.opacity = '1';
+        button.style.cursor = 'pointer';
+        if (icon) icon.style.animation = '';
+    };
+
+    fetch(`/monitoring/${monitoringId}/refresh-last-week`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Ошибка обновления: ' + (data.error || 'Неизвестная ошибка'));
+            reset();
+        }
+    })
+    .catch(error => {
+        console.error('Error refreshing last week stats:', error);
         alert('Ошибка обновления данных. Попробуйте позже.');
         reset();
     });

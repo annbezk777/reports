@@ -3125,6 +3125,34 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
                 if values:
                     setattr(stat, field, round(sum(values) / len(values), 2))
 
+            # Partial upload (e.g. only 3 of 7 days exported so far) - the
+            # SAPE side (stat.impressions/clicks above) is always the full
+            # week, so comparing it against a partial adriver total inflates
+            # the discrepancy %. Scope a second SAPE fetch to the exact span
+            # the upload actually covers, same pattern as Weborama below.
+            covered_dates = sorted(r.date for r in daily_rows)
+            coverage_start, coverage_end = covered_dates[0], covered_dates[-1]
+            full_days = (q_end - q_start).days + 1
+            if coverage_start > q_start or coverage_end < q_end or len(daily_rows) < full_days:
+                stat.adriver_partial_week = True
+                stat.adriver_coverage_start = coverage_start
+                stat.adriver_coverage_end = coverage_end
+                try:
+                    scoped_stats = client.get_stats(
+                        campaign_ids=campaign_ids,
+                        date_from=datetime.combine(coverage_start, datetime.min.time()),
+                        date_to=datetime.combine(coverage_end, datetime.min.time()),
+                        fields=None
+                    )
+                    if scoped_stats:
+                        scoped_total = scoped_stats.get('total', {})
+                        stat.adriver_scoped_impressions = scoped_total.get('shows', 0)
+                        stat.adriver_scoped_clicks = scoped_total.get('clicks', 0)
+                except Exception as e:
+                    logger.error(f"⚠️ Scoped SAPE fetch for partial Adriver week failed, monitoring {monitoring.id}, week {week_start}: {e}")
+            else:
+                stat.adriver_partial_week = False
+
     # --- Weborama ---
     weborama_links = [l for l in monitoring.verifier_links if l.verifier_type == 'weborama' and l.permalink_url]
     if weborama_links:
@@ -3504,6 +3532,42 @@ def refresh_monitoring_data(monitoring_id):
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/monitoring/<int:monitoring_id>/refresh-last-week', methods=['POST'])
+@login_required
+@block_account_manager
+def refresh_last_week_stats(monitoring_id):
+    """Recompute just last completed week's понедельная динамика row(s)
+    for this one monitoring - e.g. after a late/corrected Adriver upload,
+    without waiting for next Monday's scheduled job. Only the last
+    completed week for now (not an arbitrary past week)."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    rejection = _reject_if_frozen(monitoring)
+    if rejection:
+        return rejection
+
+    today = datetime.now(pytz.timezone('Europe/Moscow')).date()
+    chunks = get_last_completed_week_chunks(today)
+
+    updated_weeks = []
+    try:
+        for week_start, week_end in chunks:
+            if monitoring.date_from > week_end or monitoring.date_to < week_start:
+                continue  # this monitoring's own period doesn't reach this chunk
+            result = compute_monitoring_week_stats(monitoring, week_start, week_end)
+            if result:
+                updated_weeks.append(f"{result.week_start.strftime('%d.%m')}–{result.week_end.strftime('%d.%m')}")
+    except Exception as e:
+        logger.error(f"❌ Error refreshing last week's stats for monitoring {monitoring_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    if not updated_weeks:
+        return jsonify({'success': False, 'error': 'Нет данных за прошлую неделю для этого мониторинга'}), 400
+
+    return jsonify({'success': True, 'updated_weeks': updated_weeks})
 
 
 @app.route('/monitoring/refresh_all', methods=['POST'])

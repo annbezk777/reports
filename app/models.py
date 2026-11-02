@@ -845,6 +845,21 @@ class MonitoringWeeklyStat(db.Model):
     # Verifier показы/клики
     adriver_impressions = db.Column(db.Integer, nullable=True)
     adriver_clicks = db.Column(db.Integer, nullable=True)
+    # True when the Adriver/Sizmek Excel upload(s) for this week don't cover
+    # every day in [week_start, week_end] (e.g. only 3 of 7 days uploaded so
+    # far) - adriver_impressions/clicks above are already correctly summed
+    # from only the days that exist, but the SAPE side (impressions/clicks)
+    # is always the full week. Comparing a partial-week verifier total
+    # against a full-week SAPE total inflates the discrepancy % for no
+    # real reason - adriver_coverage_start/end mark the actual covered
+    # span, and the diff badge compares against
+    # adriver_scoped_impressions/clicks (SAPE fact for that SAME span)
+    # instead, same pattern as weborama_partial_week below.
+    adriver_partial_week = db.Column(db.Boolean, nullable=True)
+    adriver_coverage_start = db.Column(db.Date, nullable=True)
+    adriver_coverage_end = db.Column(db.Date, nullable=True)
+    adriver_scoped_impressions = db.Column(db.Integer, nullable=True)
+    adriver_scoped_clicks = db.Column(db.Integer, nullable=True)
     weborama_impressions = db.Column(db.Integer, nullable=True)
     weborama_clicks = db.Column(db.Integer, nullable=True)
     # True when some Weborama link's pixel (compare_date_from) went live
