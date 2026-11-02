@@ -2001,20 +2001,26 @@ def finish_monitoring_month(monitoring_id):
     report_kept_active = False
     other_active_count = 0
     if report and not report.frozen:
-        other_active_count = MonitoringCampaign.query.filter(
-            MonitoringCampaign.report_config_id == report.id,
-            MonitoringCampaign.id != monitoring.id,
-            MonitoringCampaign.archived == False
-        ).count()
-        if other_active_count == 0:
-            report.archived = True
-            report.schedule_enabled = False
-            report.frozen = True
-            report.frozen_at = datetime.utcnow()
-            report.frozen_period = monitoring.frozen_period
-            report_freezing = True
-        else:
+        if rollover:
+            # Campaign continues - the linked report keeps running exactly
+            # as it is (same Google Sheet, same schedule, never cloned).
+            # Only a true end-of-campaign (no rollover) retires a report.
             report_kept_active = True
+        else:
+            other_active_count = MonitoringCampaign.query.filter(
+                MonitoringCampaign.report_config_id == report.id,
+                MonitoringCampaign.id != monitoring.id,
+                MonitoringCampaign.archived == False
+            ).count()
+            if other_active_count == 0:
+                report.archived = True
+                report.schedule_enabled = False
+                report.frozen = True
+                report.frozen_at = datetime.utcnow()
+                report.frozen_period = monitoring.frozen_period
+                report_freezing = True
+            else:
+                report_kept_active = True
 
     new_monitoring_id = None
     new_report_id = None
@@ -2083,50 +2089,11 @@ def finish_monitoring_month(monitoring_id):
                 ))
 
         if report:
-            if report_freezing:
-                # The report closed along with this monitoring - clone it
-                # too (mirrors copy_report's own field list/reset choices:
-                # schedule stays off and the Google Sheet is cleared, same
-                # as a manual "Копировать").
-                new_report = ReportConfig(
-                    campaign_id=report.campaign_id,
-                    campaign_ids=report.campaign_ids,
-                    campaign_mode=report.campaign_mode,
-                    google_sheet_url='',
-                    worksheet_name=None,
-                    data_start_row=None,
-                    date_column=None,
-                    impressions_column=None,
-                    reach_column=None,
-                    clicks_column=None,
-                    ctr_column=None,
-                    spent_column=None,
-                    completes_column=None,
-                    campaign_settings=report.campaign_settings,
-                    campaign_frequencies=report.campaign_frequencies,
-                    frequency_variance=report.frequency_variance,
-                    total_reach_coefficient=report.total_reach_coefficient,
-                    schedule_enabled=False,
-                    schedule_days=report.schedule_days,
-                    schedule_time=report.schedule_time,
-                    manager=report.manager,
-                    account_manager=report.account_manager,
-                    name=report.name or (report.campaign.name if report.campaign else None),
-                    active=True,
-                    archived=False,
-                    frozen=False,
-                )
-                db.session.add(new_report)
-                db.session.flush()
-                report.rolled_to_id = new_report.id
-                new_report.rolled_from_id = report.id
-                new_monitoring.report_config_id = new_report.id
-                new_report_id = new_report.id
-            else:
-                # Report is shared with another still-active monitoring
-                # and stays live - the continuing card just keeps pointing
-                # at the SAME report, nothing to clone.
-                new_monitoring.report_config_id = report.id
+            # report_freezing can't be True here - it's only set on the
+            # non-rollover path above. The continuing card always just
+            # keeps pointing at the SAME report (same Google Sheet, same
+            # schedule) - a report is never frozen or cloned by a rollover.
+            new_monitoring.report_config_id = report.id
 
         new_monitoring_id = new_monitoring.id
 

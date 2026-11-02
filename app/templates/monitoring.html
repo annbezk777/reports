@@ -2217,9 +2217,7 @@ function refreshAllMonitorings() {
                 </div>
             </div>
 
-            <div id="finishReportWarning" style="display: none; margin-top: 16px; padding: 10px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12px; color: #1e40af;">
-                К этому мониторингу привязан отчёт — он тоже будет завершён (и продлён, если кампания продолжается). Если отчёт используется ещё другими активными мониторингами, он останется активным.
-            </div>
+            <div id="finishReportWarning" style="display: none; margin-top: 16px; padding: 10px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12px; color: #1e40af;"></div>
 
             <div id="finishMonthError" style="display: none; margin-top: 12px; padding: 10px 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; font-size: 13px; color: #991b1b;"></div>
         </div>
@@ -3062,22 +3060,38 @@ function setFinishCompleted(value) {
     noBtn.style.borderColor = value === false ? '#dc2626' : '';
 }
 
+let finishMonthHasReport = false;
+
 function openFinishMonthModal(monitoringId, monitoringName, hasReport) {
     finishMonthMonitoringId = monitoringId;
+    finishMonthHasReport = hasReport;
     document.getElementById('finishMonthMonitoringName').textContent = monitoringName;
     document.getElementById('finishFreezeAsOf').value = _yesterday();
     document.getElementById('finishRollover').checked = false;
     document.getElementById('finishNewDateFrom').value = '';
     document.getElementById('finishNewDateTo').value = '';
     document.getElementById('finishRolloverFields').style.display = 'none';
-    document.getElementById('finishReportWarning').style.display = hasReport ? 'block' : 'none';
     document.getElementById('finishMonthError').style.display = 'none';
     document.getElementById('finishMonthSubmitBtn').disabled = false;
     document.getElementById('finishMonthSubmitBtn').textContent = 'Завершить';
     setFinishCompleted(null);
+    updateFinishReportWarning();
 
     document.getElementById('finishMonthModal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
+}
+
+function updateFinishReportWarning() {
+    const warningBox = document.getElementById('finishReportWarning');
+    if (!finishMonthHasReport) {
+        warningBox.style.display = 'none';
+        return;
+    }
+    const rollover = document.getElementById('finishRollover').checked;
+    warningBox.textContent = rollover
+        ? 'К этому мониторингу привязан отчёт — он продолжает работать как прежде (тот же Google Sheet, то же расписание), не завершается и не пересоздаётся.'
+        : 'К этому мониторингу привязан отчёт — он тоже будет завершён, если это последний активный мониторинг на нём. Если отчёт используется ещё другими активными мониторингами, он останется активным.';
+    warningBox.style.display = 'block';
 }
 
 function closeFinishMonthModal() {
@@ -3089,6 +3103,7 @@ function closeFinishMonthModal() {
 function toggleFinishRolloverFields() {
     const on = document.getElementById('finishRollover').checked;
     document.getElementById('finishRolloverFields').style.display = on ? 'block' : 'none';
+    updateFinishReportWarning();
 }
 
 function submitFinishMonth() {
@@ -3130,7 +3145,8 @@ function submitFinishMonth() {
             if (data.success) {
                 let msg = `Месяц завершён (${data.frozen_period}).`;
                 if (data.report_frozen) msg += ' Связанный отчёт тоже завершён.';
-                if (data.report_kept_active) msg += ` Связанный отчёт остался активным (ещё ${data.other_active_monitorings} активных мониторингов на нём).`;
+                if (data.report_kept_active && data.new_monitoring_id) msg += ' Связанный отчёт продолжает работать без изменений.';
+                else if (data.report_kept_active) msg += ` Связанный отчёт остался активным (ещё ${data.other_active_monitorings} активных мониторингов на нём).`;
                 if (data.new_monitoring_id) msg += ' Создана карточка-продолжение.';
                 alert(msg);
                 window.location.href = "{{ url_for('monitoring', tab='active') }}";
