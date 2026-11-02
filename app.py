@@ -4834,10 +4834,22 @@ def run_report_old(report_id):
 
         def get_cached_worksheet(worksheet_name):
             if worksheet_name not in worksheet_cache:
+                # gid only applies to the report's own default worksheet -
+                # a per-campaign override (campaign_settings) has no gid of
+                # its own, so it still breaks on rename same as before.
+                is_report_default = worksheet_name == report.worksheet_name
+                gid = report.worksheet_gid if is_report_default else None
                 obj = gs_client.get_worksheet_object(
                     sheet_url=report.google_sheet_url,
-                    sheet_name=worksheet_name
+                    sheet_name=worksheet_name,
+                    gid=gid
                 )
+                if obj is not None and is_report_default and worksheet_name and (report.worksheet_gid != obj.id or report.worksheet_name != obj.title):
+                    if report.worksheet_name != obj.title:
+                        logging.info(f"ℹ️ Report {report.id}: worksheet tab renamed '{report.worksheet_name}' → '{obj.title}', updating saved name")
+                    report.worksheet_gid = obj.id
+                    report.worksheet_name = obj.title
+                    db.session.commit()
                 worksheet_cache[worksheet_name] = {
                     'object': obj,
                     'data': obj.get('A1:DZ300') if obj else None

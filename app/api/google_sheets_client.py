@@ -212,10 +212,19 @@ class GoogleSheetsClient:
     def get_worksheet_object(
         self,
         sheet_url: str,
-        sheet_name: Optional[str]
+        sheet_name: Optional[str],
+        gid: Optional[int] = None
     ):
         """
         Get worksheet object for reuse (to avoid API quota)
+
+        Args:
+            gid: Stable numeric tab ID from a previous successful lookup.
+                If the tab was renamed since then, spreadsheet.worksheet(name)
+                raises WorksheetNotFound even though the physical tab still
+                exists - gid survives renames, so it's tried as a fallback
+                instead of failing outright. The caller is responsible for
+                noticing worksheet.title changed and persisting the new name.
 
         Returns:
             worksheet object or None
@@ -232,7 +241,14 @@ class GoogleSheetsClient:
             spreadsheet = self.client.open_by_key(sheet_id)
 
             if sheet_name:
-                worksheet = spreadsheet.worksheet(sheet_name)
+                try:
+                    worksheet = spreadsheet.worksheet(sheet_name)
+                except gspread.exceptions.WorksheetNotFound:
+                    if gid is None:
+                        raise
+                    print(f"⚠️ Worksheet '{sheet_name}' not found by name - falling back to saved gid {gid} (tab was likely renamed)")
+                    worksheet = spreadsheet.get_worksheet_by_id(gid)
+                    print(f"✅ Resolved via gid: tab is now named '{worksheet.title}'")
             else:
                 worksheet = spreadsheet.get_worksheet(0)
 

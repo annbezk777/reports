@@ -79,6 +79,10 @@ class ReportConfig(db.Model):
     # Google Sheets settings
     google_sheet_url = db.Column(db.String(500), nullable=False)
     worksheet_name = db.Column(db.String(255), nullable=True)  # Название листа (если не указано - первый лист)
+    # Stable numeric tab ID (gid), captured on first successful run. Unlike
+    # worksheet_name, it survives someone renaming the tab in Google Sheets -
+    # used as a fallback lookup so a rename doesn't silently break auto-update.
+    worksheet_gid = db.Column(db.Integer, nullable=True)
 
     # Table structure settings (auto-detected or manual)
     data_start_row = db.Column(db.Integer, nullable=True)
