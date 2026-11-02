@@ -6071,19 +6071,34 @@ def archive_report(report_id):
 @login_required
 @block_account_manager
 def unarchive_report(report_id):
-    """Unarchive a report (restore to main view)"""
+    """Unarchive a report (restore to main view). A frozen (finished-month)
+    report is a locked historical record, same bar as unarchive_monitoring -
+    only the admin can restore it, and doing so must clear frozen the same
+    way it clears archived, on BOTH the report and its linked monitoring.
+    Leaving frozen=True while archived=False was exactly the bug that left
+    a card stuck visible-but-locked in the Активные tab."""
     report = ReportConfig.query.get_or_404(report_id)
 
+    if report.frozen and session.get('user_email') != ADMIN_EMAIL:
+        flash('Восстановить зафиксированный отчёт может только администратор', 'error')
+        return redirect(url_for('reports', show_archived='true'))
+
+    was_frozen = report.frozen
     report.archived = False
+    report.frozen = False
+    report.frozen_at = None
 
     # Restore the linked monitoring too, if this report has one
     monitoring = MonitoringCampaign.query.filter_by(report_config_id=report.id).first()
     if monitoring:
         monitoring.archived = False
+        monitoring.frozen = False
+        monitoring.frozen_at = None
 
     db.session.commit()
 
-    flash(f'Отчет "{report.name or report.campaign.name}" восстановлен из архива', 'success')
+    msg = 'восстановлен из зафиксированного месяца' if was_frozen else 'восстановлен из архива'
+    flash(f'Отчет "{report.name or report.campaign.name}" {msg}', 'success')
     return redirect(url_for('reports', show_archived='true'))
 
 
