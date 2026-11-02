@@ -418,6 +418,17 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
     color: #dc2626;
 }
 
+.account-combobox-option {
+    padding: 10px 16px;
+    font-size: 13px;
+    cursor: pointer;
+}
+.account-combobox-option:hover,
+.account-combobox-option.active {
+    background-color: var(--peach-light);
+    color: var(--primary-orange);
+}
+
 .form-group input,
 .form-group select {
     width: 100%;
@@ -928,7 +939,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     {% endif %}
                                     {% if monitoring.rolled_from_id %}
                                     <span class="meta-dot" style="color: #D1D5DB;">•</span>
-                                    <a href="{{ url_for('monitoring', tab='frozen') }}#monitoring-{{ monitoring.rolled_from_id }}" style="color: var(--text-secondary); text-decoration: none;">← из {{ monitoring.rolled_from.name if monitoring.rolled_from else '' }}</a>
+                                    <a href="{{ url_for('monitoring', tab='frozen') }}#monitoring-{{ monitoring.rolled_from_id }}" style="color: var(--primary-orange); font-weight: 500; text-decoration: none;">← из {{ monitoring.rolled_from.name if monitoring.rolled_from else '' }}</a>
                                     {% endif %}
                                 </div>
 
@@ -1798,14 +1809,11 @@ function refreshAllMonitorings() {
 
                 <!-- Аккаунт и Период в одной строке -->
                 <div class="form-row">
-                    <div class="form-group">
-                        <label for="account_id">Аккаунт SAPE <span class="required">*</span></label>
-                        <select id="account_id" name="account_id" required onchange="onMonitoringAccountChange()">
-                            <option value="">Выберите аккаунт</option>
-                            {% for account in accounts %}
-                            <option value="{{ account.id }}">{{ account.login }}</option>
-                            {% endfor %}
-                        </select>
+                    <div class="form-group" style="position: relative;">
+                        <label for="account_search">Аккаунт SAPE <span class="required">*</span></label>
+                        <input type="text" id="account_search" autocomplete="off" placeholder="Выберите аккаунт">
+                        <input type="hidden" id="account_id" name="account_id">
+                        <div id="accountDropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; background: white; border: 1px solid var(--border-color); border-radius: 8px; max-height: 240px; overflow-y: auto; z-index: 50; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);"></div>
                     </div>
 
                     <div class="form-group">
@@ -2267,6 +2275,7 @@ function openMonitoringModal(monitoringId = null) {
                 // Fill form fields
                 document.getElementById('name').value = data.name || '';
                 document.getElementById('account_id').value = data.account_id || '';
+                setMonitoringAccountDisplay(data.account_id || '');
                 document.getElementById('manager').value = data.manager || '';
                 document.getElementById('asana_task_url').value = data.asana_task_url || '';
                 loadCampaignOptionsAndRenderVerifiers(data.account_id, (data.campaign_ids || []).map(id => parseInt(id)), data.verifier_links || []);
@@ -2888,6 +2897,16 @@ document.getElementById('monitoringForm').addEventListener('submit', function(e)
     e.preventDefault();
     const form = e.target;
 
+    // account_id - скрытое поле (не <select>), так что HTML5 required
+    // на нём не действует (спецификация явно исключает type=hidden из
+    // валидации) - проверяем сами.
+    if (!document.getElementById('account_id').value) {
+        document.getElementById('account_search').style.borderColor = '#dc2626';
+        document.getElementById('account_search').focus();
+        alert('Выберите аккаунт SAPE');
+        return;
+    }
+
     // Получаем значения полей
     const planClicks = parseFloat(document.getElementById('plan_clicks').value) || 0;
     const planPi = parseFloat(document.getElementById('plan_pi').value) || 0;
@@ -3205,6 +3224,65 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+});
+
+// Единое поле выбора аккаунта с поиском - тот же combobox-паттерн, что
+// в форме отчёта (reports.html), вместо голого <select> со списком
+// логинов без возможности набрать текст.
+const MONITORING_FORM_ACCOUNTS = [
+    {% for account in accounts %}
+    {id: '{{ account.id }}', label: {{ (account.name ~ ' | ' ~ account.login) | tojson }}},
+    {% endfor %}
+];
+
+function renderMonitoringAccountOptions(filterText) {
+    const dropdown = document.getElementById('accountDropdown');
+    const needle = filterText.trim().toLowerCase();
+    const filtered = needle
+        ? MONITORING_FORM_ACCOUNTS.filter(a => a.label.toLowerCase().includes(needle))
+        : MONITORING_FORM_ACCOUNTS;
+
+    if (filtered.length === 0) {
+        dropdown.innerHTML = '<div style="padding: 10px 16px; font-size: 13px; color: var(--text-secondary);">Аккаунт не найден</div>';
+    } else {
+        dropdown.innerHTML = filtered.map(a =>
+            `<div class="account-combobox-option" data-id="${a.id}" data-label="${a.label.replace(/"/g, '&quot;')}">${a.label}</div>`
+        ).join('');
+    }
+    dropdown.style.display = 'block';
+}
+
+function selectMonitoringAccount(id, label) {
+    document.getElementById('account_id').value = id;
+    document.getElementById('account_search').value = label;
+    document.getElementById('accountDropdown').style.display = 'none';
+    onMonitoringAccountChange();
+}
+
+function setMonitoringAccountDisplay(accountId) {
+    const matched = MONITORING_FORM_ACCOUNTS.find(a => a.id === String(accountId));
+    document.getElementById('account_search').value = matched ? matched.label : '';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('account_search');
+    const dropdown = document.getElementById('accountDropdown');
+    if (!searchInput || !dropdown) return;
+
+    searchInput.addEventListener('focus', () => renderMonitoringAccountOptions(searchInput.value));
+    searchInput.addEventListener('input', () => renderMonitoringAccountOptions(searchInput.value));
+
+    dropdown.addEventListener('click', (e) => {
+        const opt = e.target.closest('.account-combobox-option');
+        if (!opt) return;
+        selectMonitoringAccount(opt.dataset.id, opt.dataset.label);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#account_search') && !e.target.closest('#accountDropdown')) {
+            dropdown.style.display = 'none';
+        }
+    });
 });
 
 function onMonitoringAccountChange() {
