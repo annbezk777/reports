@@ -59,6 +59,66 @@
 .verifier-badge-T { color: #16a34a; } /* Target Ads - зеленый */
 .verifier-badge-S { color: #7c3aed; } /* Adservin/Sizmek - фиолетовый */
 
+/* Явный (не требующий hover) индикатор формата рекламы - Баннер/Видео/ТГБ */
+.ad-format-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.ad-format-badge-banner, .ad-format-badge-video, .ad-format-badge-tgb { background: var(--peach-bg); color: var(--primary-orange); }
+
+/* Custom checkbox - native input stays for semantics/keyboard, visually
+   hidden; a styled box + white checkmark SVG are drawn instead, so the
+   check mark is guaranteed white regardless of the browser's own
+   accent-color rendering. */
+.custom-checkbox {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+}
+.custom-checkbox input[type="checkbox"] {
+    position: absolute;
+    inset: 0;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.custom-checkbox .box {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1.5px solid var(--border-color);
+    background: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s;
+}
+.custom-checkbox input[type="checkbox"]:checked ~ .box {
+    background: var(--primary-orange);
+    border-color: var(--primary-orange);
+}
+.custom-checkbox .box svg {
+    width: 10px;
+    height: 10px;
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+.custom-checkbox input[type="checkbox"]:checked ~ .box svg {
+    opacity: 1;
+}
+
 .report-card:hover {
     box-shadow: var(--shadow-md);
 }
@@ -572,6 +632,11 @@
                                     {{ report.name if report.name else report.campaign.name }}
                                 </h3>
 
+                                {% set ad_format = report.get_ad_format_label() %}
+                                {% if ad_format %}
+                                <span class="ad-format-badge ad-format-badge-{{ 'video' if ad_format == 'Видео' else ('tgb' if ad_format == 'ТГБ' else 'banner') }}">{{ ad_format }}</span>
+                                {% endif %}
+
                                 {% set asana_monitoring = report.get_asana_monitoring() %}
                                 {% if asana_monitoring and asana_monitoring.verifier_badge %}
                                 <span class="verifier-badge-wrap">
@@ -723,13 +788,21 @@
                         </a>
                         {% endif %}
 
-                        <!-- Open Report Button -->
+                        <!-- Open Report Button - no href when google_sheet_url isn't
+                             set yet (e.g. an archived, never-configured "Скопировать"
+                             copy - copy_report deliberately clears the URL) -->
+                        {% if report.google_sheet_url %}
                         <a href="{{ report.google_sheet_url }}" target="_blank" class="btn btn-secondary" style="padding: 5px 9px; font-size: 11px;">
                             Открыть отчет
                             <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-left: 3px;">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                             </svg>
                         </a>
+                        {% else %}
+                        <span class="btn btn-secondary" style="padding: 5px 9px; font-size: 11px; opacity: 0.5; cursor: not-allowed;" title="Google Sheet не настроен">
+                            Открыть отчет
+                        </span>
+                        {% endif %}
 
                         <!-- Primary Action: Choose Dates -->
                         <button onclick="openDatePickerModal({{ report.id }}, '{{ report.name if report.name else report.campaign.name }}')"
@@ -1487,8 +1560,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div style="margin-bottom: 24px; padding: 20px; background: var(--bg-light); border-radius: 8px;">
                     <h4 style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 16px 0; display: flex; align-items: center; gap: 10px;">
                         Расписание обновления
-                        <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer;">
-                            <input type="checkbox" id="formScheduleEnabled" name="schedule_enabled" value="1" checked style="accent-color: var(--primary-orange);">
+                        <label class="custom-checkbox" style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">
+                            <input type="checkbox" id="formScheduleEnabled" name="schedule_enabled" value="1" checked>
+                            <span class="box"><svg viewBox="0 0 10 10" fill="none"><path d="M1.5 5L4 7.5L8.5 2" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
                             Включено
                         </label>
                     </h4>

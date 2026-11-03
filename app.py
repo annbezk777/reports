@@ -2161,6 +2161,25 @@ def set_monitoring_churn_status(monitoring_id):
     return jsonify({'success': True, 'churned': monitoring.churned})
 
 
+@app.route('/monitoring/<int:monitoring_id>/visible-columns', methods=['POST'])
+@login_required
+@block_account_manager
+def set_monitoring_visible_columns(monitoring_id):
+    """Save which statistics columns show on this card (gear icon, task
+    #46) - a display preference, not campaign data, so it's intentionally
+    NOT blocked by _reject_if_frozen: a finished card is still allowed to
+    declutter its own view."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    data = request.get_json(silent=True) or {}
+    columns = data.get('columns')
+    if not isinstance(columns, list):
+        return jsonify({'success': False, 'error': 'Некорректный формат'}), 400
+    valid_keys = {key for key, _ in MonitoringCampaign.COLUMN_DEFS}
+    monitoring.visible_columns = [c for c in columns if c in valid_keys]
+    db.session.commit()
+    return jsonify({'success': True, 'visible_columns': monitoring.visible_columns})
+
+
 @app.route('/monitoring/<int:monitoring_id>/delete', methods=['POST'])
 @admin_required
 def delete_monitoring(monitoring_id):
@@ -2435,7 +2454,7 @@ def create_monitoring():
             fact_page_depth=float(fact_page_depth) if fact_page_depth else None,
             fact_robotness=float(fact_robotness) if fact_robotness else None,
             plan_pi=float(plan_pi) if plan_pi else None,
-            plan_vtr=int(round(float(plan_vtr))) if plan_vtr else None,
+            plan_vtr=round(float(plan_vtr), 1) if plan_vtr else None,
             plan_ivt_impressions=float(plan_ivt) if plan_ivt else None,
             plan_givt_impressions=float(plan_givt) if plan_givt else None,
             plan_sivt=float(plan_sivt) if plan_sivt else None,
@@ -2477,6 +2496,16 @@ def create_monitoring():
                 db.session.commit()
             except AsanaSyncError as e:
                 asana_warning = str(e)
+
+        # Pull real SAPE numbers in right away (date_from..вчера) instead of
+        # leaving the card empty until the next scheduled run - reuses the
+        # same refresh_monitoring_data the "Обновить" button and
+        # finish-month's final refresh already call directly as a function.
+        try:
+            refresh_monitoring_data(monitoring.id)
+        except Exception as e:
+            logger.error(f"⚠️ Initial refresh for newly created monitoring {monitoring.id} failed: {e}")
+            db.session.rollback()
 
         if asana_warning:
             flash(f'Мониторинг создан, но не удалось подтянуть план из Asana: {asana_warning}', 'error')
@@ -2556,7 +2585,7 @@ def edit_monitoring(monitoring_id):
         plan_givt_clicks = request.form.get('plan_givt_clicks')
 
         monitoring.plan_pi = float(plan_pi) if plan_pi else None
-        monitoring.plan_vtr = int(round(float(plan_vtr))) if plan_vtr else None
+        monitoring.plan_vtr = round(float(plan_vtr), 1) if plan_vtr else None
         logger.info(f"   → Saving plan_vtr: {monitoring.plan_vtr}")
         monitoring.plan_ivt_impressions = float(plan_ivt) if plan_ivt else None
         monitoring.plan_givt_impressions = float(plan_givt) if plan_givt else None
@@ -3518,11 +3547,11 @@ def refresh_monitoring_data(monitoring_id):
         is_video = monitoring.is_video_format()
         if is_video:
             vtr_value = total.get('vtr', 0.0)
-            monitoring.fact_vtr = int(round(vtr_value)) if vtr_value else None
+            monitoring.fact_vtr = round(vtr_value, 1) if vtr_value else None
             logger.info(f"📹 Video format detected, loaded VTR: {monitoring.fact_vtr}%")
         else:
             vr_value = total.get('vr', 0.0)
-            monitoring.fact_vtr = int(round(vr_value)) if vr_value else None
+            monitoring.fact_vtr = round(vr_value, 1) if vr_value else None
             logger.info(f"🎯 Banner/TGB format detected, loaded VR: {monitoring.fact_vtr}%")
 
         _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
@@ -3712,10 +3741,10 @@ def refresh_all_monitorings():
                     is_video = monitoring.is_video_format()
                     if is_video:
                         vtr_value = total.get('vtr', 0.0)
-                        monitoring.fact_vtr = int(round(vtr_value)) if vtr_value else None
+                        monitoring.fact_vtr = round(vtr_value, 1) if vtr_value else None
                     else:
                         vr_value = total.get('vr', 0.0)
-                        monitoring.fact_vtr = int(round(vr_value)) if vr_value else None
+                        monitoring.fact_vtr = round(vr_value, 1) if vr_value else None
 
                     _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
                     _refresh_adriver_fact(monitoring, client, date_to)

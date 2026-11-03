@@ -3,6 +3,12 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
+# format_type -> человекочитаемая метка для бейджа формата рекламы на
+# карточках Мониторинга/Отчётов. Неклассифицированные (None) кампании
+# считаются баннером - тот же дефолт, что уже использует reports.html
+# (campaign.format_type || 'B').
+AD_FORMAT_LABELS = {'V': 'Видео', 'CTV': 'Видео', 'TGB': 'ТГБ', 'B': 'Баннер'}
+
 
 class SapeAccount(db.Model):
     """SAPE account model"""
@@ -156,6 +162,13 @@ class ReportConfig(db.Model):
         if not self.campaign_ids:
             return []
         return Campaign.query.filter(Campaign.id.in_(self.campaign_ids)).all()
+
+    def get_ad_format_label(self):
+        """Метка формата рекламы (Баннер/Видео/ТГБ) для бейджа на карточке."""
+        campaigns = self.get_campaigns()
+        if not campaigns:
+            return None
+        return AD_FORMAT_LABELS.get(campaigns[0].format_type, 'Баннер')
 
     def get_asana_monitoring(self):
         """Find the monitoring whose Asana link should be shown on this
@@ -345,6 +358,13 @@ class MonitoringCampaign(db.Model):
     completed = db.Column(db.Boolean, nullable=True)
     churned = db.Column(db.Boolean, nullable=True)
 
+    # Ручная настройка видимых столбцов статистики на карточке (задача #46,
+    # переключается через значок-шестерёнку прямо на карточке) - None
+    # означает "не настраивалось", т.е. показывать всё (поведение по
+    # умолчанию до появления этой настройки, не трогает существующие
+    # карточки задним числом).
+    visible_columns = db.Column(db.JSON, nullable=True)
+
     # Relationships
     account = db.relationship('SapeAccount', backref='monitoring_campaigns', lazy=True)
     report_config = db.relationship('ReportConfig', backref='monitoring_campaigns', lazy=True)
@@ -478,6 +498,13 @@ class MonitoringCampaign(db.Model):
         """Get VTR for video or VR for banners/TGB"""
         return 'VTR' if self.is_video_format() else 'VR'
 
+    def get_ad_format_label(self):
+        """Метка формата рекламы (Баннер/Видео/ТГБ) для бейджа на карточке."""
+        campaigns = self.get_campaigns()
+        if not campaigns:
+            return None
+        return AD_FORMAT_LABELS.get(campaigns[0].format_type, 'Баннер')
+
     def get_fact_vr(self):
         """Get actual VTR (Video Through Rate) for video formats or VR for banners"""
         return self.fact_vtr
@@ -485,6 +512,55 @@ class MonitoringCampaign(db.Model):
     def get_plan_vr(self):
         """Get planned VTR (Video Through Rate) for video formats or VR for banners"""
         return self.plan_vtr
+
+    # Полный список столбцов статистики, которые можно скрыть/показать через
+    # значок-шестерёнку на карточке (задача #46) - метка для 'vtr' динамическая
+    # (VTR для видео, VR для баннера/ТГБ), остальные статичные.
+    COLUMN_DEFS = (
+        ('impressions', 'Показы'),
+        ('clicks', 'Клики'),
+        ('ctr', 'CTR'),
+        ('visits', 'Визиты'),
+        ('vtr', None),
+        ('bounce_rate', 'Отказы'),
+        ('time_on_site', 'Время'),
+        ('page_depth', 'Глубина'),
+        ('robotness', 'Роботн.'),
+        ('pi', 'PI'),
+        ('conversions', 'Conv'),
+        ('cr', 'CR'),
+        ('ivt', 'IVT'),
+        ('givt', 'GIVT'),
+        ('sivt', 'SIVT'),
+        ('givt_clicks', 'GIVT (к)'),
+        ('adriver_impressions', 'Adriver Показы'),
+        ('adriver_clicks', 'Adriver Клики'),
+        ('weborama_impressions', 'Weborama Показы'),
+        ('weborama_clicks', 'Weborama Клики'),
+    )
+
+    def get_column_label(self, key):
+        for col_key, label in self.COLUMN_DEFS:
+            if col_key == key:
+                return label or self.get_format_label()
+        return key
+
+    def get_visible_columns(self):
+        """Какие столбцы статистики показывать на карточке - ручная
+        настройка через значок-шестерёнку (задача #46). None = настройка не
+        трогалась явно - показываем всё, КРОМЕ одного случая (задача #48):
+        баннер/ТГБ без заданного VR-плана (plan_vtr) - эта метрика тогда ещё
+        не является KPI кампании, нет смысла показывать пустой столбец по
+        умолчанию."""
+        if self.visible_columns is not None:
+            return self.visible_columns
+        defaults = [key for key, _ in self.COLUMN_DEFS]
+        if not self.is_video_format() and not self.plan_vtr:
+            defaults.remove('vtr')
+        return defaults
+
+    def is_column_visible(self, key):
+        return key in self.get_visible_columns()
 
     def get_performance_percent(self, fact_value, plan_value, inverse=False):
         """
@@ -592,7 +668,7 @@ class MonitoringCampaign(db.Model):
         if self.fact_vtr is None or not self.plan_vtr:
             return None
         diff = self.fact_vtr - self.plan_vtr
-        return round(diff, 0)
+        return round(diff, 1)
 
     def get_daily_limit_impressions(self):
         """Calculate daily impressions limit (evenly distributed)"""

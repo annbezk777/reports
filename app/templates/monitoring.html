@@ -41,6 +41,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
     border: 1px solid var(--border-color);
     transition: box-shadow 0.2s;
     min-width: 0;
+    position: relative;
 }
 
 .report-card:hover {
@@ -258,6 +259,142 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 .verifier-badge-A { color: #dc2626; } /* Adriver - красный */
 .verifier-badge-T { color: #16a34a; } /* Target Ads - зеленый */
 .verifier-badge-S { color: #7c3aed; } /* Adservin/Sizmek - фиолетовый */
+
+/* Явный (не требующий hover) индикатор формата рекламы - Баннер/Видео/ТГБ */
+.ad-format-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.ad-format-badge-banner, .ad-format-badge-video, .ad-format-badge-tgb { background: var(--peach-bg); color: var(--primary-orange); }
+
+/* Custom checkbox - native input stays for semantics/keyboard, visually
+   hidden; a styled box + white checkmark SVG are drawn instead, so the
+   check mark is guaranteed white regardless of the browser's own
+   accent-color rendering. */
+.custom-checkbox {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+}
+.custom-checkbox input[type="checkbox"] {
+    position: absolute;
+    inset: 0;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.custom-checkbox .box {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1.5px solid var(--border-color);
+    background: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s;
+}
+.custom-checkbox input[type="checkbox"]:checked ~ .box {
+    background: var(--primary-orange);
+    border-color: var(--primary-orange);
+}
+.custom-checkbox .box svg {
+    width: 10px;
+    height: 10px;
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+.custom-checkbox input[type="checkbox"]:checked ~ .box svg {
+    opacity: 1;
+}
+
+/* Gear icon + columns popover on the monitoring card (task #46) */
+.visible-columns-gear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+.visible-columns-gear:hover {
+    background: var(--bg-light);
+    color: var(--text-primary);
+}
+.visible-columns-popover {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    width: 260px;
+    max-height: 340px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    padding: 10px 0;
+    z-index: 100;
+}
+.visible-columns-popover.open {
+    display: block;
+}
+.visible-columns-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px 8px 14px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 6px;
+}
+.visible-columns-popover-header span {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.visible-columns-popover-close {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 2px;
+    display: inline-flex;
+}
+.visible-columns-popover-close:hover {
+    color: var(--primary-orange);
+}
+.visible-columns-popover .custom-checkbox {
+    display: flex;
+    width: 100%;
+    padding: 5px 14px;
+    font-size: 12px;
+    color: var(--text-primary);
+}
+.visible-columns-popover .custom-checkbox:hover {
+    background: var(--bg-light);
+}
+.vcol-hidden {
+    display: none !important;
+}
 
 /* Fast hover tooltip for non-icon elements (e.g. buttons) - same visual
    style as .kpi-tooltip above, but without the native title attribute's
@@ -799,6 +936,11 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
     <div id="monitoringGrid" style="display: grid; gap: 16px;">
         {% if monitorings %}
             {% for monitoring in monitorings %}
+            {% set visible_cols = monitoring.get_visible_columns() %}
+            {% set ivt_group_keys = ['ivt', 'givt', 'sivt', 'givt_clicks', 'adriver_impressions', 'adriver_clicks'] %}
+            {% set ivt_visible_count = (ivt_group_keys | select('in', visible_cols) | list) | length %}
+            {% set weborama_group_keys = ['weborama_impressions', 'weborama_clicks'] %}
+            {% set weborama_visible_count = (weborama_group_keys | select('in', visible_cols) | list) | length %}
             <div class="report-card monitoring-card"
                  id="monitoring-{{ monitoring.id }}"
                  data-name="{{ monitoring.name|lower }}"
@@ -817,11 +959,16 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                     <div style="flex: 1; min-width: 0;">
                         <!-- Title on its own line; account/managers/period/status/badges on the line below -->
                         <div style="margin-bottom: 10px;">
-                            <div style="display: flex; align-items: center; gap: 5px 7px; margin-bottom: 5px;">
+                            <div style="display: flex; align-items: center; gap: 5px 7px; margin-bottom: 5px; padding-right: 230px;">
                                 <!-- Title -->
                                 <h3 class="monitoring-card-title" style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0; line-height: 1.3;">
                                     {{ monitoring.name }}
                                 </h3>
+
+                                {% set ad_format = monitoring.get_ad_format_label() %}
+                                {% if ad_format %}
+                                <span class="ad-format-badge ad-format-badge-{{ 'video' if ad_format == 'Видео' else ('tgb' if ad_format == 'ТГБ' else 'banner') }}">{{ ad_format }}</span>
+                                {% endif %}
 
                                 {% if monitoring.asana_kpi_comment %}
                                 <span class="kpi-info-icon">
@@ -942,16 +1089,6 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     <a href="{{ url_for('monitoring', tab='frozen') }}#monitoring-{{ monitoring.rolled_from_id }}" style="color: var(--primary-orange); font-weight: 500; text-decoration: none;">← из {{ monitoring.rolled_from.name if monitoring.rolled_from else '' }}</a>
                                     {% endif %}
                                 </div>
-
-                                <!-- Timeline Progress (Right-aligned) -->
-                                {% set days_passed = monitoring.get_days_passed_until_yesterday() %}
-                                {% set progress_percent = (days_passed / monitoring.get_total_days() * 100)|int if monitoring.get_total_days() > 0 else 0 %}
-                                <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(231, 229, 228, 0.6); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(214, 211, 209, 0.7); font-size: 11px; font-variant-numeric: tabular-nums; margin-left: auto;">
-                                    <div style="width: 56px; background: #e7e5e4; height: 6px; border-radius: 9999px; overflow: hidden; flex-shrink: 0;">
-                                        <div style="background: #f59e0b; height: 100%; width: {{ progress_percent }}%;" title="Прошло {{ progress_percent }}%"></div>
-                                    </div>
-                                    <span style="color: #44403c; font-weight: 500;">{{ days_passed }}/{{ monitoring.get_total_days() }} дн.</span>
-                                </div>
                             </div>
                         </div>
 
@@ -984,91 +1121,98 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                 <thead>
                                     <tr>
                                         <th class="col-label" rowspan="2" style="vertical-align: bottom;">Показатель</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Показы</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Клики</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">CTR</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Визиты</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">{{ monitoring.get_format_label() }}</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Отказы</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Время</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Глубина</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Роботн.</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">PI</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Conv</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">CR</th>
-                                        <th class="col-data" colspan="6" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">ADRIVER/TARGET ADS/ADSERVING</th>
-                                        <th class="col-data" colspan="2" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">WEBORAMA</th>
+                                        <th class="col-data vcol-impressions{% if not monitoring.is_column_visible('impressions') %} vcol-hidden{% endif %}" data-col="impressions" rowspan="2" style="vertical-align: bottom;">Показы</th>
+                                        <th class="col-data vcol-clicks{% if not monitoring.is_column_visible('clicks') %} vcol-hidden{% endif %}" data-col="clicks" rowspan="2" style="vertical-align: bottom;">Клики</th>
+                                        <th class="col-data vcol-ctr{% if not monitoring.is_column_visible('ctr') %} vcol-hidden{% endif %}" data-col="ctr" rowspan="2" style="vertical-align: bottom;">CTR</th>
+                                        <th class="col-data vcol-visits{% if not monitoring.is_column_visible('visits') %} vcol-hidden{% endif %}" data-col="visits" rowspan="2" style="vertical-align: bottom;">Визиты</th>
+                                        <th class="col-data vcol-vtr{% if not monitoring.is_column_visible('vtr') %} vcol-hidden{% endif %}" data-col="vtr" rowspan="2" style="vertical-align: bottom;">{{ monitoring.get_format_label() }}</th>
+                                        <th class="col-data vcol-bounce_rate{% if not monitoring.is_column_visible('bounce_rate') %} vcol-hidden{% endif %}" data-col="bounce_rate" rowspan="2" style="vertical-align: bottom;">Отказы</th>
+                                        <th class="col-data vcol-time_on_site{% if not monitoring.is_column_visible('time_on_site') %} vcol-hidden{% endif %}" data-col="time_on_site" rowspan="2" style="vertical-align: bottom;">Время</th>
+                                        <th class="col-data vcol-page_depth{% if not monitoring.is_column_visible('page_depth') %} vcol-hidden{% endif %}" data-col="page_depth" rowspan="2" style="vertical-align: bottom;">Глубина</th>
+                                        <th class="col-data vcol-robotness{% if not monitoring.is_column_visible('robotness') %} vcol-hidden{% endif %}" data-col="robotness" rowspan="2" style="vertical-align: bottom;">Роботн.</th>
+                                        <th class="col-data vcol-pi{% if not monitoring.is_column_visible('pi') %} vcol-hidden{% endif %}" data-col="pi" rowspan="2" style="vertical-align: bottom;">PI</th>
+                                        <th class="col-data vcol-conversions{% if not monitoring.is_column_visible('conversions') %} vcol-hidden{% endif %}" data-col="conversions" rowspan="2" style="vertical-align: bottom;">Conv</th>
+                                        <th class="col-data vcol-cr{% if not monitoring.is_column_visible('cr') %} vcol-hidden{% endif %}" data-col="cr" rowspan="2" style="vertical-align: bottom;">CR</th>
+                                        <th class="col-data vcol-group-ivt{% if ivt_visible_count == 0 %} vcol-hidden{% endif %}" data-group="ivt" colspan="{{ ivt_visible_count if ivt_visible_count > 0 else 1 }}" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">ADRIVER/TARGET ADS/ADSERVING</th>
+                                        <th class="col-data vcol-group-weborama{% if weborama_visible_count == 0 %} vcol-hidden{% endif %}" data-group="weborama" colspan="{{ weborama_visible_count if weborama_visible_count > 0 else 1 }}" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">WEBORAMA</th>
                                     </tr>
                                     <tr>
-                                        <th class="col-data" style="border-left: 1px solid #e7e5e4;">IVT</th>
-                                        <th class="col-data">GIVT</th>
-                                        <th class="col-data">SIVT</th>
-                                        <th class="col-data">GIVT (к)</th>
-                                        <th class="col-data">Показы</th>
-                                        <th class="col-data">Клики</th>
-                                        <th class="col-data" style="border-left: 1px solid #e7e5e4;">Показы</th>
-                                        <th class="col-data">Клики</th>
+                                        <th class="col-data vcol-ivt{% if not monitoring.is_column_visible('ivt') %} vcol-hidden{% endif %}" data-col="ivt" style="border-left: 1px solid #e7e5e4;">IVT</th>
+                                        <th class="col-data vcol-givt{% if not monitoring.is_column_visible('givt') %} vcol-hidden{% endif %}" data-col="givt">GIVT</th>
+                                        <th class="col-data vcol-sivt{% if not monitoring.is_column_visible('sivt') %} vcol-hidden{% endif %}" data-col="sivt">SIVT</th>
+                                        <th class="col-data vcol-givt_clicks{% if not monitoring.is_column_visible('givt_clicks') %} vcol-hidden{% endif %}" data-col="givt_clicks">GIVT (к)</th>
+                                        <th class="col-data vcol-adriver_impressions{% if not monitoring.is_column_visible('adriver_impressions') %} vcol-hidden{% endif %}" data-col="adriver_impressions">Показы</th>
+                                        <th class="col-data vcol-adriver_clicks{% if not monitoring.is_column_visible('adriver_clicks') %} vcol-hidden{% endif %}" data-col="adriver_clicks">Клики</th>
+                                        <th class="col-data vcol-weborama_impressions{% if not monitoring.is_column_visible('weborama_impressions') %} vcol-hidden{% endif %}" data-col="weborama_impressions" style="border-left: 1px solid #e7e5e4;">Показы</th>
+                                        <th class="col-data vcol-weborama_clicks{% if not monitoring.is_column_visible('weborama_clicks') %} vcol-hidden{% endif %}" data-col="weborama_clicks">Клики</th>
                                     </tr>
                                 </thead>
                                 <tbody style="font-size: 8px; color: #44403c; border-top: 1px solid #e7e5e4;">
                                     <!-- ПЛАН -->
                                     <tr style="border-bottom: 1px solid #e7e5e4;">
                                         <td style="padding: 6px 8px; font-weight: 600; color: #78716c; background: white; position: sticky; left: 0; z-index: 10; border-right: 1px solid #e7e5e4; text-transform: uppercase; font-size: 8px;">План</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_impressions|default(0)).replace(',', ' ') if monitoring.plan_impressions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_clicks|default(0)).replace(',', ' ') if monitoring.plan_clicks else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % monitoring.get_plan_ctr()) if monitoring.get_plan_ctr() else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_visits|default(0)).replace(',', ' ') if monitoring.plan_visits else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">
-                                            {{ ('%.0f%%' % monitoring.get_plan_vr()) if monitoring.get_plan_vr() else '—' }}
+                                        <td class="vcol-impressions{% if not monitoring.is_column_visible('impressions') %} vcol-hidden{% endif %}" data-col="impressions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_impressions|default(0)).replace(',', ' ') if monitoring.plan_impressions else '—' }}</td>
+                                        <td class="vcol-clicks{% if not monitoring.is_column_visible('clicks') %} vcol-hidden{% endif %}" data-col="clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_clicks|default(0)).replace(',', ' ') if monitoring.plan_clicks else '—' }}</td>
+                                        <td class="vcol-ctr{% if not monitoring.is_column_visible('ctr') %} vcol-hidden{% endif %}" data-col="ctr" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % monitoring.get_plan_ctr()) if monitoring.get_plan_ctr() else '—' }}</td>
+                                        <td class="vcol-visits{% if not monitoring.is_column_visible('visits') %} vcol-hidden{% endif %}" data-col="visits" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_visits|default(0)).replace(',', ' ') if monitoring.plan_visits else '—' }}</td>
+                                        
+                                        <td class="vcol-vtr{% if not monitoring.is_column_visible('vtr') %} vcol-hidden{% endif %}" data-col="vtr" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">
+                                            {{ ('%.1f%%' % monitoring.get_plan_vr()) if monitoring.get_plan_vr() else '—' }}
                                         </td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.0f%%' % monitoring.plan_bounce_rate) if monitoring.plan_bounce_rate else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.0f' % monitoring.plan_time_on_site) if monitoring.plan_time_on_site else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f' % monitoring.plan_page_depth) if monitoring.plan_page_depth else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % monitoring.plan_robotness) if monitoring.plan_robotness else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.0f%%' % monitoring.plan_pi) if monitoring.plan_pi else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_conversions).replace(',', ' ') if monitoring.plan_conversions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % monitoring.get_plan_cr()) if monitoring.get_plan_cr() else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e; border-left: 1px solid #e7e5e4;">{{ ('%.1f%%' % monitoring.plan_ivt_impressions) if monitoring.plan_ivt_impressions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % monitoring.plan_givt_impressions) if monitoring.plan_givt_impressions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % monitoring.plan_sivt) if monitoring.plan_sivt else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % monitoring.plan_givt_clicks) if monitoring.plan_givt_clicks else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; color: #a8a29e;">—</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; color: #a8a29e;">—</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; color: #a8a29e; border-left: 1px solid #e7e5e4;">—</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; color: #a8a29e;">—</td>
+                                        
+                                        <td class="vcol-bounce_rate{% if not monitoring.is_column_visible('bounce_rate') %} vcol-hidden{% endif %}" data-col="bounce_rate" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % monitoring.plan_bounce_rate) if monitoring.plan_bounce_rate else '—' }}</td>
+                                        <td class="vcol-time_on_site{% if not monitoring.is_column_visible('time_on_site') %} vcol-hidden{% endif %}" data-col="time_on_site" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.0f' % monitoring.plan_time_on_site) if monitoring.plan_time_on_site else '—' }}</td>
+                                        <td class="vcol-page_depth{% if not monitoring.is_column_visible('page_depth') %} vcol-hidden{% endif %}" data-col="page_depth" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f' % monitoring.plan_page_depth) if monitoring.plan_page_depth else '—' }}</td>
+                                        <td class="vcol-robotness{% if not monitoring.is_column_visible('robotness') %} vcol-hidden{% endif %}" data-col="robotness" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % monitoring.plan_robotness) if monitoring.plan_robotness else '—' }}</td>
+                                        <td class="vcol-pi{% if not monitoring.is_column_visible('pi') %} vcol-hidden{% endif %}" data-col="pi" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % monitoring.plan_pi) if monitoring.plan_pi else '—' }}</td>
+                                        <td class="vcol-conversions{% if not monitoring.is_column_visible('conversions') %} vcol-hidden{% endif %}" data-col="conversions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(monitoring.plan_conversions).replace(',', ' ') if monitoring.plan_conversions else '—' }}</td>
+                                        <td class="vcol-cr{% if not monitoring.is_column_visible('cr') %} vcol-hidden{% endif %}" data-col="cr" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % monitoring.get_plan_cr()) if monitoring.get_plan_cr() else '—' }}</td>
+                                        
+                                        <td class="vcol-ivt{% if not monitoring.is_column_visible('ivt') %} vcol-hidden{% endif %}" data-col="ivt" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e; border-left: 1px solid #e7e5e4;">{{ ('%.1f%%' % monitoring.plan_ivt_impressions) if monitoring.plan_ivt_impressions else '—' }}</td>
+                                        <td class="vcol-givt{% if not monitoring.is_column_visible('givt') %} vcol-hidden{% endif %}" data-col="givt" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % monitoring.plan_givt_impressions) if monitoring.plan_givt_impressions else '—' }}</td>
+                                        <td class="vcol-sivt{% if not monitoring.is_column_visible('sivt') %} vcol-hidden{% endif %}" data-col="sivt" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % monitoring.plan_sivt) if monitoring.plan_sivt else '—' }}</td>
+                                        <td class="vcol-givt_clicks{% if not monitoring.is_column_visible('givt_clicks') %} vcol-hidden{% endif %}" data-col="givt_clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % monitoring.plan_givt_clicks) if monitoring.plan_givt_clicks else '—' }}</td>
+                                        <td class="vcol-adriver_impressions{% if not monitoring.is_column_visible('adriver_impressions') %} vcol-hidden{% endif %}" data-col="adriver_impressions" style="padding: 6px 8px; text-align: left; font-size: 8px; color: #a8a29e;">—</td>
+                                        <td class="vcol-adriver_clicks{% if not monitoring.is_column_visible('adriver_clicks') %} vcol-hidden{% endif %}" data-col="adriver_clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; color: #a8a29e;">—</td>
+                                        
+                                        <td class="vcol-weborama_impressions{% if not monitoring.is_column_visible('weborama_impressions') %} vcol-hidden{% endif %}" data-col="weborama_impressions" style="padding: 6px 8px; text-align: left; font-size: 8px; color: #a8a29e; border-left: 1px solid #e7e5e4;">—</td>
+                                        <td class="vcol-weborama_clicks{% if not monitoring.is_column_visible('weborama_clicks') %} vcol-hidden{% endif %}" data-col="weborama_clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; color: #a8a29e;">—</td>
                                     </tr>
 
                                     <!-- ФАКТ -->
                                     <tr style="border-bottom: 1px solid #e7e5e4;">
                                         <td style="padding: 6px 8px; font-weight: 600; color: #78716c; background: white; position: sticky; left: 0; z-index: 10; border-right: 1px solid #e7e5e4; text-transform: uppercase; font-size: 8px;">Факт</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_impressions).replace(',', ' ') if monitoring.fact_impressions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_clicks).replace(',', ' ') if monitoring.fact_clicks else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.get_fact_ctr()) if monitoring.get_fact_ctr() else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_visits).replace(',', ' ') if monitoring.fact_visits else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">
-                                            {{ ('%.0f%%' % monitoring.get_fact_vr()) if monitoring.get_fact_vr() else '—' }}
+                                        <td class="vcol-impressions{% if not monitoring.is_column_visible('impressions') %} vcol-hidden{% endif %}" data-col="impressions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_impressions).replace(',', ' ') if monitoring.fact_impressions else '—' }}</td>
+                                        <td class="vcol-clicks{% if not monitoring.is_column_visible('clicks') %} vcol-hidden{% endif %}" data-col="clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_clicks).replace(',', ' ') if monitoring.fact_clicks else '—' }}</td>
+                                        <td class="vcol-ctr{% if not monitoring.is_column_visible('ctr') %} vcol-hidden{% endif %}" data-col="ctr" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.get_fact_ctr()) if monitoring.get_fact_ctr() else '—' }}</td>
+                                        <td class="vcol-visits{% if not monitoring.is_column_visible('visits') %} vcol-hidden{% endif %}" data-col="visits" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_visits).replace(',', ' ') if monitoring.fact_visits else '—' }}</td>
+                                        
+                                        <td class="vcol-vtr{% if not monitoring.is_column_visible('vtr') %} vcol-hidden{% endif %}" data-col="vtr" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">
+                                            {{ ('%.1f%%' % monitoring.get_fact_vr()) if monitoring.get_fact_vr() else '—' }}
                                         </td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.0f%%' % monitoring.fact_bounce_rate) if monitoring.fact_bounce_rate else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.0f' % monitoring.fact_time_on_site) if monitoring.fact_time_on_site else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.1f' % monitoring.fact_page_depth) if monitoring.fact_page_depth else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.1f%%' % monitoring.fact_robotness) if monitoring.fact_robotness else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.0f%%' % monitoring.get_fact_pi()) if monitoring.get_fact_pi() else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_conversions).replace(',', ' ') if monitoring.fact_conversions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.get_fact_cr()) if monitoring.get_fact_cr() else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917; border-left: 1px solid #e7e5e4;">{{ ('%.2f%%' % monitoring.fact_ivt_impressions) if monitoring.fact_ivt_impressions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_givt_impressions) if monitoring.fact_givt_impressions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_sivt_impressions) if monitoring.fact_sivt_impressions else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_givt_clicks) if monitoring.fact_givt_clicks else '—' }}</td>
-
+                                        
+                                        <td class="vcol-bounce_rate{% if not monitoring.is_column_visible('bounce_rate') %} vcol-hidden{% endif %}" data-col="bounce_rate" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.1f%%' % monitoring.fact_bounce_rate) if monitoring.fact_bounce_rate else '—' }}</td>
+                                        <td class="vcol-time_on_site{% if not monitoring.is_column_visible('time_on_site') %} vcol-hidden{% endif %}" data-col="time_on_site" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.0f' % monitoring.fact_time_on_site) if monitoring.fact_time_on_site else '—' }}</td>
+                                        <td class="vcol-page_depth{% if not monitoring.is_column_visible('page_depth') %} vcol-hidden{% endif %}" data-col="page_depth" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.1f' % monitoring.fact_page_depth) if monitoring.fact_page_depth else '—' }}</td>
+                                        <td class="vcol-robotness{% if not monitoring.is_column_visible('robotness') %} vcol-hidden{% endif %}" data-col="robotness" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.1f%%' % monitoring.fact_robotness) if monitoring.fact_robotness else '—' }}</td>
+                                        <td class="vcol-pi{% if not monitoring.is_column_visible('pi') %} vcol-hidden{% endif %}" data-col="pi" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.1f%%' % monitoring.get_fact_pi()) if monitoring.get_fact_pi() else '—' }}</td>
+                                        <td class="vcol-conversions{% if not monitoring.is_column_visible('conversions') %} vcol-hidden{% endif %}" data-col="conversions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(monitoring.fact_conversions).replace(',', ' ') if monitoring.fact_conversions else '—' }}</td>
+                                        <td class="vcol-cr{% if not monitoring.is_column_visible('cr') %} vcol-hidden{% endif %}" data-col="cr" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.get_fact_cr()) if monitoring.get_fact_cr() else '—' }}</td>
+                                        
+                                        <td class="vcol-ivt{% if not monitoring.is_column_visible('ivt') %} vcol-hidden{% endif %}" data-col="ivt" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917; border-left: 1px solid #e7e5e4;">{{ ('%.2f%%' % monitoring.fact_ivt_impressions) if monitoring.fact_ivt_impressions else '—' }}</td>
+                                        <td class="vcol-givt{% if not monitoring.is_column_visible('givt') %} vcol-hidden{% endif %}" data-col="givt" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_givt_impressions) if monitoring.fact_givt_impressions else '—' }}</td>
+                                        <td class="vcol-sivt{% if not monitoring.is_column_visible('sivt') %} vcol-hidden{% endif %}" data-col="sivt" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_sivt_impressions) if monitoring.fact_sivt_impressions else '—' }}</td>
+                                        <td class="vcol-givt_clicks{% if not monitoring.is_column_visible('givt_clicks') %} vcol-hidden{% endif %}" data-col="givt_clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ ('%.2f%%' % monitoring.fact_givt_clicks) if monitoring.fact_givt_clicks else '—' }}</td>
                                         {% set adr_imp = monitoring.adriver_impressions %}
                                         {% set adr_clk = monitoring.adriver_clicks %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(adr_imp).replace(',', ' ') if adr_imp else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(adr_clk).replace(',', ' ') if adr_clk else '—' }}</td>
+                                        <td class="vcol-adriver_impressions{% if not monitoring.is_column_visible('adriver_impressions') %} vcol-hidden{% endif %}" data-col="adriver_impressions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(adr_imp).replace(',', ' ') if adr_imp else '—' }}</td>
+                                        <td class="vcol-adriver_clicks{% if not monitoring.is_column_visible('adriver_clicks') %} vcol-hidden{% endif %}" data-col="adriver_clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(adr_clk).replace(',', ' ') if adr_clk else '—' }}</td>
 
+                                        
                                         {% set wcm_imp = monitoring.get_weborama_impressions() %}
                                         {% set wcm_clk = monitoring.get_weborama_clicks() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917; border-left: 1px solid #e7e5e4;">{{ "{:,}".format(wcm_imp).replace(',', ' ') if wcm_imp else '—' }}</td>
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(wcm_clk).replace(',', ' ') if wcm_clk else '—' }}</td>
+                                        <td class="vcol-weborama_impressions{% if not monitoring.is_column_visible('weborama_impressions') %} vcol-hidden{% endif %}" data-col="weborama_impressions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917; border-left: 1px solid #e7e5e4;">{{ "{:,}".format(wcm_imp).replace(',', ' ') if wcm_imp else '—' }}</td>
+                                        <td class="vcol-weborama_clicks{% if not monitoring.is_column_visible('weborama_clicks') %} vcol-hidden{% endif %}" data-col="weborama_clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; color: #1c1917;">{{ "{:,}".format(wcm_clk).replace(',', ' ') if wcm_clk else '—' }}</td>
                                     </tr>
 
                                     <!-- ВЫПОЛНЕНИЕ -->
@@ -1076,66 +1220,58 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                         <td style="padding: 6px 8px; font-weight: 600; color: #78716c; background: rgba(250, 250, 249, 0.5); position: sticky; left: 0; z-index: 10; border-right: 1px solid #e7e5e4; text-transform: uppercase; font-size: 8px;">Выполнение</td>
 
                                         {% set perf_imp = monitoring.get_uniform_performance_percent(monitoring.fact_impressions, monitoring.plan_impressions) %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if perf_imp %}color: {% if perf_imp > 115 or perf_imp < 85 %}#dc2626{% elif perf_imp >= 100 %}#16a34a{% else %}#f59e0b{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_imp) if perf_imp else '—' }}</td>
+                                        <td class="vcol-impressions{% if not monitoring.is_column_visible('impressions') %} vcol-hidden{% endif %}" data-col="impressions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if perf_imp %}color: {% if perf_imp > 115 or perf_imp < 85 %}#dc2626{% elif perf_imp >= 100 %}#16a34a{% else %}#f59e0b{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_imp) if perf_imp else '—' }}</td>
 
                                         {% set perf_clicks = monitoring.get_uniform_performance_percent(monitoring.fact_clicks, monitoring.plan_clicks) %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if perf_clicks %}color: {% if perf_clicks >= 100 %}#16a34a{% elif perf_clicks >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_clicks) if perf_clicks else '—' }}</td>
+                                        <td class="vcol-clicks{% if not monitoring.is_column_visible('clicks') %} vcol-hidden{% endif %}" data-col="clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if perf_clicks %}color: {% if perf_clicks >= 100 %}#16a34a{% elif perf_clicks >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_clicks) if perf_clicks else '—' }}</td>
 
                                         {% set ctr_diff = monitoring.get_ctr_diff() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if ctr_diff is not none %}color: {% if ctr_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % ctr_diff) if ctr_diff > 0 else ('%.2f' % ctr_diff)) if ctr_diff is not none else '—' }}</td>
+                                        <td class="vcol-ctr{% if not monitoring.is_column_visible('ctr') %} vcol-hidden{% endif %}" data-col="ctr" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if ctr_diff is not none %}color: {% if ctr_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % ctr_diff) if ctr_diff > 0 else ('%.2f' % ctr_diff)) if ctr_diff is not none else '—' }}</td>
 
                                         {% set perf_visits = monitoring.get_uniform_performance_percent(monitoring.fact_visits, monitoring.plan_visits) %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if perf_visits %}color: {% if perf_visits >= 100 %}#16a34a{% elif perf_visits >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_visits) if perf_visits else '—' }}</td>
+                                        <td class="vcol-visits{% if not monitoring.is_column_visible('visits') %} vcol-hidden{% endif %}" data-col="visits" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if perf_visits %}color: {% if perf_visits >= 100 %}#16a34a{% elif perf_visits >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_visits) if perf_visits else '—' }}</td>
 
+                                        
                                         {% set vtr_diff = monitoring.get_vtr_diff() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if vtr_diff is not none %}color: {% if vtr_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0f' % vtr_diff) if vtr_diff > 0 else ('%.0f' % vtr_diff)) if vtr_diff is not none else '—' }}</td>
+                                        <td class="vcol-vtr{% if not monitoring.is_column_visible('vtr') %} vcol-hidden{% endif %}" data-col="vtr" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if vtr_diff is not none %}color: {% if vtr_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % vtr_diff) if vtr_diff > 0 else ('%.1f' % vtr_diff)) if vtr_diff is not none else '—' }}</td>
 
+                                        
                                         {% set bounce_diff = monitoring.get_bounce_diff() %}
                                         {% set bounce_rel_pct = ((bounce_diff / monitoring.plan_bounce_rate * 100)|abs) if (bounce_diff is not none and monitoring.plan_bounce_rate) else None %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if bounce_diff is not none %}color: {% if bounce_diff <= 0 %}#16a34a{% elif bounce_rel_pct is not none and bounce_rel_pct <= 15 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % bounce_diff) if bounce_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-bounce_rate{% if not monitoring.is_column_visible('bounce_rate') %} vcol-hidden{% endif %}" data-col="bounce_rate" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if bounce_diff is not none %}color: {% if bounce_diff <= 0 %}#16a34a{% elif bounce_rel_pct is not none and bounce_rel_pct <= 15 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % bounce_diff) if bounce_diff is not none else '—' }}</td>
                                         {% set time_diff = monitoring.get_time_diff_seconds() %}
                                         {% set time_rel_pct = ((time_diff / monitoring.plan_time_on_site * 100)|abs) if (time_diff is not none and monitoring.plan_time_on_site) else None %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if time_diff is not none %}color: {% if time_diff >= 0 %}#16a34a{% elif time_rel_pct is not none and time_rel_pct <= 15 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0fс' % time_diff) if time_diff > 0 else ('%.0fс' % time_diff)) if time_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-time_on_site{% if not monitoring.is_column_visible('time_on_site') %} vcol-hidden{% endif %}" data-col="time_on_site" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if time_diff is not none %}color: {% if time_diff >= 0 %}#16a34a{% elif time_rel_pct is not none and time_rel_pct <= 15 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.0fс' % time_diff) if time_diff > 0 else ('%.0fс' % time_diff)) if time_diff is not none else '—' }}</td>
                                         {% set depth_diff = monitoring.get_depth_diff() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if depth_diff is not none %}color: {% if depth_diff >= 0 %}#16a34a{% else %}#f59e0b{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % depth_diff) if depth_diff > 0 else ('%.1f' % depth_diff)) if depth_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-page_depth{% if not monitoring.is_column_visible('page_depth') %} vcol-hidden{% endif %}" data-col="page_depth" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if depth_diff is not none %}color: {% if depth_diff >= 0 %}#16a34a{% else %}#f59e0b{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % depth_diff) if depth_diff > 0 else ('%.1f' % depth_diff)) if depth_diff is not none else '—' }}</td>
                                         {% set robotness_diff = monitoring.get_robotness_diff() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if robotness_diff is not none %}color: {% if robotness_diff <= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % robotness_diff) if robotness_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-robotness{% if not monitoring.is_column_visible('robotness') %} vcol-hidden{% endif %}" data-col="robotness" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if robotness_diff is not none %}color: {% if robotness_diff <= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.1f' % robotness_diff) if robotness_diff is not none else '—' }}</td>
                                         {% set pi_diff = monitoring.get_pi_diff_percent() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if pi_diff is not none %}color: {% if pi_diff >= 0 %}#16a34a{% elif pi_diff >= -5 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % pi_diff) if pi_diff > 0 else ('%.1f' % pi_diff)) if pi_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-pi{% if not monitoring.is_column_visible('pi') %} vcol-hidden{% endif %}" data-col="pi" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if pi_diff is not none %}color: {% if pi_diff >= 0 %}#16a34a{% elif pi_diff >= -5 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f' % pi_diff) if pi_diff > 0 else ('%.1f' % pi_diff)) if pi_diff is not none else '—' }}</td>
                                         {% set perf_conversions = monitoring.get_uniform_performance_percent(monitoring.fact_conversions, monitoring.plan_conversions) %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if perf_conversions %}color: {% if perf_conversions >= 100 %}#16a34a{% elif perf_conversions >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_conversions) if perf_conversions else '—' }}</td>
-
+                                        <td class="vcol-conversions{% if not monitoring.is_column_visible('conversions') %} vcol-hidden{% endif %}" data-col="conversions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if perf_conversions %}color: {% if perf_conversions >= 100 %}#16a34a{% elif perf_conversions >= 80 %}#f59e0b{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_conversions) if perf_conversions else '—' }}</td>
                                         {% set cr_diff = monitoring.get_cr_diff() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if cr_diff is not none %}color: {% if cr_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % cr_diff) if cr_diff > 0 else ('%.2f' % cr_diff)) if cr_diff is not none else '—' }}</td>
+                                        <td class="vcol-cr{% if not monitoring.is_column_visible('cr') %} vcol-hidden{% endif %}" data-col="cr" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if cr_diff is not none %}color: {% if cr_diff >= 0 %}#16a34a{% else %}#dc2626{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % cr_diff) if cr_diff > 0 else ('%.2f' % cr_diff)) if cr_diff is not none else '—' }}</td>
 
+                                        
                                         {% set ivt_diff = monitoring.get_ivt_diff() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; border-left: 1px solid #e7e5e4; {% if ivt_diff is not none %}color: {% if ivt_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % ivt_diff) if ivt_diff > 0 else ('%.2f' % ivt_diff)) if ivt_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-ivt{% if not monitoring.is_column_visible('ivt') %} vcol-hidden{% endif %}" data-col="ivt" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; border-left: 1px solid #e7e5e4; {% if ivt_diff is not none %}color: {% if ivt_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % ivt_diff) if ivt_diff > 0 else ('%.2f' % ivt_diff)) if ivt_diff is not none else '—' }}</td>
                                         {% set givt_diff = monitoring.get_givt_diff() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if givt_diff is not none %}color: {% if givt_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % givt_diff) if givt_diff > 0 else ('%.2f' % givt_diff)) if givt_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-givt{% if not monitoring.is_column_visible('givt') %} vcol-hidden{% endif %}" data-col="givt" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if givt_diff is not none %}color: {% if givt_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % givt_diff) if givt_diff > 0 else ('%.2f' % givt_diff)) if givt_diff is not none else '—' }}</td>
                                         {% set sivt_diff = monitoring.get_sivt_diff() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if sivt_diff is not none %}color: {% if sivt_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % sivt_diff) if sivt_diff > 0 else ('%.2f' % sivt_diff)) if sivt_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-sivt{% if not monitoring.is_column_visible('sivt') %} vcol-hidden{% endif %}" data-col="sivt" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if sivt_diff is not none %}color: {% if sivt_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % sivt_diff) if sivt_diff > 0 else ('%.2f' % sivt_diff)) if sivt_diff is not none else '—' }}</td>
                                         {% set givt_clicks_diff = monitoring.get_givt_clicks_diff() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if givt_clicks_diff is not none %}color: {% if givt_clicks_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % givt_clicks_diff) if givt_clicks_diff > 0 else ('%.2f' % givt_clicks_diff)) if givt_clicks_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-givt_clicks{% if not monitoring.is_column_visible('givt_clicks') %} vcol-hidden{% endif %}" data-col="givt_clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if givt_clicks_diff is not none %}color: {% if givt_clicks_diff > 0 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.2f' % givt_clicks_diff) if givt_clicks_diff > 0 else ('%.2f' % givt_clicks_diff)) if givt_clicks_diff is not none else '—' }}</td>
                                         {% set adr_imp_diff = monitoring.get_adriver_impressions_diff_percent() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if adr_imp_diff is not none %}color: {% if adr_imp_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % adr_imp_diff) if adr_imp_diff > 0 else ('%.1f%%' % adr_imp_diff)) if adr_imp_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-adriver_impressions{% if not monitoring.is_column_visible('adriver_impressions') %} vcol-hidden{% endif %}" data-col="adriver_impressions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if adr_imp_diff is not none %}color: {% if adr_imp_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % adr_imp_diff) if adr_imp_diff > 0 else ('%.1f%%' % adr_imp_diff)) if adr_imp_diff is not none else '—' }}</td>
                                         {% set adr_clk_diff = monitoring.get_adriver_clicks_diff_percent() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if adr_clk_diff is not none %}color: {% if adr_clk_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % adr_clk_diff) if adr_clk_diff > 0 else ('%.1f%%' % adr_clk_diff)) if adr_clk_diff is not none else '—' }}</td>
+                                        <td class="vcol-adriver_clicks{% if not monitoring.is_column_visible('adriver_clicks') %} vcol-hidden{% endif %}" data-col="adriver_clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if adr_clk_diff is not none %}color: {% if adr_clk_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % adr_clk_diff) if adr_clk_diff > 0 else ('%.1f%%' % adr_clk_diff)) if adr_clk_diff is not none else '—' }}</td>
 
+                                        
                                         {% set wcm_imp_diff = monitoring.get_weborama_impressions_diff_percent() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; border-left: 1px solid #e7e5e4; {% if wcm_imp_diff is not none %}color: {% if wcm_imp_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % wcm_imp_diff) if wcm_imp_diff > 0 else ('%.1f%%' % wcm_imp_diff)) if wcm_imp_diff is not none else '—' }}</td>
-
+                                        <td class="vcol-weborama_impressions{% if not monitoring.is_column_visible('weborama_impressions') %} vcol-hidden{% endif %}" data-col="weborama_impressions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; border-left: 1px solid #e7e5e4; {% if wcm_imp_diff is not none %}color: {% if wcm_imp_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % wcm_imp_diff) if wcm_imp_diff > 0 else ('%.1f%%' % wcm_imp_diff)) if wcm_imp_diff is not none else '—' }}</td>
                                         {% set wcm_clk_diff = monitoring.get_weborama_clicks_diff_percent() %}
-                                        <td style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if wcm_clk_diff is not none %}color: {% if wcm_clk_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % wcm_clk_diff) if wcm_clk_diff > 0 else ('%.1f%%' % wcm_clk_diff)) if wcm_clk_diff is not none else '—' }}</td>
+                                        <td class="vcol-weborama_clicks{% if not monitoring.is_column_visible('weborama_clicks') %} vcol-hidden{% endif %}" data-col="weborama_clicks" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if wcm_clk_diff is not none %}color: {% if wcm_clk_diff|abs > 15 %}#dc2626{% else %}#16a34a{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ (('+%.1f%%' % wcm_clk_diff) if wcm_clk_diff > 0 else ('%.1f%%' % wcm_clk_diff)) if wcm_clk_diff is not none else '—' }}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1230,30 +1366,30 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                 <thead>
                                     <tr>
                                         <th class="col-label" rowspan="2" style="vertical-align: bottom;">Неделя</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Показы</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Клики</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">CTR</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Визиты</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">{{ monitoring.get_format_label() }}</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Отказы</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Время</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Глубина</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Роботн.</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">PI</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">Conv</th>
-                                        <th class="col-data" rowspan="2" style="vertical-align: bottom;">CR</th>
-                                        <th class="col-data" colspan="6" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">ADRIVER/TARGET ADS/ADSERVING</th>
-                                        <th class="col-data" colspan="2" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">WEBORAMA</th>
+                                        <th class="col-data vcol-impressions{% if not monitoring.is_column_visible('impressions') %} vcol-hidden{% endif %}" data-col="impressions" rowspan="2" style="vertical-align: bottom;">Показы</th>
+                                        <th class="col-data vcol-clicks{% if not monitoring.is_column_visible('clicks') %} vcol-hidden{% endif %}" data-col="clicks" rowspan="2" style="vertical-align: bottom;">Клики</th>
+                                        <th class="col-data vcol-ctr{% if not monitoring.is_column_visible('ctr') %} vcol-hidden{% endif %}" data-col="ctr" rowspan="2" style="vertical-align: bottom;">CTR</th>
+                                        <th class="col-data vcol-visits{% if not monitoring.is_column_visible('visits') %} vcol-hidden{% endif %}" data-col="visits" rowspan="2" style="vertical-align: bottom;">Визиты</th>
+                                        <th class="col-data vcol-vtr{% if not monitoring.is_column_visible('vtr') %} vcol-hidden{% endif %}" data-col="vtr" rowspan="2" style="vertical-align: bottom;">{{ monitoring.get_format_label() }}</th>
+                                        <th class="col-data vcol-bounce_rate{% if not monitoring.is_column_visible('bounce_rate') %} vcol-hidden{% endif %}" data-col="bounce_rate" rowspan="2" style="vertical-align: bottom;">Отказы</th>
+                                        <th class="col-data vcol-time_on_site{% if not monitoring.is_column_visible('time_on_site') %} vcol-hidden{% endif %}" data-col="time_on_site" rowspan="2" style="vertical-align: bottom;">Время</th>
+                                        <th class="col-data vcol-page_depth{% if not monitoring.is_column_visible('page_depth') %} vcol-hidden{% endif %}" data-col="page_depth" rowspan="2" style="vertical-align: bottom;">Глубина</th>
+                                        <th class="col-data vcol-robotness{% if not monitoring.is_column_visible('robotness') %} vcol-hidden{% endif %}" data-col="robotness" rowspan="2" style="vertical-align: bottom;">Роботн.</th>
+                                        <th class="col-data vcol-pi{% if not monitoring.is_column_visible('pi') %} vcol-hidden{% endif %}" data-col="pi" rowspan="2" style="vertical-align: bottom;">PI</th>
+                                        <th class="col-data vcol-conversions{% if not monitoring.is_column_visible('conversions') %} vcol-hidden{% endif %}" data-col="conversions" rowspan="2" style="vertical-align: bottom;">Conv</th>
+                                        <th class="col-data vcol-cr{% if not monitoring.is_column_visible('cr') %} vcol-hidden{% endif %}" data-col="cr" rowspan="2" style="vertical-align: bottom;">CR</th>
+                                        <th class="col-data vcol-group-ivt{% if ivt_visible_count == 0 %} vcol-hidden{% endif %}" data-group="ivt" colspan="{{ ivt_visible_count if ivt_visible_count > 0 else 1 }}" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">ADRIVER/TARGET ADS/ADSERVING</th>
+                                        <th class="col-data vcol-group-weborama{% if weborama_visible_count == 0 %} vcol-hidden{% endif %}" data-group="weborama" colspan="{{ weborama_visible_count if weborama_visible_count > 0 else 1 }}" style="text-align: center; border-left: 1px solid #e7e5e4; border-bottom: 1px solid #e7e5e4;">WEBORAMA</th>
                                     </tr>
                                     <tr>
-                                        <th class="col-data" style="border-left: 1px solid #e7e5e4;">IVT</th>
-                                        <th class="col-data">GIVT</th>
-                                        <th class="col-data">SIVT</th>
-                                        <th class="col-data">GIVT (к)</th>
-                                        <th class="col-data">Показы</th>
-                                        <th class="col-data">Клики</th>
-                                        <th class="col-data" style="border-left: 1px solid #e7e5e4;">Показы</th>
-                                        <th class="col-data">Клики</th>
+                                        <th class="col-data vcol-ivt{% if not monitoring.is_column_visible('ivt') %} vcol-hidden{% endif %}" data-col="ivt" style="border-left: 1px solid #e7e5e4;">IVT</th>
+                                        <th class="col-data vcol-givt{% if not monitoring.is_column_visible('givt') %} vcol-hidden{% endif %}" data-col="givt">GIVT</th>
+                                        <th class="col-data vcol-sivt{% if not monitoring.is_column_visible('sivt') %} vcol-hidden{% endif %}" data-col="sivt">SIVT</th>
+                                        <th class="col-data vcol-givt_clicks{% if not monitoring.is_column_visible('givt_clicks') %} vcol-hidden{% endif %}" data-col="givt_clicks">GIVT (к)</th>
+                                        <th class="col-data vcol-adriver_impressions{% if not monitoring.is_column_visible('adriver_impressions') %} vcol-hidden{% endif %}" data-col="adriver_impressions">Показы</th>
+                                        <th class="col-data vcol-adriver_clicks{% if not monitoring.is_column_visible('adriver_clicks') %} vcol-hidden{% endif %}" data-col="adriver_clicks">Клики</th>
+                                        <th class="col-data vcol-weborama_impressions{% if not monitoring.is_column_visible('weborama_impressions') %} vcol-hidden{% endif %}" data-col="weborama_impressions" style="border-left: 1px solid #e7e5e4;">Показы</th>
+                                        <th class="col-data vcol-weborama_clicks{% if not monitoring.is_column_visible('weborama_clicks') %} vcol-hidden{% endif %}" data-col="weborama_clicks">Клики</th>
                                     </tr>
                                 </thead>
                                 <tbody style="font-size: 8px; color: #44403c; border-top: 1px solid #e7e5e4;">
@@ -1261,26 +1397,30 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     {% set prev = weekly_stats[loop.index0 - 1] if loop.index0 > 0 else None %}
                                     <tr style="border-bottom: 1px solid #e7e5e4;">
                                         <td style="padding: 6px 8px; font-weight: 600; color: #78716c; background: white; position: sticky; left: 0; z-index: 10; border-right: 1px solid #e7e5e4; font-size: 8px; white-space: nowrap;">{{ w.week_start.strftime('%d.%m') }}–{{ w.week_end.strftime('%d.%m') }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;"><span style="white-space: nowrap;">{{ "{:,}".format(w.impressions).replace(',', ' ') if w.impressions else '—' }}{{ trend_arrow(w.impressions, prev.impressions if prev else None) }}</span></td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;"><span style="white-space: nowrap;">{{ "{:,}".format(w.clicks).replace(',', ' ') if w.clicks else '—' }}{{ trend_arrow(w.clicks, prev.clicks if prev else None) }}</span></td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;"><span style="white-space: nowrap;">{{ ('%.2f%%' % w.ctr) if w.ctr else '—' }}{{ trend_arrow(w.ctr, prev.ctr if prev else None) }}</span></td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(w.visits).replace(',', ' ') if w.visits else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.0f%%' % w.vtr) if w.vtr else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;"><span style="white-space: nowrap;">{{ ('%.0f%%' % w.bounce_rate) if w.bounce_rate else '—' }}{{ trend_arrow(w.bounce_rate, prev.bounce_rate if prev else None, inverse=true) }}</span></td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.0f' % w.time_on_site) if w.time_on_site else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f' % w.page_depth) if w.page_depth else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % w.robotness) if w.robotness else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;"><span style="white-space: nowrap;">{{ ('%.0f%%' % w.pi) if w.pi else '—' }}{{ trend_arrow(w.pi, prev.pi if prev else None) }}</span></td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(w.conversions).replace(',', ' ') if w.conversions else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.cr) if w.cr else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; border-left: 1px solid #e7e5e4;">{{ ('%.2f%%' % w.ivt_impressions_percent) if w.ivt_impressions_percent else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.givt_impressions_percent) if w.givt_impressions_percent else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.sivt_impressions_percent) if w.sivt_impressions_percent else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.givt_clicks_percent) if w.givt_clicks_percent else '—' }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.adriver_impressions).replace(',', ' ') if w.adriver_impressions else '—' }}{{ verifier_diff_badge(w.adriver_impressions, w.adriver_scoped_impressions if w.adriver_partial_week else w.impressions) }}{% if w.adriver_partial_week and w.adriver_coverage_start %}<span title="Выгрузка покрывает {{ w.adriver_coverage_start.strftime('%d.%m.%Y') }}{% if w.adriver_coverage_end %}–{{ w.adriver_coverage_end.strftime('%d.%m.%Y') }}{% endif %}, расхождение считается по этим датам" style="margin-left:2px;color:#a8a29e;cursor:help;">ⓘ</span>{% endif %}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.adriver_clicks).replace(',', ' ') if w.adriver_clicks else '—' }}{{ verifier_diff_badge(w.adriver_clicks, w.adriver_scoped_clicks if w.adriver_partial_week else w.clicks) }}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; border-left: 1px solid #e7e5e4; white-space: nowrap;">{{ "{:,}".format(w.weborama_impressions).replace(',', ' ') if w.weborama_impressions else '—' }}{{ verifier_diff_badge(w.weborama_impressions, w.weborama_scoped_impressions if w.weborama_partial_week else w.impressions) }}{% if w.weborama_partial_week and w.weborama_coverage_start %}<span title="Расчёт с {{ w.weborama_coverage_start.strftime('%d.%m.%Y') }} (дата активации пикселя)" style="margin-left:2px;color:#a8a29e;cursor:help;">ⓘ</span>{% endif %}</td>
-                                        <td style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.weborama_clicks).replace(',', ' ') if w.weborama_clicks else '—' }}{{ verifier_diff_badge(w.weborama_clicks, w.weborama_scoped_clicks if w.weborama_partial_week else w.clicks) }}</td>
+                                        <td class="vcol-impressions{% if not monitoring.is_column_visible('impressions') %} vcol-hidden{% endif %}" data-col="impressions" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;"><span style="white-space: nowrap;">{{ "{:,}".format(w.impressions).replace(',', ' ') if w.impressions else '—' }}{{ trend_arrow(w.impressions, prev.impressions if prev else None) }}</span></td>
+                                        <td class="vcol-clicks{% if not monitoring.is_column_visible('clicks') %} vcol-hidden{% endif %}" data-col="clicks" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;"><span style="white-space: nowrap;">{{ "{:,}".format(w.clicks).replace(',', ' ') if w.clicks else '—' }}{{ trend_arrow(w.clicks, prev.clicks if prev else None) }}</span></td>
+                                        <td class="vcol-ctr{% if not monitoring.is_column_visible('ctr') %} vcol-hidden{% endif %}" data-col="ctr" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;"><span style="white-space: nowrap;">{{ ('%.2f%%' % w.ctr) if w.ctr else '—' }}{{ trend_arrow(w.ctr, prev.ctr if prev else None) }}</span></td>
+                                        <td class="vcol-visits{% if not monitoring.is_column_visible('visits') %} vcol-hidden{% endif %}" data-col="visits" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(w.visits).replace(',', ' ') if w.visits else '—' }}</td>
+                                        
+                                        <td class="vcol-vtr{% if not monitoring.is_column_visible('vtr') %} vcol-hidden{% endif %}" data-col="vtr" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % w.vtr) if w.vtr else '—' }}</td>
+                                        
+                                        <td class="vcol-bounce_rate{% if not monitoring.is_column_visible('bounce_rate') %} vcol-hidden{% endif %}" data-col="bounce_rate" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;"><span style="white-space: nowrap;">{{ ('%.1f%%' % w.bounce_rate) if w.bounce_rate else '—' }}{{ trend_arrow(w.bounce_rate, prev.bounce_rate if prev else None, inverse=true) }}</span></td>
+                                        <td class="vcol-time_on_site{% if not monitoring.is_column_visible('time_on_site') %} vcol-hidden{% endif %}" data-col="time_on_site" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.0f' % w.time_on_site) if w.time_on_site else '—' }}</td>
+                                        <td class="vcol-page_depth{% if not monitoring.is_column_visible('page_depth') %} vcol-hidden{% endif %}" data-col="page_depth" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f' % w.page_depth) if w.page_depth else '—' }}</td>
+                                        <td class="vcol-robotness{% if not monitoring.is_column_visible('robotness') %} vcol-hidden{% endif %}" data-col="robotness" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.1f%%' % w.robotness) if w.robotness else '—' }}</td>
+                                        <td class="vcol-pi{% if not monitoring.is_column_visible('pi') %} vcol-hidden{% endif %}" data-col="pi" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;"><span style="white-space: nowrap;">{{ ('%.1f%%' % w.pi) if w.pi else '—' }}{{ trend_arrow(w.pi, prev.pi if prev else None) }}</span></td>
+                                        <td class="vcol-conversions{% if not monitoring.is_column_visible('conversions') %} vcol-hidden{% endif %}" data-col="conversions" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ "{:,}".format(w.conversions).replace(',', ' ') if w.conversions else '—' }}</td>
+                                        <td class="vcol-cr{% if not monitoring.is_column_visible('cr') %} vcol-hidden{% endif %}" data-col="cr" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.cr) if w.cr else '—' }}</td>
+                                        
+                                        <td class="vcol-ivt{% if not monitoring.is_column_visible('ivt') %} vcol-hidden{% endif %}" data-col="ivt" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; border-left: 1px solid #e7e5e4;">{{ ('%.2f%%' % w.ivt_impressions_percent) if w.ivt_impressions_percent else '—' }}</td>
+                                        <td class="vcol-givt{% if not monitoring.is_column_visible('givt') %} vcol-hidden{% endif %}" data-col="givt" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.givt_impressions_percent) if w.givt_impressions_percent else '—' }}</td>
+                                        <td class="vcol-sivt{% if not monitoring.is_column_visible('sivt') %} vcol-hidden{% endif %}" data-col="sivt" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.sivt_impressions_percent) if w.sivt_impressions_percent else '—' }}</td>
+                                        <td class="vcol-givt_clicks{% if not monitoring.is_column_visible('givt_clicks') %} vcol-hidden{% endif %}" data-col="givt_clicks" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e;">{{ ('%.2f%%' % w.givt_clicks_percent) if w.givt_clicks_percent else '—' }}</td>
+                                        <td class="vcol-adriver_impressions{% if not monitoring.is_column_visible('adriver_impressions') %} vcol-hidden{% endif %}" data-col="adriver_impressions" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.adriver_impressions).replace(',', ' ') if w.adriver_impressions else '—' }}{{ verifier_diff_badge(w.adriver_impressions, w.adriver_scoped_impressions if w.adriver_partial_week else w.impressions) }}{% if w.adriver_partial_week and w.adriver_coverage_start %}<span title="Выгрузка покрывает {{ w.adriver_coverage_start.strftime('%d.%m.%Y') }}{% if w.adriver_coverage_end %}–{{ w.adriver_coverage_end.strftime('%d.%m.%Y') }}{% endif %}, расхождение считается по этим датам" style="margin-left:2px;color:#a8a29e;cursor:help;">ⓘ</span>{% endif %}</td>
+                                        <td class="vcol-adriver_clicks{% if not monitoring.is_column_visible('adriver_clicks') %} vcol-hidden{% endif %}" data-col="adriver_clicks" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.adriver_clicks).replace(',', ' ') if w.adriver_clicks else '—' }}{{ verifier_diff_badge(w.adriver_clicks, w.adriver_scoped_clicks if w.adriver_partial_week else w.clicks) }}</td>
+                                        
+                                        <td class="vcol-weborama_impressions{% if not monitoring.is_column_visible('weborama_impressions') %} vcol-hidden{% endif %}" data-col="weborama_impressions" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; border-left: 1px solid #e7e5e4; white-space: nowrap;">{{ "{:,}".format(w.weborama_impressions).replace(',', ' ') if w.weborama_impressions else '—' }}{{ verifier_diff_badge(w.weborama_impressions, w.weborama_scoped_impressions if w.weborama_partial_week else w.impressions) }}{% if w.weborama_partial_week and w.weborama_coverage_start %}<span title="Расчёт с {{ w.weborama_coverage_start.strftime('%d.%m.%Y') }} (дата активации пикселя)" style="margin-left:2px;color:#a8a29e;cursor:help;">ⓘ</span>{% endif %}</td>
+                                        <td class="vcol-weborama_clicks{% if not monitoring.is_column_visible('weborama_clicks') %} vcol-hidden{% endif %}" data-col="weborama_clicks" style="padding: 6px 8px; font-size: 8px; font-weight: 500; color: #57534e; white-space: nowrap;">{{ "{:,}".format(w.weborama_clicks).replace(',', ' ') if w.weborama_clicks else '—' }}{{ verifier_diff_badge(w.weborama_clicks, w.weborama_scoped_clicks if w.weborama_partial_week else w.clicks) }}</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -1290,13 +1430,48 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 
                     </div>
 
-                    <!-- Right: Actions -->
-                    <div style="display: flex; gap: 8px; align-items: center;">
+                    <!-- Right: Actions - absolutely positioned (not a flex sibling of
+                         Left: Info) so it only overlaps the title row visually instead
+                         of reserving its column width for the whole card height, which
+                         was squeezing the KPI table narrower all the way down. -->
+                    <div style="position: absolute; top: 16px; right: 16px; display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
+                        <!-- Timeline Progress -->
+                        {% set days_passed = monitoring.get_days_passed_until_yesterday() %}
+                        {% set progress_percent = (days_passed / monitoring.get_total_days() * 100)|int if monitoring.get_total_days() > 0 else 0 %}
+                        <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(231, 229, 228, 0.6); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(214, 211, 209, 0.7); font-size: 11px; font-variant-numeric: tabular-nums; flex-shrink: 0; margin-right: 4px;">
+                            <div style="width: 56px; background: #e7e5e4; height: 6px; border-radius: 9999px; overflow: hidden; flex-shrink: 0;">
+                                <div style="background: #f59e0b; height: 100%; width: {{ progress_percent }}%;" title="Прошло {{ progress_percent }}%"></div>
+                            </div>
+                            <span style="color: #44403c; font-weight: 500;">{{ days_passed }}/{{ monitoring.get_total_days() }} дн.</span>
+                        </div>
+
                         {% if session.get('user_role') == 'account_manager' %}
                         <button onclick="openMonitoringModal({{ monitoring.id }})" class="btn-icon-ghost" title="Просмотреть">
                             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                         </button>
                         {% else %}
+                        <!-- Visible columns settings (task #46) -->
+                        <div style="position: relative;">
+                            <button type="button" class="visible-columns-gear" title="Настройка столбцов таблицы" onclick="toggleVisibleColumnsPopover(event, {{ monitoring.id }})">
+                                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </button>
+                            <div class="visible-columns-popover" id="visible-columns-popover-{{ monitoring.id }}" style="left: auto; right: 0;">
+                                <div class="visible-columns-popover-header">
+                                    <span>Видимые столбцы</span>
+                                    <button type="button" class="visible-columns-popover-close" onclick="closeVisibleColumnsPopover({{ monitoring.id }})">
+                                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
+                                {% for key, _ in monitoring.COLUMN_DEFS %}
+                                <label class="custom-checkbox">
+                                    <input type="checkbox" value="{{ key }}" {{ 'checked' if monitoring.is_column_visible(key) else '' }} onchange="onVisibleColumnToggle({{ monitoring.id }})">
+                                    <span class="box"><svg viewBox="0 0 10 10" fill="none"><path d="M1.5 5L4 7.5L8.5 2" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                                    <span>{{ monitoring.get_column_label(key) }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+
                         <!-- Kebab Menu -->
                         <div class="kebab-menu">
                             <button class="kebab-button" onclick="toggleMonitoringKebab(event, {{ monitoring.id }})">
@@ -1664,6 +1839,78 @@ function setChurnStatus(monitoringId, churned) {
         });
 }
 
+// Gear icon + popover (task #46) - which stat columns show on this card.
+// Toggling a checkbox hides/shows that column INSTANTLY on this card (no
+// reload, no waiting for the popover to close) via CSS - every cell for
+// every column is always rendered server-side, just marked .vcol-hidden
+// when off. The group headers (ADRIVER/WEBORAMA) recompute their own
+// colspan from however many of their sub-columns are currently visible.
+// The choice is also saved to the server in the background so it sticks
+// on the next page load.
+const IVT_GROUP_COLS = ['ivt', 'givt', 'sivt', 'givt_clicks', 'adriver_impressions', 'adriver_clicks'];
+const WEBORAMA_GROUP_COLS = ['weborama_impressions', 'weborama_clicks'];
+
+function toggleVisibleColumnsPopover(event, monitoringId) {
+    event.stopPropagation();
+    const popover = document.getElementById(`visible-columns-popover-${monitoringId}`);
+    const wasOpen = popover.classList.contains('open');
+    closeAllVisibleColumnsPopovers();
+    if (!wasOpen) popover.classList.add('open');
+}
+
+function closeAllVisibleColumnsPopovers() {
+    document.querySelectorAll('.visible-columns-popover.open').forEach(p => p.classList.remove('open'));
+}
+
+function closeVisibleColumnsPopover(monitoringId) {
+    closeAllVisibleColumnsPopovers();
+}
+
+document.addEventListener('click', function(e) {
+    if (e.target.closest('.visible-columns-popover') || e.target.closest('.visible-columns-gear')) return;
+    closeAllVisibleColumnsPopovers();
+});
+
+function applyVisibleColumns(monitoringId, visibleKeys) {
+    const card = document.getElementById(`monitoring-${monitoringId}`);
+    if (!card) return;
+    const visibleSet = new Set(visibleKeys);
+    card.querySelectorAll('[data-col]').forEach(el => {
+        el.classList.toggle('vcol-hidden', !visibleSet.has(el.dataset.col));
+    });
+    const ivtCount = IVT_GROUP_COLS.filter(k => visibleSet.has(k)).length;
+    const weboramaCount = WEBORAMA_GROUP_COLS.filter(k => visibleSet.has(k)).length;
+    card.querySelectorAll('[data-group="ivt"]').forEach(th => {
+        th.classList.toggle('vcol-hidden', ivtCount === 0);
+        th.setAttribute('colspan', Math.max(ivtCount, 1));
+    });
+    card.querySelectorAll('[data-group="weborama"]').forEach(th => {
+        th.classList.toggle('vcol-hidden', weboramaCount === 0);
+        th.setAttribute('colspan', Math.max(weboramaCount, 1));
+    });
+}
+
+function onVisibleColumnToggle(monitoringId) {
+    const popover = document.getElementById(`visible-columns-popover-${monitoringId}`);
+    const columns = Array.from(popover.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+    applyVisibleColumns(monitoringId, columns);
+    fetch(`/monitoring/${monitoringId}/visible-columns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ columns })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) {
+                alert('Ошибка: ' + (data.error || 'неизвестная ошибка'));
+            }
+        })
+        .catch(err => {
+            console.error('visible-columns error:', err);
+            alert('Ошибка при обращении к серверу');
+        });
+}
+
 function refreshMonitoring(monitoringId) {
     const button = event.currentTarget;
     const icon = button.querySelector('svg');
@@ -1995,12 +2242,12 @@ function refreshAllMonitorings() {
 
                     <div class="form-group">
                         <label for="plan_vtr" id="plan_vtr_label">VTR (%)</label>
-                        <input type="number" id="plan_vtr" name="plan_vtr" step="1" min="0" max="100" placeholder="70">
+                        <input type="number" id="plan_vtr" name="plan_vtr" step="0.1" min="0" max="100" placeholder="70">
                     </div>
 
                     <div class="form-group">
                         <label for="plan_bounce_rate">Отказы (%)</label>
-                        <input type="number" id="plan_bounce_rate" name="plan_bounce_rate" step="1" placeholder="45">
+                        <input type="number" id="plan_bounce_rate" name="plan_bounce_rate" step="0.1" placeholder="45">
                     </div>
 
                     <div class="form-group">
@@ -2040,7 +2287,7 @@ function refreshAllMonitorings() {
 
                     <div class="form-group">
                         <label for="fact_bounce_rate">Отказы (%)</label>
-                        <input type="number" id="fact_bounce_rate" name="fact_bounce_rate" step="1" placeholder="45">
+                        <input type="number" id="fact_bounce_rate" name="fact_bounce_rate" step="0.1" placeholder="45">
                     </div>
 
                     <div class="form-group">
@@ -2309,7 +2556,7 @@ function openMonitoringModal(monitoringId = null) {
                 document.getElementById('plan_pi').value = data.plan_pi || '';
                 document.getElementById('fact_visits').value = data.fact_visits || '';
                 document.getElementById('fact_conversions').value = data.fact_conversions || '';
-                document.getElementById('fact_bounce_rate').value = data.fact_bounce_rate ? Math.round(data.fact_bounce_rate) : '';
+                document.getElementById('fact_bounce_rate').value = data.fact_bounce_rate ? data.fact_bounce_rate.toFixed(1) : '';
                 document.getElementById('fact_time_on_site').value = data.fact_time_on_site ? Math.round(data.fact_time_on_site) : '';
                 document.getElementById('fact_page_depth').value = data.fact_page_depth ? data.fact_page_depth.toFixed(1) : '';
                 document.getElementById('fact_robotness').value = data.fact_robotness ? data.fact_robotness.toFixed(1) : '';
