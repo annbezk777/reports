@@ -1404,6 +1404,14 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 <script>
 // Filter function
 const MONITORING_FILTER_STORAGE_KEY = 'monitoringFilterState';
+const MONITORING_SCROLL_RESTORE_KEY = 'monitoringScrollRestore';
+
+function restoreMonitoringScrollPosition() {
+    const saved = sessionStorage.getItem(MONITORING_SCROLL_RESTORE_KEY);
+    if (saved === null) return;
+    sessionStorage.removeItem(MONITORING_SCROLL_RESTORE_KEY);
+    window.scrollTo(0, parseInt(saved, 10) || 0);
+}
 
 function saveMonitoringFilterState() {
     sessionStorage.setItem(MONITORING_FILTER_STORAGE_KEY, JSON.stringify({
@@ -1533,6 +1541,7 @@ function bulkDeleteMonitoringsSelected() {
 
 document.addEventListener('DOMContentLoaded', function() {
     restoreMonitoringFilterState();
+    restoreMonitoringScrollPosition();
 
     // Deep link from Главная ("Метрики эффективности" drill-down) -
     // ?search=<name> pre-fills the search box so only that campaign shows.
@@ -3168,6 +3177,7 @@ function submitFinishMonth() {
                 else if (data.report_kept_active) msg += ` Связанный отчёт остался активным (ещё ${data.other_active_monitorings} активных мониторингов на нём).`;
                 if (data.new_monitoring_id) msg += ' Создана карточка-продолжение.';
                 alert(msg);
+                sessionStorage.setItem(MONITORING_SCROLL_RESTORE_KEY, String(window.scrollY));
                 window.location.href = "{{ url_for('monitoring', tab='active') }}";
             } else {
                 errorBox.textContent = data.error || 'Неизвестная ошибка';
