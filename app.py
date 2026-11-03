@@ -740,6 +740,29 @@ def dashboard():
     for entry in manager_avg_success:
         entry['color'] = bucket_color(entry['percent'])
 
+    # Same breakdown again, but by Account-менеджер instead of trafik - a
+    # toggle on the dashboard switches between the two views of the same
+    # underlying metric_success computation.
+    account_manager_names = sorted({
+        (mo.account_manager or '').strip() for mo in active_monitorings if (mo.account_manager or '').strip()
+    })
+    account_manager_metric_success = {}
+    for account_manager_name in account_manager_names:
+        am_monitorings = [mo for mo in active_monitorings if (mo.account_manager or '').strip() == account_manager_name]
+        computed = compute_metric_success(am_monitorings)
+        if computed:
+            account_manager_metric_success[account_manager_name] = computed
+
+    account_manager_avg_success = [
+        {
+            'name': name,
+            'percent': round(sum(m['percent'] for m in metrics) / len(metrics)),
+        }
+        for name, metrics in account_manager_metric_success.items()
+    ]
+    for entry in account_manager_avg_success:
+        entry['color'] = bucket_color(entry['percent'])
+
     # 2. Verifier discrepancies (показы) across every monitoring that has
     # Weborama and/or Adriver/TargetADS data to compare against SAPE fact.
     # A big diff can just mean the verifier side hasn't been refreshed in
@@ -977,6 +1000,8 @@ def dashboard():
                          metric_success=metric_success,
                          manager_metric_success=manager_metric_success,
                          manager_avg_success=manager_avg_success,
+                         account_manager_metric_success=account_manager_metric_success,
+                         account_manager_avg_success=account_manager_avg_success,
                          verifier_avg_abs_diff=verifier_avg_abs_diff,
                          verifier_top_diffs=verifier_top_diffs,
                          avg_ivt_by_source=avg_ivt_by_source,

@@ -100,21 +100,27 @@
     <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 32px;">
         <!-- Metric Success Rates (compact) -->
         <div class="metric-card">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
-                <div style="width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--peach-light) 0%, var(--peach-bg) 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                    <svg width="16" height="16" fill="none" stroke="var(--primary-orange)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v6m3-6v6m3-6v6M5 9l4-4 4 4 6-6"/></svg>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--peach-light) 0%, var(--peach-bg) 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <svg width="16" height="16" fill="none" stroke="var(--primary-orange)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v6m3-6v6m3-6v6M5 9l4-4 4 4 6-6"/></svg>
+                    </div>
+                    <div>
+                        <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                            Метрики эффективности
+                        </h3>
+                        <p id="metricSuccessSubtitle" style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+                            По трафик-менеджерам, относительно плана
+                        </p>
+                    </div>
                 </div>
-                <div>
-                    <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
-                        Метрики эффективности
-                    </h3>
-                    <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
-                        По трафик-менеджерам, относительно плана
-                    </p>
+                <div style="display: inline-flex; border-radius: 7px; overflow: hidden; border: 1px solid var(--border-color); flex-shrink: 0;">
+                    <button type="button" id="metricSuccessTabManager" onclick="switchMetricSuccessTab('manager')" style="padding: 5px 10px; border: none; cursor: pointer; font-weight: 600; font-size: 11px; background: var(--primary-orange); color: white;">Трафик</button>
+                    <button type="button" id="metricSuccessTabAccountManager" onclick="switchMetricSuccessTab('account_manager')" style="padding: 5px 10px; border: none; border-left: 1px solid var(--border-color); cursor: pointer; font-weight: 600; font-size: 11px; background: white; color: var(--text-secondary);">Аккаунт</button>
                 </div>
             </div>
             {% if manager_metric_success %}
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
+            <div id="metricSuccessGridManager" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
                 {% for manager_name, metrics in manager_metric_success.items() %}
                 {% set manager_idx = loop.index %}
                 <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 12px;">
@@ -129,6 +135,25 @@
                 </div>
                 {% endfor %}
             </div>
+            {% endif %}
+            {% if account_manager_metric_success %}
+            <div id="metricSuccessGridAccountManager" style="display: none; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
+                {% for am_name, metrics in account_manager_metric_success.items() %}
+                {% set am_idx = loop.index %}
+                <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 12px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">{{ am_name }}</span>
+                        <span style="font-size: 10px; font-weight: 600; color: var(--primary-orange); background: var(--peach-bg); border-radius: 999px; padding: 2px 8px; white-space: nowrap;">{{ account_manager_avg_success[loop.index0].percent }}%</span>
+                    </div>
+                    <div style="height: 190px; position: relative;">
+                        <canvas id="amBarChart-{{ am_idx }}"></canvas>
+                    </div>
+                    <div id="amDetail-{{ am_idx }}" style="display: none; margin-top: 8px;"></div>
+                </div>
+                {% endfor %}
+            </div>
+            {% elif manager_metric_success %}
+            <p id="metricSuccessGridAccountManagerEmpty" style="display: none; text-align: center; color: var(--text-secondary); padding: 20px 0; margin: 0;">Нет данных по account-менеджерам</p>
             {% endif %}
         </div>
 
@@ -672,6 +697,39 @@ createMetricBarChart(
     {{ sorted_metrics|tojson }}
 );
 {% endfor %}
+
+{% for am_name, metrics in account_manager_metric_success.items() %}
+{% set sorted_am_metrics = metrics|sort(attribute='percent', reverse=True) %}
+createMetricBarChart(
+    'amBarChart-{{ loop.index }}',
+    'amDetail-{{ loop.index }}',
+    {{ sorted_am_metrics|tojson }}
+);
+{% endfor %}
+
+// Toggle between "Метрики эффективности" grouped by trafik-menedzher vs
+// account-menedzher - both grids/charts are already built above, this
+// just switches which one is visible.
+function switchMetricSuccessTab(which) {
+    const managerGrid = document.getElementById('metricSuccessGridManager');
+    const amGrid = document.getElementById('metricSuccessGridAccountManager');
+    const amEmpty = document.getElementById('metricSuccessGridAccountManagerEmpty');
+    const tabManager = document.getElementById('metricSuccessTabManager');
+    const tabAm = document.getElementById('metricSuccessTabAccountManager');
+    const subtitle = document.getElementById('metricSuccessSubtitle');
+
+    const showManager = which === 'manager';
+    if (managerGrid) managerGrid.style.display = showManager ? 'grid' : 'none';
+    if (amGrid) amGrid.style.display = showManager ? 'none' : 'grid';
+    if (amEmpty) amEmpty.style.display = showManager ? 'none' : 'block';
+    if (subtitle) subtitle.textContent = showManager ? 'По трафик-менеджерам, относительно плана' : 'По account-менеджерам, относительно плана';
+
+    [[tabManager, showManager], [tabAm, !showManager]].forEach(([btn, active]) => {
+        if (!btn) return;
+        btn.style.background = active ? 'var(--primary-orange)' : 'white';
+        btn.style.color = active ? 'white' : 'var(--text-secondary)';
+    });
+}
 
 </script>
 {% endblock %}
