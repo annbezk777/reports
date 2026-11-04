@@ -54,7 +54,8 @@ class AsanaClient:
             f'{self.BASE_URL}/tasks/{task_gid}',
             headers={'Authorization': f'Bearer {self.token}'},
             params={
-                'opt_fields': 'name,notes,custom_fields.name,custom_fields.type,'
+                'opt_fields': 'name,notes,assignee.name,assignee.email,'
+                              'custom_fields.name,custom_fields.type,'
                               'custom_fields.text_value,custom_fields.display_value,'
                               'custom_fields.date_value.date,'
                               'custom_fields.multi_enum_values.name'
@@ -139,6 +140,23 @@ class AsanaClient:
             'verifier_badge': cls._detect_verifier_badge(cls._notes_field(notes, r'Верификатор')),
         }
         return {k: v for k, v in result.items() if v}
+
+    @classmethod
+    def get_sape_ids(cls, task_data):
+        """Pull SAPE's own numeric account/client IDs out of the task's
+        'user_id' and 'client_id' custom fields (set by the DSP-launch
+        intake form) - lets the report form look up and auto-select the
+        matching SapeAccount/Client the moment the Asana link is pasted,
+        instead of the trafficker re-picking them by hand."""
+        fields_by_name = {}
+        for f in task_data.get('custom_fields', []):
+            name = (f.get('name') or '').strip().lower()
+            if name:
+                fields_by_name[name] = f
+        return {
+            'sape_user_id': cls._field_text(fields_by_name.get('user_id')),
+            'sape_client_id': cls._field_text(fields_by_name.get('client_id')),
+        }
 
     @classmethod
     def _detect_format_index(cls, format_field):

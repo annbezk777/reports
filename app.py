@@ -197,6 +197,15 @@ ACCOUNT_MANAGER_NAMES = {
     'v.fesenko@sape.ru': 'Владислав',
 }
 
+# Asana assignee email -> the short name used in the "Менеджер" select
+# (#formManager in reports.html: Даня/Саша/Аня/Лена) - task #52.
+TRAFFIC_MANAGER_EMAILS = {
+    'd.krugovyh@sape.ru': 'Даня',
+    'a.kotenev@sape.ru': 'Саша',
+    'e.fokina@sape.ru': 'Лена',
+    'a.bereznyak@sape.ru': 'Аня',
+}
+
 
 @app.template_filter('am_label')
 def account_manager_label(email):
@@ -4493,12 +4502,29 @@ def get_asana_task_info():
 
     notes_fields = AsanaClient.parse_task_notes(task.get('notes'))
     account_manager_email = notes_fields.get('account_manager_email')
+    assignee = task.get('assignee') or {}
+    assignee_email = assignee.get('email')
+
+    sape_ids = AsanaClient.get_sape_ids(task)
+    sape_account = None
+    if sape_ids.get('sape_user_id'):
+        sape_account = SapeAccount.query.filter_by(sape_user_id=sape_ids['sape_user_id']).first()
+    sape_client = None
+    if sape_ids.get('sape_client_id'):
+        sape_client = Client.query.filter_by(client_id=sape_ids['sape_client_id']).first()
+
     return jsonify({
         'task_name': task.get('name'),
         'google_sheet_url': notes_fields.get('google_sheet_url'),
         'account_manager_email': account_manager_email,
         'account_manager_label': account_manager_label(account_manager_email),
         'metrika_counter_id': notes_fields.get('metrika_counter_id'),
+        'assignee_name': assignee.get('name'),
+        'assignee_manager': TRAFFIC_MANAGER_EMAILS.get(assignee_email),
+        'account_id': sape_account.id if sape_account else None,
+        'account_label': f'{sape_account.name} | {sape_account.login}' if sape_account else None,
+        'client_db_id': sape_client.id if sape_client else None,
+        'client_name': sape_client.name if sape_client else None,
     })
 
 
