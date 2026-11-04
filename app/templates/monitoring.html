@@ -12,26 +12,41 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 
 {% block extra_head %}
 <style>
+/* Segmented control: one floating gray track, segments have no border of
+   their own - only the active one gets a solid pill + shadow, like a
+   native iOS/macOS segmented control. */
+.tab-segmented-control {
+    display: inline-flex;
+    background: #F1F1F0;
+    border-radius: 999px;
+    padding: 3px;
+    gap: 2px;
+}
 .tab-button {
     padding: 10px 20px;
-    border-radius: 8px;
+    border-radius: 999px;
     font-size: 10px;
     font-weight: 500;
     text-decoration: none;
     color: var(--text-secondary);
-    background: white;
-    border: 1px solid var(--border-color);
-    transition: all 0.2s;
+    background: transparent;
+    border: none;
+    transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
     cursor: pointer;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .tab-button:hover {
-    background: var(--bg-light);
+    color: var(--text-primary);
 }
 .tab-button.tab-active {
     background: var(--primary-orange);
     color: white;
-    border-color: var(--primary-orange);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.tab-button.tab-active:hover {
+    color: white;
 }
 
 .report-card {
@@ -765,106 +780,96 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 <!-- Content Body -->
 <div class="content-body">
     <!-- Toolbar -->
-    <div id="monitoringToolbar" style="display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start;">
-        <!-- Tabs -->
-        <div>
-            <div style="display: flex; gap: 8px;">
-                {% if tab == 'active' %}
-                    <span class="tab-button tab-active" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Активные</span>
-                {% else %}
-                    <a href="{{ url_for('monitoring', tab='active') }}" class="tab-button" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Активные</a>
-                {% endif %}
-                {% if tab == 'frozen' %}
-                    <span class="tab-button tab-active" style="width: 100px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Завершённые</span>
-                {% else %}
-                    <a href="{{ url_for('monitoring', tab='frozen') }}" class="tab-button" style="width: 100px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Завершённые</a>
-                {% endif %}
+    <div id="monitoringToolbar" style="background: white; border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 24px; overflow: hidden;">
+        <!-- Row 1: Tabs + Обновить все -->
+        <div class="monitoring-toolbar-row" style="display: flex; align-items: center; gap: 8px; padding: 16px;">
+            <div class="tab-segmented-control" role="tablist" aria-label="Статус мониторингов">
+                <a href="{{ url_for('monitoring', tab='active') }}" class="tab-button{{ ' tab-active' if tab == 'active' else '' }}" role="tab" aria-selected="{{ 'true' if tab == 'active' else 'false' }}" style="width: 90px; height: 32px; box-sizing: border-box;">Активные</a>
+                <a href="{{ url_for('monitoring', tab='frozen') }}" class="tab-button{{ ' tab-active' if tab == 'frozen' else '' }}" role="tab" aria-selected="{{ 'true' if tab == 'frozen' else 'false' }}" style="width: 100px; height: 32px; box-sizing: border-box;">Завершённые</a>
                 {% if session.get('user_role') != 'account_manager' %}
-                    {% if tab == 'archive' %}
-                        <span class="tab-button tab-active" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Архив</span>
-                    {% else %}
-                        <a href="{{ url_for('monitoring', tab='archive') }}" class="tab-button" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">Архив</a>
-                    {% endif %}
+                <a href="{{ url_for('monitoring', tab='archive') }}" class="tab-button{{ ' tab-active' if tab == 'archive' else '' }}" role="tab" aria-selected="{{ 'true' if tab == 'archive' else 'false' }}" style="width: 90px; height: 32px; box-sizing: border-box;">Архив</a>
                 {% endif %}
             </div>
-            {% if tab == 'frozen' %}
-            <div style="margin-top: 8px;">
-                <select onchange="window.location.href='{{ url_for('monitoring', tab='frozen') }}' + (this.value ? '&month=' + this.value : '')"
-                        style="width: 160px; height: 30px; font-size: 11px; border: 1px solid var(--border-color); border-radius: 6px; padding: 0 6px; background: white;">
-                    <option value="">Все месяцы</option>
-                    {% for m in frozen_months %}
-                    <option value="{{ m }}" {% if m == month_filter %}selected{% endif %}>{{ (m ~ '-01')|format_month }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+
+            {% if monitorings and session.get('user_role') != 'account_manager' %}
+            <button onclick="refreshAllMonitorings()" class="btn btn-primary" style="margin-left: auto; width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px;">
+                <svg class="btn-icon" style="width: 12px; height: 12px; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span class="btn-label">Обновить все</span>
+            </button>
             {% endif %}
-            <span onclick="selectAllMonitorings()"
-                  onmouseover="this.style.color='var(--primary-orange)'"
-                  onmouseout="this.style.color='var(--text-secondary)'"
-                  style="display: block; width: 90px; margin-top: 6px; text-align: center; font-size: 10px; color: var(--text-secondary); cursor: pointer;">
-                Выбрать все
-            </span>
         </div>
 
-        <!-- Search -->
-        <div style="flex: 1; position: relative;">
-            <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-            </svg>
-            <input type="text"
-                   id="searchInput"
-                   placeholder="Поиск по названию..."
-                   style="width: 100%; height: 38px; padding: 0 16px 0 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary);"
-                   onkeyup="filterMonitoring()">
+        {% if tab == 'frozen' %}
+        <div style="padding: 0 16px 12px 16px;">
+            <select onchange="window.location.href='{{ url_for('monitoring', tab='frozen') }}' + (this.value ? '&month=' + this.value : '')"
+                    style="width: 160px; height: 30px; font-size: 11px; border: 1px solid var(--border-color); border-radius: 6px; padding: 0 6px; background: white;">
+                <option value="">Все месяцы</option>
+                {% for m in frozen_months %}
+                <option value="{{ m }}" {% if m == month_filter %}selected{% endif %}>{{ (m ~ '-01')|format_month }}</option>
+                {% endfor %}
+            </select>
         </div>
-
-        <!-- Manager Filter -->
-        <select id="managerFilter" onchange="filterMonitoring()"
-                style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="">Трафик-менеджер</option>
-            {% set all_managers = monitorings | map(attribute='manager') | select | unique | list %}
-            {% for manager in all_managers %}
-                <option value="{{ manager|lower }}" {% if manager_filter and manager_filter|lower == manager|lower %}selected{% endif %}>
-                    {{ manager }}
-                </option>
-            {% endfor %}
-            <option value="unassigned" {% if manager_filter == 'unassigned' %}selected{% endif %}>Не назначен</option>
-        </select>
-
-        <!-- Account Manager Filter -->
-        <select id="accountManagerFilter" onchange="filterMonitoring()"
-                style="width: 150px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="">Аккаунт-менеджер</option>
-            {% set all_account_managers = monitorings | map(attribute='account_manager') | select | unique | list %}
-            {% for am in all_account_managers %}
-                <option value="{{ am|lower }}">{{ am|am_label }}</option>
-            {% endfor %}
-            <option value="unassigned">Не назначен</option>
-        </select>
-
-        <!-- Sort -->
-        <select id="sortFilter" title="Сортировка" onchange="filterMonitoring()"
-                style="width: 170px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="newest">Сначала новые</option>
-            <option value="oldest">Сначала старые</option>
-            <option value="name">По названию (А-Я)</option>
-        </select>
-
-        <!-- Action Buttons -->
-        {% if monitorings and session.get('user_role') != 'account_manager' %}
-        <button onclick="openMonitoringModal()" class="btn btn-secondary" style="width: 160px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px; color: var(--text-secondary); white-space: nowrap;">
-            <svg class="btn-icon" style="width: 12px; height: 12px; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            <span class="btn-label">Добавить мониторинг</span>
-        </button>
-        <button onclick="refreshAllMonitorings()" class="btn btn-primary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px;">
-            <svg class="btn-icon" style="width: 12px; height: 12px; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-            <span class="btn-label">Обновить все</span>
-        </button>
         {% endif %}
+
+        <div style="border-top: 1px solid var(--border-color);"></div>
+
+        <!-- Row 2: Search + Filters + Добавить мониторинг -->
+        <div class="monitoring-toolbar-row" style="display: flex; align-items: center; gap: 12px; padding: 16px; flex-wrap: wrap;">
+            <!-- Search -->
+            <div style="flex: 1; min-width: 200px; position: relative;">
+                <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <input type="text"
+                       id="searchInput"
+                       placeholder="Поиск по названию..."
+                       style="width: 100%; height: 38px; padding: 0 16px 0 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary);"
+                       onkeyup="filterMonitoring()">
+            </div>
+
+            <!-- Manager Filter -->
+            <select id="managerFilter" onchange="filterMonitoring()"
+                    style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
+                <option value="">Трафик-менеджер</option>
+                {% set all_managers = monitorings | map(attribute='manager') | select | unique | list %}
+                {% for manager in all_managers %}
+                    <option value="{{ manager|lower }}" {% if manager_filter and manager_filter|lower == manager|lower %}selected{% endif %}>
+                        {{ manager }}
+                    </option>
+                {% endfor %}
+                <option value="unassigned" {% if manager_filter == 'unassigned' %}selected{% endif %}>Не назначен</option>
+            </select>
+
+            <!-- Account Manager Filter -->
+            <select id="accountManagerFilter" onchange="filterMonitoring()"
+                    style="width: 150px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
+                <option value="">Аккаунт-менеджер</option>
+                {% set all_account_managers = monitorings | map(attribute='account_manager') | select | unique | list %}
+                {% for am in all_account_managers %}
+                    <option value="{{ am|lower }}">{{ am|am_label }}</option>
+                {% endfor %}
+                <option value="unassigned">Не назначен</option>
+            </select>
+
+            <!-- Sort -->
+            <select id="sortFilter" title="Сортировка" onchange="filterMonitoring()"
+                    style="width: 170px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; color: var(--text-secondary); background: white; cursor: pointer;">
+                <option value="newest">Сначала новые</option>
+                <option value="oldest">Сначала старые</option>
+                <option value="name">По названию (А-Я)</option>
+            </select>
+
+            {% if monitorings and session.get('user_role') != 'account_manager' %}
+            <button onclick="openMonitoringModal()" class="btn btn-secondary" style="margin-left: auto; width: 160px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px; color: var(--text-secondary); white-space: nowrap;">
+                <svg class="btn-icon" style="width: 12px; height: 12px; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                <span class="btn-label">Добавить мониторинг</span>
+            </button>
+            {% endif %}
+        </div>
     </div>
 
     {% if tab == 'frozen' and monitorings %}
@@ -889,21 +894,6 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
             </strong>
             <span style="color: var(--text-secondary); font-size: 11px;">(<span id="churnedSummaryCount">{{ churned_count }}/{{ churned_total }}</span> с отметкой)</span>
         </div>
-    </div>
-    {% endif %}
-
-    {% if session.get('user_role') != 'account_manager' %}
-    <!-- Bulk Action Bar -->
-    <div id="bulkMonitoringActionBar" style="display: none; align-items: center; gap: 12px; padding: 10px 16px; margin-bottom: 16px; background: var(--bg-light); border-radius: 8px; font-size: 10px;">
-        <span id="bulkMonitoringSelectedCount" style="color: var(--text-secondary);"></span>
-        {% if show_archived %}
-        {% if session.get('user_email') == admin_email %}
-        <button onclick="bulkDeleteMonitoringsSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">Удалить</button>
-        {% endif %}
-        {% else %}
-        <button onclick="bulkArchiveMonitoringsSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">В архив</button>
-        {% endif %}
-        <button onclick="clearBulkMonitoringSelection()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">Отмена</button>
     </div>
     {% endif %}
 
@@ -949,19 +939,14 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                  data-created-at="{{ monitoring.created_at.isoformat() if monitoring.created_at else '' }}">
 
                 <div style="display: flex; gap: 16px; align-items: start;">
-                    <!-- Select -->
-                    {% if session.get('user_role') != 'account_manager' %}
-                    <input type="checkbox" class="monitoring-select-checkbox" data-monitoring-id="{{ monitoring.id }}"
-                           onchange="updateBulkMonitoringBar()" style="margin-top: 4px; width: 9px; height: 9px; cursor: pointer; flex-shrink: 0; accent-color: var(--primary-orange);">
-                    {% endif %}
-
                     <!-- Left: Info -->
                     <div style="flex: 1; min-width: 0;">
                         <!-- Title on its own line; account/managers/period/status/badges on the line below -->
                         <div style="margin-bottom: 10px;">
-                            <div style="display: flex; align-items: center; gap: 5px 7px; margin-bottom: 5px; padding-right: 230px;">
-                                <!-- Title -->
-                                <h3 class="monitoring-card-title" style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0; line-height: 1.3;">
+                            <div class="monitoring-card-title-row" style="display: flex; align-items: center; gap: 5px 7px; margin-bottom: 5px;">
+                                <!-- Title - truncated to one line so a long name never
+                                     wraps and pushes the Right: Actions block around. -->
+                                <h3 class="monitoring-card-title" title="{{ monitoring.name }}" style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0; line-height: 1.3; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                     {{ monitoring.name }}
                                 </h3>
 
@@ -988,6 +973,131 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                 </span>
                                 {% endif %}
 
+                                <!-- Right: Actions - a flex sibling of just the
+                                     title row (not the whole Left: Info column),
+                                     so its own row grows to fit it and it can
+                                     never reserve column width across the KPI
+                                     table below (that was the old squeeze bug). -->
+                                <div class="monitoring-card-actions" style="margin-left: auto; display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
+                                    <!-- Timeline Progress -->
+                                    {% set days_passed = monitoring.get_days_passed_until_yesterday() %}
+                                    {% set progress_percent = (days_passed / monitoring.get_total_days() * 100)|int if monitoring.get_total_days() > 0 else 0 %}
+                                    <div class="monitoring-timeline-badge" style="display: inline-flex; align-items: center; gap: 8px; background: rgba(231, 229, 228, 0.6); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(214, 211, 209, 0.7); font-size: 11px; font-variant-numeric: tabular-nums; flex-shrink: 0; margin-right: 4px;">
+                                        <div class="monitoring-timeline-bar" style="width: 56px; background: #e7e5e4; height: 6px; border-radius: 9999px; overflow: hidden; flex-shrink: 0;">
+                                            <div style="background: #f59e0b; height: 100%; width: {{ progress_percent }}%;" title="Прошло {{ progress_percent }}%"></div>
+                                        </div>
+                                        <span style="color: #44403c; font-weight: 500;">{{ days_passed }}/{{ monitoring.get_total_days() }} дн.</span>
+                                    </div>
+
+                                    {% if session.get('user_role') == 'account_manager' %}
+                                    <button onclick="openMonitoringModal({{ monitoring.id }})" class="btn-icon-ghost" title="Просмотреть">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                    </button>
+                                    {% else %}
+                                    <!-- Visible columns settings (task #46) -->
+                                    <div style="position: relative;">
+                                        <button type="button" class="visible-columns-gear" title="Настройка столбцов таблицы" onclick="toggleVisibleColumnsPopover(event, {{ monitoring.id }})">
+                                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        </button>
+                                        <div class="visible-columns-popover" id="visible-columns-popover-{{ monitoring.id }}" style="left: auto; right: 0;">
+                                            <div class="visible-columns-popover-header">
+                                                <span>Видимые столбцы</span>
+                                                <button type="button" class="visible-columns-popover-close" onclick="closeVisibleColumnsPopover({{ monitoring.id }})">
+                                                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                </button>
+                                            </div>
+                                            {% for key, _ in monitoring.COLUMN_DEFS %}
+                                            <label class="custom-checkbox">
+                                                <input type="checkbox" value="{{ key }}" {{ 'checked' if monitoring.is_column_visible(key) else '' }} onchange="onVisibleColumnToggle({{ monitoring.id }})">
+                                                <span class="box"><svg viewBox="0 0 10 10" fill="none"><path d="M1.5 5L4 7.5L8.5 2" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                                                <span>{{ monitoring.get_column_label(key) }}</span>
+                                            </label>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+
+                                    <!-- Kebab Menu -->
+                                    <div class="kebab-menu">
+                                        <button class="kebab-button" onclick="toggleMonitoringKebab(event, {{ monitoring.id }})">
+                                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                                <circle cx="8" cy="3" r="1.5"/>
+                                                <circle cx="8" cy="8" r="1.5"/>
+                                                <circle cx="8" cy="13" r="1.5"/>
+                                            </svg>
+                                        </button>
+                                        <div class="kebab-dropdown" id="monitoring-kebab-{{ monitoring.id }}">
+                                            {% if not monitoring.frozen %}
+                                            <button onclick="openMonitoringModal({{ monitoring.id }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                                </svg>
+                                                Редактировать
+                                            </button>
+                                            <div class="kebab-divider"></div>
+                                            <button onclick="openUploadModal({{ monitoring.id }}, '{{ monitoring.name }}')" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                                </svg>
+                                                Adriver .xlsx
+                                            </button>
+                                            <div class="kebab-divider"></div>
+                                            {% else %}
+                                            <button onclick="openMonitoringModal({{ monitoring.id }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                                Просмотреть
+                                            </button>
+                                            <div class="kebab-divider"></div>
+                                            {% endif %}
+                                            <a href="{{ url_for('copy_monitoring', monitoring_id=monitoring.id) }}" class="kebab-item" onclick="return confirm('Создать копию мониторинга?')" style="width: 100%; text-align: left; text-decoration: none; color: inherit; display: flex; align-items: center; gap: 12px;">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                                </svg>
+                                                Скопировать
+                                            </a>
+                                            {% if not monitoring.archived and session.get('user_email') == admin_email %}
+                                            <div class="kebab-divider"></div>
+                                            <button onclick="openFinishMonthModal({{ monitoring.id }}, '{{ monitoring.name }}', {{ 'true' if monitoring.report_config_id else 'false' }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                </svg>
+                                                Завершить месяц
+                                            </button>
+                                            {% endif %}
+                                            <div class="kebab-divider"></div>
+                                            {% if show_archived %}
+                                            <form action="{{ url_for('unarchive_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;">
+                                                <button type="submit" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4M3 7l9 4 9-4"/>
+                                                    </svg>
+                                                    Восстановить
+                                                </button>
+                                            </form>
+                                            {% else %}
+                                            <form action="{{ url_for('archive_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;">
+                                                <button type="submit" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 01-2-2V4a2 2 0 012-2h14a2 2 0 012 2v2a2 2 0 01-2 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                                                    </svg>
+                                                    В архив
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                            {% if session.get('user_email') == admin_email %}
+                                            <div class="kebab-divider"></div>
+                                            <form action="{{ url_for('delete_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;" onsubmit="return confirm('Вы уверены, что хотите удалить этот мониторинг?\n\nЭто действие необратимо.');">
+                                                <button type="submit" class="kebab-item kebab-item-danger" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                    </svg>
+                                                    Удалить
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
                             </div>
 
                             <div class="monitoring-card-meta custom-scrollbar" style="display: flex; flex-wrap: nowrap; align-items: center; gap: 5px 7px; font-size: 10px; white-space: nowrap; overflow-x: auto; max-width: 100%;">
@@ -1430,130 +1540,6 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
 
                     </div>
 
-                    <!-- Right: Actions - absolutely positioned (not a flex sibling of
-                         Left: Info) so it only overlaps the title row visually instead
-                         of reserving its column width for the whole card height, which
-                         was squeezing the KPI table narrower all the way down. -->
-                    <div style="position: absolute; top: 16px; right: 16px; display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
-                        <!-- Timeline Progress -->
-                        {% set days_passed = monitoring.get_days_passed_until_yesterday() %}
-                        {% set progress_percent = (days_passed / monitoring.get_total_days() * 100)|int if monitoring.get_total_days() > 0 else 0 %}
-                        <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(231, 229, 228, 0.6); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(214, 211, 209, 0.7); font-size: 11px; font-variant-numeric: tabular-nums; flex-shrink: 0; margin-right: 4px;">
-                            <div style="width: 56px; background: #e7e5e4; height: 6px; border-radius: 9999px; overflow: hidden; flex-shrink: 0;">
-                                <div style="background: #f59e0b; height: 100%; width: {{ progress_percent }}%;" title="Прошло {{ progress_percent }}%"></div>
-                            </div>
-                            <span style="color: #44403c; font-weight: 500;">{{ days_passed }}/{{ monitoring.get_total_days() }} дн.</span>
-                        </div>
-
-                        {% if session.get('user_role') == 'account_manager' %}
-                        <button onclick="openMonitoringModal({{ monitoring.id }})" class="btn-icon-ghost" title="Просмотреть">
-                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                        </button>
-                        {% else %}
-                        <!-- Visible columns settings (task #46) -->
-                        <div style="position: relative;">
-                            <button type="button" class="visible-columns-gear" title="Настройка столбцов таблицы" onclick="toggleVisibleColumnsPopover(event, {{ monitoring.id }})">
-                                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/><circle cx="12" cy="12" r="3"/></svg>
-                            </button>
-                            <div class="visible-columns-popover" id="visible-columns-popover-{{ monitoring.id }}" style="left: auto; right: 0;">
-                                <div class="visible-columns-popover-header">
-                                    <span>Видимые столбцы</span>
-                                    <button type="button" class="visible-columns-popover-close" onclick="closeVisibleColumnsPopover({{ monitoring.id }})">
-                                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                    </button>
-                                </div>
-                                {% for key, _ in monitoring.COLUMN_DEFS %}
-                                <label class="custom-checkbox">
-                                    <input type="checkbox" value="{{ key }}" {{ 'checked' if monitoring.is_column_visible(key) else '' }} onchange="onVisibleColumnToggle({{ monitoring.id }})">
-                                    <span class="box"><svg viewBox="0 0 10 10" fill="none"><path d="M1.5 5L4 7.5L8.5 2" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                                    <span>{{ monitoring.get_column_label(key) }}</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                        </div>
-
-                        <!-- Kebab Menu -->
-                        <div class="kebab-menu">
-                            <button class="kebab-button" onclick="toggleMonitoringKebab(event, {{ monitoring.id }})">
-                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                    <circle cx="8" cy="3" r="1.5"/>
-                                    <circle cx="8" cy="8" r="1.5"/>
-                                    <circle cx="8" cy="13" r="1.5"/>
-                                </svg>
-                            </button>
-                            <div class="kebab-dropdown" id="monitoring-kebab-{{ monitoring.id }}">
-                                {% if not monitoring.frozen %}
-                                <button onclick="openMonitoringModal({{ monitoring.id }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
-                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                    </svg>
-                                    Редактировать
-                                </button>
-                                <div class="kebab-divider"></div>
-                                <button onclick="openUploadModal({{ monitoring.id }}, '{{ monitoring.name }}')" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
-                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                                    </svg>
-                                    Adriver .xlsx
-                                </button>
-                                <div class="kebab-divider"></div>
-                                {% else %}
-                                <button onclick="openMonitoringModal({{ monitoring.id }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
-                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                    Просмотреть
-                                </button>
-                                <div class="kebab-divider"></div>
-                                {% endif %}
-                                <a href="{{ url_for('copy_monitoring', monitoring_id=monitoring.id) }}" class="kebab-item" onclick="return confirm('Создать копию мониторинга?')" style="width: 100%; text-align: left; text-decoration: none; color: inherit; display: flex; align-items: center; gap: 12px;">
-                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                                    </svg>
-                                    Скопировать
-                                </a>
-                                {% if not monitoring.archived and session.get('user_email') == admin_email %}
-                                <div class="kebab-divider"></div>
-                                <button onclick="openFinishMonthModal({{ monitoring.id }}, '{{ monitoring.name }}', {{ 'true' if monitoring.report_config_id else 'false' }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
-                                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                    </svg>
-                                    Завершить месяц
-                                </button>
-                                {% endif %}
-                                <div class="kebab-divider"></div>
-                                {% if show_archived %}
-                                <form action="{{ url_for('unarchive_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;">
-                                    <button type="submit" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
-                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9-4 9 4M3 7l9 4 9-4"/>
-                                        </svg>
-                                        Восстановить
-                                    </button>
-                                </form>
-                                {% else %}
-                                <form action="{{ url_for('archive_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;">
-                                    <button type="submit" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
-                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 01-2-2V4a2 2 0 012-2h14a2 2 0 012 2v2a2 2 0 01-2 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
-                                        </svg>
-                                        В архив
-                                    </button>
-                                </form>
-                                {% endif %}
-                                {% if session.get('user_email') == admin_email %}
-                                <div class="kebab-divider"></div>
-                                <form action="{{ url_for('delete_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;" onsubmit="return confirm('Вы уверены, что хотите удалить этот мониторинг?\n\nЭто действие необратимо.');">
-                                    <button type="submit" class="kebab-item kebab-item-danger" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
-                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                        </svg>
-                                        Удалить
-                                    </button>
-                                </form>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-                    </div>
                 </div>
             </div>
             {% endfor %}
@@ -1643,75 +1629,6 @@ function filterMonitoring() {
     sorted.forEach(card => grid.appendChild(card));
 
     saveMonitoringFilterState();
-}
-
-// Bulk selection
-function getSelectedMonitoringIds() {
-    return Array.from(document.querySelectorAll('.monitoring-select-checkbox:checked'))
-        .map(cb => parseInt(cb.dataset.monitoringId));
-}
-
-function updateBulkMonitoringBar() {
-    const ids = getSelectedMonitoringIds();
-    const bar = document.getElementById('bulkMonitoringActionBar');
-    const countEl = document.getElementById('bulkMonitoringSelectedCount');
-    if (ids.length > 0) {
-        bar.style.display = 'flex';
-        countEl.textContent = `Выбрано: ${ids.length}`;
-    } else {
-        bar.style.display = 'none';
-    }
-}
-
-function clearBulkMonitoringSelection() {
-    document.querySelectorAll('.monitoring-select-checkbox:checked').forEach(cb => cb.checked = false);
-    updateBulkMonitoringBar();
-}
-
-function selectAllMonitorings() {
-    document.querySelectorAll('.monitoring-card').forEach(card => {
-        if (card.style.display !== 'none') {
-            const cb = card.querySelector('.monitoring-select-checkbox');
-            if (cb) cb.checked = true;
-        }
-    });
-    updateBulkMonitoringBar();
-}
-
-function bulkArchiveMonitoringsSelected() {
-    const ids = getSelectedMonitoringIds();
-    if (ids.length === 0) return;
-    if (!confirm(`Переместить в архив ${ids.length} мониторинг(ов)?`)) return;
-
-    fetch('/monitoring/bulk-archive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monitoring_ids: ids })
-    })
-        .then(res => res.json())
-        .then(() => window.location.reload())
-        .catch(err => {
-            console.error('Bulk archive error:', err);
-            alert('Ошибка при архивации');
-        });
-}
-
-function bulkDeleteMonitoringsSelected() {
-    const ids = getSelectedMonitoringIds();
-    if (ids.length === 0) return;
-    if (!confirm(`Удалить безвозвратно ${ids.length} мониторинг(ов)? Это действие нельзя отменить.`)) return;
-
-    fetch('/monitoring/bulk-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monitoring_ids: ids })
-    })
-        .then(res => res.json())
-        .then(() => window.location.reload())
-        .catch(err => {
-            console.error('Bulk delete error:', err);
-            alert('Ошибка при удалении');
-        });
 }
 
 document.addEventListener('DOMContentLoaded', function() {

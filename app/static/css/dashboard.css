@@ -491,6 +491,19 @@ tbody tr:hover {
         flex-wrap: wrap !important;
     }
 
+    /* Monitoring toolbar rows (tabs+Обновить все / search+filters+Добавить
+       мониторинг) - stack as full-width rows instead of the generic wrap
+       rule above, which otherwise squeezes each child into a narrow
+       column since none of them have an explicit width. */
+    .monitoring-toolbar-row {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+    .monitoring-toolbar-row > * {
+        width: 100% !important;
+        margin-left: 0 !important;
+    }
+
     /* flex:1 children default to min-width:auto, which keeps them at their
        unwrapped content width even inside a wrapping flex row - this lets
        them actually shrink instead of pushing the row past the viewport. */
@@ -533,14 +546,32 @@ tbody tr:hover {
         white-space: nowrap;
     }
 
-    /* Monitoring card title - one line, truncated, rather than wrapping
-       across two lines inside the already-crowded meta row. */
+    /* Monitoring card title - its own full-width line on mobile (not
+       squeezed next to the timeline/gear/⋮ cluster), truncated if still
+       too long for one line. flex-basis:100% in a wrapping flex row
+       forces everything after it onto the next line. */
     .monitoring-card-title {
-        width: 100%;
+        flex-basis: 100% !important;
+        width: 100% !important;
+        min-width: 0 !important;
         font-size: 13px !important;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    /* Badges + timeline/gear/⋮ wrap onto their own line below the title -
+       plenty of room there since they're no longer sharing it with the
+       name. */
+    .monitoring-card-title-row {
+        flex-wrap: wrap !important;
+    }
+
+    /* Drop the format badge and KPI-comment info icon on mobile - not
+       essential, and freeing their space keeps the second line tidier. */
+    .monitoring-card-title-row .ad-format-badge,
+    .monitoring-card-title-row .kpi-info-icon {
+        display: none !important;
     }
 
     /* Monitoring card meta row (Кабинет / Трафик-менеджер / Период /
@@ -581,13 +612,14 @@ tbody tr:hover {
         text-overflow: ellipsis;
     }
 
-    /* Reports/Monitoring toolbar: explicit 3-column grid instead of
-       organic flex-wrap, so related controls land in predictable rows
-       (tabs+search / filters / sort+primary action) instead of whatever
-       grouping falls out of each control's individual width. Desktop is
-       untouched - this only applies inside the mobile breakpoint. */
-    #reportsToolbar,
-    #monitoringToolbar {
+    /* Reports toolbar: explicit 3-column grid instead of organic
+       flex-wrap, so related controls land in predictable rows (tabs+search
+       / filters / sort+primary action) instead of whatever grouping falls
+       out of each control's individual width. Desktop is untouched - this
+       only applies inside the mobile breakpoint.
+       (Monitoring's toolbar is a different, already 2-row markup - see
+       .monitoring-toolbar-row above instead.) */
+    #reportsToolbar {
         display: grid !important;
         grid-template-columns: repeat(3, 1fr);
         gap: 8px;
@@ -598,14 +630,11 @@ tbody tr:hover {
        inside their own box - display:contents keeps them in the DOM
        (still clickable, still styled) but removes their own layout box. */
     #reportsToolbar > div:first-child,
-    #reportsToolbar > div:first-child > div:first-child,
-    #monitoringToolbar > div:first-child,
-    #monitoringToolbar > div:first-child > div:first-child {
+    #reportsToolbar > div:first-child > div:first-child {
         display: contents !important;
     }
 
-    #reportsToolbar .tab-button,
-    #monitoringToolbar .tab-button {
+    #reportsToolbar .tab-button {
         width: 100% !important;
         min-width: 0 !important;
         margin: 0;
@@ -614,8 +643,7 @@ tbody tr:hover {
     /* "Выбрать все" isn't part of any of the 3-up rows - send it to the
        very end of grid auto-placement and let it span the full width on
        its own line, rather than breaking the Активные/Архив/Поиск row. */
-    #reportsToolbar [onclick="selectAllReports()"],
-    #monitoringToolbar [onclick="selectAllMonitorings()"] {
+    #reportsToolbar [onclick="selectAllReports()"] {
         order: 99;
         grid-column: 1 / -1;
         width: auto !important;
@@ -629,15 +657,12 @@ tbody tr:hover {
        width instead of true equal thirds. Reset every direct toolbar
        item to min-width:0 so the 1fr tracks are actually equal, and let
        each item's own width:100% (below) fill its track evenly. */
-    #reportsToolbar > *,
-    #monitoringToolbar > * {
+    #reportsToolbar > * {
         min-width: 0 !important;
     }
 
     #reportsToolbar select,
-    #monitoringToolbar select,
-    #reportsToolbar #createReportBtn,
-    #monitoringToolbar button {
+    #reportsToolbar #createReportBtn {
         width: 100% !important;
         min-width: 0 !important;
         padding: 0 8px !important;
@@ -649,9 +674,29 @@ tbody tr:hover {
 
     /* These buttons are icon+text flex rows, not plain text - ellipsis on
        the button itself doesn't reach text buried inside a flex child, so
-       truncate the label span directly instead ("Добавить мониторинг",
-       "Обновить все", "Создать отчет" are the longest toolbar labels). */
-    #reportsToolbar .btn-label,
+       truncate the label span directly instead ("Создать отчет" etc). */
+    #reportsToolbar .btn-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Monitoring toolbar buttons/selects - same icon+label truncation and
+       full-width-in-row behavior as reports, via the 2-row markup above. */
+    #monitoringToolbar select,
+    #monitoringToolbar button {
+        min-width: 0 !important;
+        padding: 0 8px !important;
+        font-size: 9px !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    #monitoringToolbar .tab-button {
+        min-width: 0 !important;
+        margin: 0;
+    }
     #monitoringToolbar .btn-label {
         min-width: 0;
         overflow: hidden;
