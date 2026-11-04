@@ -167,28 +167,44 @@
     box-shadow: var(--shadow-md);
 }
 
+/* Segmented control: one floating gray track, segments have no border of
+   their own - only the active one gets a solid pill + shadow, like a
+   native iOS/macOS segmented control. */
+.tab-segmented-control {
+    display: inline-flex;
+    background: #F1F1F0;
+    border-radius: 999px;
+    padding: 3px;
+    gap: 2px;
+}
+
 .tab-button {
     padding: 10px 20px;
-    border-radius: 8px;
+    border-radius: 999px;
     font-size: 14px;
     font-weight: 500;
     text-decoration: none;
     color: var(--text-secondary);
-    background: white;
-    border: 1px solid var(--border-color);
-    transition: all 0.2s;
+    background: transparent;
+    border: none;
+    transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
     cursor: pointer;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .tab-button:hover {
-    background: var(--bg-light);
+    color: var(--text-primary);
 }
 
 .tab-button.tab-active {
     background: var(--primary-orange);
     color: white;
-    border-color: var(--primary-orange);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.tab-button.tab-active:hover {
+    color: white;
 }
 
 /* Campaigns table */
@@ -555,97 +571,78 @@
 <!-- Content Body -->
 <div class="content-body">
     <!-- Toolbar: Tabs + Search + Filter + Actions -->
-    <div id="reportsToolbar" style="display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-start; flex-wrap: wrap;">
-        <!-- Tabs -->
-        <div>
-            <div style="display: flex; gap: 8px;">
-                {% if show_archived %}
-                    <a href="{{ url_for('reports') }}" class="tab-button" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 10px;">Активные</a>
-                    <span class="tab-button tab-active" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 10px;">Архив</span>
-                {% else %}
-                    <span class="tab-button tab-active" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 10px;">Активные</span>
-                    {% if session.get('user_role') != 'account_manager' %}
-                    <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button" style="width: 90px; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 10px;">Архив</a>
-                    {% endif %}
+    <div id="reportsToolbar" style="background: white; border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 24px; overflow: hidden;">
+        <!-- Row 1: Tabs -->
+        <div class="reports-toolbar-row" style="display: flex; align-items: center; gap: 8px; padding: 16px;">
+            <div class="tab-segmented-control" role="tablist" aria-label="Статус отчётов">
+                <a href="{{ url_for('reports') }}" class="tab-button{{ '' if show_archived else ' tab-active' }}" role="tab" aria-selected="{{ 'false' if show_archived else 'true' }}" style="width: 90px; height: 32px; box-sizing: border-box;">Активные</a>
+                {% if show_archived or session.get('user_role') != 'account_manager' %}
+                <a href="{{ url_for('reports', show_archived='true') }}" class="tab-button{{ ' tab-active' if show_archived else '' }}" role="tab" aria-selected="{{ 'true' if show_archived else 'false' }}" style="width: 90px; height: 32px; box-sizing: border-box;">Архив</a>
                 {% endif %}
             </div>
-            <span onclick="selectAllReports()"
-                  onmouseover="this.style.color='var(--primary-orange)'"
-                  onmouseout="this.style.color='var(--text-secondary)'"
-                  style="display: block; width: 90px; margin-top: 6px; text-align: center; font-size: 10px; color: var(--text-secondary); cursor: pointer;">
-                Выбрать все
-            </span>
         </div>
 
-        <!-- Search -->
-        <div style="flex: 1; min-width: 250px; position: relative;">
-            <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-            </svg>
-            <input type="text" id="searchInput" placeholder="Поиск по названию, бренду, менеджеру..."
-                   style="width: 100%; height: 38px; padding: 0 16px 0 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary);"
-                   oninput="searchReports()">
+        <div style="border-top: 1px solid var(--border-color);"></div>
+
+        <!-- Row 2: Search + Filters + Создать отчет -->
+        <div class="reports-toolbar-row" style="display: flex; align-items: center; gap: 12px; padding: 16px; flex-wrap: wrap;">
+            <!-- Search -->
+            <div style="flex: 1; min-width: 200px; position: relative;">
+                <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Поиск по названию, бренду, менеджеру..."
+                       style="width: 100%; height: 38px; padding: 0 16px 0 40px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary);"
+                       oninput="searchReports()">
+            </div>
+
+            <!-- Month Filter -->
+            <select id="monthFilter" onchange="filterReports()"
+                    style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
+                <option value="">Все месяцы</option>
+                {% for month_year in months_list %}
+                    <option value="{{ month_year }}">{{ (month_year ~ '-01')|format_month }}</option>
+                {% endfor %}
+            </select>
+
+            <!-- Manager Filter -->
+            <select id="managerFilter" onchange="filterReports()"
+                    style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
+                <option value="">Трафик-менеджер</option>
+                <option value="Даня">Даня</option>
+                <option value="Саша">Саша</option>
+                <option value="Аня">Аня</option>
+                <option value="Лена">Лена</option>
+                <option value="unassigned">Без менеджера</option>
+            </select>
+
+            <!-- Account Manager Filter -->
+            <select id="accountManagerFilter" onchange="filterReports()"
+                    style="width: 150px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
+                <option value="">Аккаунт-менеджер</option>
+                {% set all_account_managers = reports | map(attribute='account_manager') | select | unique | list %}
+                {% for am in all_account_managers %}
+                    <option value="{{ am|lower }}">{{ am|am_label }}</option>
+                {% endfor %}
+                <option value="unassigned">Не назначен</option>
+            </select>
+
+            <!-- Sort -->
+            <select id="sortFilter" title="Сортировка" onchange="filterReports()"
+                    style="width: 170px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
+                <option value="newest">Сначала новые</option>
+                <option value="oldest">Сначала старые</option>
+                <option value="name">По названию (А-Я)</option>
+            </select>
+
+            <!-- Add Report Button -->
+            <button id="createReportBtn" onclick="openReportFormModal()" class="btn btn-secondary" style="margin-left: auto; width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px; color: var(--text-secondary);">
+                <svg class="btn-icon" style="width: 12px; height: 12px; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                <span class="btn-label">Создать отчет</span>
+            </button>
         </div>
-
-        <!-- Month Filter -->
-        <select id="monthFilter" onchange="filterReports()"
-                style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="">Все месяцы</option>
-            {% for month_year in months_list %}
-                <option value="{{ month_year }}">{{ (month_year ~ '-01')|format_month }}</option>
-            {% endfor %}
-        </select>
-
-        <!-- Manager Filter -->
-        <select id="managerFilter" onchange="filterReports()"
-                style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="">Трафик-менеджер</option>
-            <option value="Даня">Даня</option>
-            <option value="Саша">Саша</option>
-            <option value="Аня">Аня</option>
-            <option value="Лена">Лена</option>
-            <option value="unassigned">Без менеджера</option>
-        </select>
-
-        <!-- Account Manager Filter -->
-        <select id="accountManagerFilter" onchange="filterReports()"
-                style="width: 150px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="">Аккаунт-менеджер</option>
-            {% set all_account_managers = reports | map(attribute='account_manager') | select | unique | list %}
-            {% for am in all_account_managers %}
-                <option value="{{ am|lower }}">{{ am|am_label }}</option>
-            {% endfor %}
-            <option value="unassigned">Не назначен</option>
-        </select>
-
-        <!-- Sort -->
-        <select id="sortFilter" title="Сортировка" onchange="filterReports()"
-                style="width: 170px; height: 38px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 10px; font-weight: 500; color: var(--text-secondary); background: white; cursor: pointer;">
-            <option value="newest">Сначала новые</option>
-            <option value="oldest">Сначала старые</option>
-            <option value="name">По названию (А-Я)</option>
-        </select>
-
-        <!-- Add Report Button -->
-        <button id="createReportBtn" onclick="openReportFormModal()" class="btn btn-secondary" style="width: 140px; height: 38px; box-sizing: border-box; padding: 0 16px; font-size: 10px; color: var(--text-secondary);">
-            <svg class="btn-icon" style="width: 12px; height: 12px; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            <span class="btn-label">Создать отчет</span>
-        </button>
-    </div>
-
-    <!-- Bulk Action Bar -->
-    <div id="bulkActionBar" style="display: none; align-items: center; gap: 12px; padding: 10px 16px; margin-bottom: 16px; background: var(--bg-light); border-radius: 8px; font-size: 10px;">
-        <span id="bulkSelectedCount" style="color: var(--text-secondary);"></span>
-        {% if show_archived %}
-        {% if session.get('user_email') == admin_email %}
-        <button onclick="bulkDeleteSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">Удалить</button>
-        {% endif %}
-        {% else %}
-        <button onclick="bulkArchiveSelected()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">В архив</button>
-        {% endif %}
-        <button onclick="clearBulkSelection()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 10px;">Отмена</button>
     </div>
 
     <!-- Reports Grid -->
@@ -662,10 +659,6 @@
                  data-created-at="{{ report.created_at.isoformat() if report.created_at else '' }}">
 
                 <div style="display: flex; gap: 16px; align-items: start;">
-                    <!-- Select -->
-                    <input type="checkbox" class="report-select-checkbox" data-report-id="{{ report.id }}"
-                           onchange="updateBulkBar()" style="margin-top: 4px; width: 9px; height: 9px; cursor: pointer; flex-shrink: 0; accent-color: var(--primary-orange);">
-
                     <!-- Left: Info -->
                     <div style="flex: 1;">
                         <!-- Title, Account & Manager in one line -->
@@ -1175,75 +1168,6 @@ function filterReports() {
     sorted.forEach(card => grid.appendChild(card));
 
     saveReportsFilterState();
-}
-
-// Bulk selection
-function getSelectedReportIds() {
-    return Array.from(document.querySelectorAll('.report-select-checkbox:checked'))
-        .map(cb => parseInt(cb.dataset.reportId));
-}
-
-function updateBulkBar() {
-    const ids = getSelectedReportIds();
-    const bar = document.getElementById('bulkActionBar');
-    const countEl = document.getElementById('bulkSelectedCount');
-    if (ids.length > 0) {
-        bar.style.display = 'flex';
-        countEl.textContent = `Выбрано: ${ids.length}`;
-    } else {
-        bar.style.display = 'none';
-    }
-}
-
-function clearBulkSelection() {
-    document.querySelectorAll('.report-select-checkbox:checked').forEach(cb => cb.checked = false);
-    updateBulkBar();
-}
-
-function selectAllReports() {
-    document.querySelectorAll('.report-card').forEach(card => {
-        if (card.style.display !== 'none') {
-            const cb = card.querySelector('.report-select-checkbox');
-            if (cb) cb.checked = true;
-        }
-    });
-    updateBulkBar();
-}
-
-function bulkArchiveSelected() {
-    const ids = getSelectedReportIds();
-    if (ids.length === 0) return;
-    if (!confirm(`Переместить в архив ${ids.length} отчёт(ов)?`)) return;
-
-    fetch('/reports/bulk-archive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ report_ids: ids })
-    })
-        .then(res => res.json())
-        .then(() => window.location.reload())
-        .catch(err => {
-            console.error('Bulk archive error:', err);
-            alert('Ошибка при архивации');
-        });
-}
-
-function bulkDeleteSelected() {
-    const ids = getSelectedReportIds();
-    if (ids.length === 0) return;
-    if (!confirm(`Удалить безвозвратно ${ids.length} отчёт(ов)? Это действие нельзя отменить.`)) return;
-
-    fetch('/reports/bulk-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ report_ids: ids })
-    })
-        .then(res => res.json())
-        .then(() => window.location.reload())
-        .catch(err => {
-            console.error('Bulk delete error:', err);
-            alert('Ошибка при удалении');
-        });
 }
 
 document.addEventListener('DOMContentLoaded', function() {

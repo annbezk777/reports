@@ -491,15 +491,17 @@ tbody tr:hover {
         flex-wrap: wrap !important;
     }
 
-    /* Monitoring toolbar rows (tabs+Обновить все / search+filters+Добавить
-       мониторинг) - stack as full-width rows instead of the generic wrap
-       rule above, which otherwise squeezes each child into a narrow
-       column since none of them have an explicit width. */
-    .monitoring-toolbar-row {
+    /* Monitoring/Reports toolbar rows (tabs+Обновить все / search+filters+
+       Добавить мониторинг|Создать отчет) - stack as full-width rows instead
+       of the generic wrap rule above, which otherwise squeezes each child
+       into a narrow column since none of them have an explicit width. */
+    .monitoring-toolbar-row,
+    .reports-toolbar-row {
         flex-direction: column !important;
         align-items: stretch !important;
     }
-    .monitoring-toolbar-row > * {
+    .monitoring-toolbar-row > *,
+    .reports-toolbar-row > * {
         width: 100% !important;
         margin-left: 0 !important;
     }
@@ -612,78 +614,11 @@ tbody tr:hover {
         text-overflow: ellipsis;
     }
 
-    /* Reports toolbar: explicit 3-column grid instead of organic
-       flex-wrap, so related controls land in predictable rows (tabs+search
-       / filters / sort+primary action) instead of whatever grouping falls
-       out of each control's individual width. Desktop is untouched - this
-       only applies inside the mobile breakpoint.
-       (Monitoring's toolbar is a different, already 2-row markup - see
-       .monitoring-toolbar-row above instead.) */
-    #reportsToolbar {
-        display: grid !important;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-    }
-
-    /* Un-nest the tabs wrapper (and its inner row) so Активные/Архив
-       become direct grid items instead of being trapped two levels deep
-       inside their own box - display:contents keeps them in the DOM
-       (still clickable, still styled) but removes their own layout box. */
-    #reportsToolbar > div:first-child,
-    #reportsToolbar > div:first-child > div:first-child {
-        display: contents !important;
-    }
-
-    #reportsToolbar .tab-button {
-        width: 100% !important;
-        min-width: 0 !important;
-        margin: 0;
-    }
-
-    /* "Выбрать все" isn't part of any of the 3-up rows - send it to the
-       very end of grid auto-placement and let it span the full width on
-       its own line, rather than breaking the Активные/Архив/Поиск row. */
-    #reportsToolbar [onclick="selectAllReports()"] {
-        order: 99;
-        grid-column: 1 / -1;
-        width: auto !important;
-        text-align: left !important;
-        margin: 4px 0 0 0 !important;
-    }
-
-    /* Every grid item's automatic min-width otherwise defaults to its own
-       min-content size (a select's full option text, a button's full
-       label) - that's what was making each of the 3 columns a different
-       width instead of true equal thirds. Reset every direct toolbar
-       item to min-width:0 so the 1fr tracks are actually equal, and let
-       each item's own width:100% (below) fill its track evenly. */
-    #reportsToolbar > * {
-        min-width: 0 !important;
-    }
-
+    /* Reports/Monitoring toolbar buttons/selects - icon+label truncation
+       and full-width-in-row behavior, via the 2-row .reports-toolbar-row /
+       .monitoring-toolbar-row markup above. */
     #reportsToolbar select,
-    #reportsToolbar #createReportBtn {
-        width: 100% !important;
-        min-width: 0 !important;
-        padding: 0 8px !important;
-        font-size: 9px !important;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    /* These buttons are icon+text flex rows, not plain text - ellipsis on
-       the button itself doesn't reach text buried inside a flex child, so
-       truncate the label span directly instead ("Создать отчет" etc). */
-    #reportsToolbar .btn-label {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    /* Monitoring toolbar buttons/selects - same icon+label truncation and
-       full-width-in-row behavior as reports, via the 2-row markup above. */
+    #reportsToolbar button,
     #monitoringToolbar select,
     #monitoringToolbar button {
         min-width: 0 !important;
@@ -693,10 +628,12 @@ tbody tr:hover {
         text-overflow: ellipsis;
         white-space: nowrap;
     }
+    #reportsToolbar .tab-button,
     #monitoringToolbar .tab-button {
         min-width: 0 !important;
         margin: 0;
     }
+    #reportsToolbar .btn-label,
     #monitoringToolbar .btn-label {
         min-width: 0;
         overflow: hidden;
