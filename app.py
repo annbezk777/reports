@@ -3201,6 +3201,43 @@ def _store_adriver_daily_stats(monitoring_id, upload_id, daily_rows):
         existing.givt_clicks_percent = row.get('givt_clicks_percent')
 
 
+def _weighted_daily_percent(rows, percent_attr, weight_attr):
+    """Volume-weighted average of a per-day IVT/GIVT/SIVT percent column.
+
+    A plain mean across days lets a near-empty day (e.g. a campaign's
+    first day with 10 impressions, 80% IVT just from noise) swing the
+    whole-period percentage as much as a day with hundreds of thousands
+    of impressions - a launch day like that can drag a real ~4% IVT rate
+    up to a reported ~15%. Weighting each day's percent by that day's own
+    volume (impressions for the IVT/GIVT/SIVT показы columns, clicks for
+    GIVT клики) fixes that. None when there's no weighted volume to
+    divide by (e.g. every day had 0 of the weight metric)."""
+    weighted_sum = 0.0
+    total_weight = 0
+    for r in rows:
+        pct = getattr(r, percent_attr)
+        weight = getattr(r, weight_attr) or 0
+        if pct is None or weight <= 0:
+            continue
+        weighted_sum += pct * weight
+        total_weight += weight
+    if total_weight == 0:
+        return None
+    return round(weighted_sum / total_weight, 2)
+
+
+# Which per-day column to weight each IVT/GIVT/SIVT percent by when
+# averaging across days - показы-based percents by that day's показы,
+# the one клики-based percent by that day's клики. See
+# _weighted_daily_percent.
+_ADRIVER_PERCENT_WEIGHT_FIELD = {
+    'ivt_impressions_percent': 'impressions',
+    'givt_impressions_percent': 'impressions',
+    'sivt_impressions_percent': 'impressions',
+    'givt_clicks_percent': 'clicks',
+}
+
+
 def _recompute_adriver_card_totals(monitoring):
     """Derive the card-level Adriver total (показы/клики + IVT/GIVT/SIVT%)
     from the FULL accumulated AdriverDailyStat history for this monitoring,
@@ -3230,9 +3267,9 @@ def _recompute_adriver_card_totals(monitoring):
     monitoring.adriver_impressions = sum(r.impressions or 0 for r in daily_rows)
     monitoring.adriver_clicks = sum(r.clicks or 0 for r in daily_rows)
     for field in ('ivt_impressions_percent', 'givt_impressions_percent', 'sivt_impressions_percent', 'givt_clicks_percent'):
-        values = [getattr(r, field) for r in daily_rows if getattr(r, field) is not None]
-        if values:
-            setattr(monitoring, _ADRIVER_CARD_FACT_FIELD[field], round(sum(values) / len(values), 2))
+        weighted = _weighted_daily_percent(daily_rows, field, _ADRIVER_PERCENT_WEIGHT_FIELD[field])
+        if weighted is not None:
+            setattr(monitoring, _ADRIVER_CARD_FACT_FIELD[field], weighted)
 
     # The true "we have real data through this date" cutoff is the latest
     # day actually present in the daily history - not just whatever the
@@ -3281,9 +3318,9 @@ def _refresh_weekly_adriver_stats(monitoring_id, daily_rows):
         stat.adriver_impressions = sum(r.impressions or 0 for r in week_rows)
         stat.adriver_clicks = sum(r.clicks or 0 for r in week_rows)
         for field in ('ivt_impressions_percent', 'givt_impressions_percent', 'sivt_impressions_percent', 'givt_clicks_percent'):
-            values = [getattr(r, field) for r in week_rows if getattr(r, field) is not None]
-            if values:
-                setattr(stat, field, round(sum(values) / len(values), 2))
+            weighted = _weighted_daily_percent(week_rows, field, _ADRIVER_PERCENT_WEIGHT_FIELD[field])
+            if weighted is not None:
+                setattr(stat, field, weighted)
 
 
 def get_last_completed_week_chunks(today):
@@ -3416,15 +3453,10 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
         if daily_rows:
             stat.adriver_impressions = sum(r.impressions or 0 for r in daily_rows)
             stat.adriver_clicks = sum(r.clicks or 0 for r in daily_rows)
-            for field, attr in [
-                ('ivt_impressions_percent', 'ivt_impressions_percent'),
-                ('givt_impressions_percent', 'givt_impressions_percent'),
-                ('sivt_impressions_percent', 'sivt_impressions_percent'),
-                ('givt_clicks_percent', 'givt_clicks_percent'),
-            ]:
-                values = [getattr(r, attr) for r in daily_rows if getattr(r, attr) is not None]
-                if values:
-                    setattr(stat, field, round(sum(values) / len(values), 2))
+            for field in ('ivt_impressions_percent', 'givt_impressions_percent', 'sivt_impressions_percent', 'givt_clicks_percent'):
+                weighted = _weighted_daily_percent(daily_rows, field, _ADRIVER_PERCENT_WEIGHT_FIELD[field])
+                if weighted is not None:
+                    setattr(stat, field, weighted)
 
             # Partial upload (e.g. only 3 of 7 days exported so far) - the
             # SAPE side (stat.impressions/clicks above) is always the full
