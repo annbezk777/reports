@@ -5618,21 +5618,30 @@ def run_report_old(report_id):
                         'completes_column': None
                     }
 
-                    success = gs_client.write_daily_data(
-                        sheet_url=report.google_sheet_url,
-                        sheet_name=campaign_worksheet,
-                        daily_data=daily_data_to_write,
-                        column_mapping=column_mapping,
-                        data_start_row=structure['data_start_row'],
-                        daily_frequency=daily_frequency,
-                        daily_variance=daily_variance,
-                        total_frequency=total_frequency,
-                        total_variance=total_variance,
-                        frequency=daily_frequency,
-                        frequency_variance=report.frequency_variance or 0.1,
-                        total_reach_coefficient=report.total_reach_coefficient or 0.96,
-                        cached_worksheet=cache_entry['object']
-                    )
+                    try:
+                        success = gs_client.write_daily_data(
+                            sheet_url=report.google_sheet_url,
+                            sheet_name=campaign_worksheet,
+                            daily_data=daily_data_to_write,
+                            column_mapping=column_mapping,
+                            data_start_row=structure['data_start_row'],
+                            daily_frequency=daily_frequency,
+                            daily_variance=daily_variance,
+                            total_frequency=total_frequency,
+                            total_variance=total_variance,
+                            frequency=daily_frequency,
+                            frequency_variance=report.frequency_variance or 0.1,
+                            total_reach_coefficient=report.total_reach_coefficient or 0.96,
+                            cached_worksheet=cache_entry['object']
+                        )
+                    except Exception as write_error:
+                        # write_daily_data now raises (instead of silently
+                        # returning False) once its own quota retries are
+                        # exhausted, so the real reason isn't lost - this
+                        # call site just keeps its original skip-and-continue
+                        # behavior either way.
+                        print(f"   ❌ Failed to write section: {write_error}")
+                        success = False
 
                     if not success:
                         print(f"   ❌ Failed to write section")
@@ -6050,7 +6059,8 @@ def run_report_old(report_id):
                 print(f"🔍 DEBUG: write_daily_data returned: {success}")
 
                 if not success:
-                    error_msg = f"Failed to write data for section {list(section_key)}"
+                    section_key_display = list(section_key) if isinstance(section_key, (list, tuple, set)) else section_key
+                    error_msg = f"Failed to write data for section {section_key_display}"
                     print(f"❌ {error_msg}")
                     print(f"   Campaigns in section: {[campaigns_by_sape_id.get(cid).name for cid in header_ids if campaigns_by_sape_id.get(cid)]}")
                     print(f"   Data points to write: {len(daily_data_to_write)}")

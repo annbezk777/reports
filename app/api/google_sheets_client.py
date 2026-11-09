@@ -3,11 +3,40 @@ from google.oauth2.service_account import Credentials
 from typing import Dict, Optional, List
 import random
 import re
+import time
 from datetime import datetime
+
+
+def _is_quota_error(e: Exception) -> bool:
+    """Google Sheets API 429 'Read/Write requests per minute' limit."""
+    msg = str(e)
+    return '429' in msg or 'Quota exceeded' in msg or 'RATE_LIMIT_EXCEEDED' in msg
 
 
 class GoogleSheetsClient:
     """Client for Google Sheets API"""
+
+    def _call_with_quota_retry(self, fn, label: str, max_retries: int = 3, wait_seconds: int = 65):
+        """Call fn() with bounded retries on Sheets 429/quota errors.
+
+        A single 65s retry often isn't enough when several report refreshes
+        share the same per-minute quota (60 reads/min/project/user) - keep
+        retrying instead of giving up after one attempt. Always re-raises
+        the ORIGINAL exception on exhaustion (never swallows it into a
+        generic message) so callers can show/act on the real reason.
+        """
+        attempt = 0
+        while True:
+            try:
+                return fn()
+            except Exception as e:
+                if not _is_quota_error(e) or attempt >= max_retries:
+                    raise
+                attempt += 1
+                print(f"⚠️ Google Sheets API quota exceeded (429) during {label}. "
+                      f"Waiting {wait_seconds}s (попытка {attempt}/{max_retries})...")
+                time.sleep(wait_seconds)
+                print(f"🔄 Retrying {label} after quota cooldown...")
 
     def __init__(self, credentials_file: str, scopes: list):
         """
@@ -1087,24 +1116,9 @@ class GoogleSheetsClient:
             # Read up to 50 rows to find section end
             search_range = f"{date_col}{data_start_row}:{date_col}{data_start_row + 50}"
 
-            # Retry logic for 429 errors
-            try:
-                search_dates = worksheet.get(search_range)
-            except Exception as e:
-                if '429' in str(e) or 'Quota exceeded' in str(e) or 'RATE_LIMIT_EXCEEDED' in str(e):
-                    print(f"⚠️ Google Sheets API quota exceeded (429) while searching for 'Всего'. Waiting 65 seconds...")
-                    import time
-                    time.sleep(65)
-                    print(f"🔄 Retrying search after quota cooldown...")
-                    try:
-                        search_dates = worksheet.get(search_range)
-                        print(f"✅ Retry successful!")
-                    except Exception as retry_error:
-                        print(f"❌ Retry also failed: {retry_error}")
-                        return False
-                else:
-                    print(f"❌ Error reading search range: {e}")
-                    return False
+            search_dates = self._call_with_quota_retry(
+                lambda: worksheet.get(search_range), "search for 'Всего'"
+            )
 
             # Find where "Всего" appears (marks end of section)
             section_end_offset = 35  # Default: 35 rows (enough for monthly data)
@@ -1119,24 +1133,9 @@ class GoogleSheetsClient:
             # Read dates only within this section boundary
             date_range = f"{date_col}{data_start_row}:{date_col}{data_start_row + section_end_offset - 1}"
 
-            # Retry logic for 429 errors
-            try:
-                existing_dates = worksheet.get(date_range)
-            except Exception as e:
-                if '429' in str(e) or 'Quota exceeded' in str(e) or 'RATE_LIMIT_EXCEEDED' in str(e):
-                    print(f"⚠️ Google Sheets API quota exceeded (429) while reading dates. Waiting 65 seconds...")
-                    import time
-                    time.sleep(65)
-                    print(f"🔄 Retrying date read after quota cooldown...")
-                    try:
-                        existing_dates = worksheet.get(date_range)
-                        print(f"✅ Retry successful!")
-                    except Exception as retry_error:
-                        print(f"❌ Retry also failed: {retry_error}")
-                        return False
-                else:
-                    print(f"❌ Error reading dates: {e}")
-                    return False
+            existing_dates = self._call_with_quota_retry(
+                lambda: worksheet.get(date_range), "date read"
+            )
 
             # Create a mapping of date -> row number
             date_to_row = {}
@@ -1250,30 +1249,11 @@ class GoogleSheetsClient:
             if updates:
                 print(f"📝 DEBUG: Preparing to batch_update {len(updates)} cells")
                 print(f"   First 3 updates: {updates[:3] if len(updates) >= 3 else updates}")
-                try:
-                    print(f"🔧 DEBUG: About to call worksheet.batch_update() for worksheet: {sheet_name}")
-                    worksheet.batch_update(updates)
-                    print(f"✅ Updated {len(daily_data)} days in Google Sheets ({len(updates)} cells written)")
-                except Exception as batch_error:
-                    # Check if this is a quota exceeded error (429)
-                    if '429' in str(batch_error) or 'Quota exceeded' in str(batch_error) or 'RATE_LIMIT_EXCEEDED' in str(batch_error):
-                        print(f"⚠️ Google Sheets API quota exceeded (429) during batch_update. Waiting 65 seconds...")
-                        import time
-                        time.sleep(65)
-                        print(f"🔄 Retrying batch_update after quota cooldown...")
-                        try:
-                            worksheet.batch_update(updates)
-                            print(f"✅ Retry successful! Updated {len(daily_data)} days in Google Sheets ({len(updates)} cells written)")
-                        except Exception as retry_error:
-                            print(f"❌ Retry also failed: {retry_error}")
-                            import traceback
-                            traceback.print_exc()
-                            raise
-                    else:
-                        print(f"❌ ERROR in batch_update: {batch_error}")
-                        import traceback
-                        traceback.print_exc()
-                        raise
+                print(f"🔧 DEBUG: About to call worksheet.batch_update() for worksheet: {sheet_name}")
+                self._call_with_quota_retry(
+                    lambda: worksheet.batch_update(updates), "batch_update"
+                )
+                print(f"✅ Updated {len(daily_data)} days in Google Sheets ({len(updates)} cells written)")
             else:
                 print(f"⚠️ WARNING: No updates to write (updates array is empty)")
 
@@ -1314,7 +1294,10 @@ class GoogleSheetsClient:
 
                     # Batch get both columns in single API call (saves 1 API call per section!)
                     try:
-                        batch_values = worksheet.batch_get([impressions_range, reach_range])
+                        batch_values = self._call_with_quota_retry(
+                            lambda: worksheet.batch_get([impressions_range, reach_range]),
+                            "batch_get for total reach"
+                        )
                         impressions_values = batch_values[0] if len(batch_values) > 0 else []
                         reach_values = batch_values[1] if len(batch_values) > 1 else []
 
@@ -1325,25 +1308,11 @@ class GoogleSheetsClient:
                         if reach_values:
                             print(f"   First 3 reaches: {reach_values[:3]}")
                     except Exception as e:
-                        # Check if this is a quota exceeded error (429)
-                        if '429' in str(e) or 'Quota exceeded' in str(e) or 'RATE_LIMIT_EXCEEDED' in str(e):
-                            print(f"⚠️ Google Sheets API quota exceeded (429). Waiting 65 seconds...")
-                            import time
-                            time.sleep(65)  # Wait for quota to reset (60 sec + 5 sec buffer)
-                            print(f"🔄 Retrying batch_get after quota cooldown...")
-                            try:
-                                batch_values = worksheet.batch_get([impressions_range, reach_range])
-                                impressions_values = batch_values[0] if len(batch_values) > 0 else []
-                                reach_values = batch_values[1] if len(batch_values) > 1 else []
-                                print(f"✅ Retry successful!")
-                            except Exception as retry_error:
-                                print(f"❌ Retry also failed: {retry_error}")
-                                # If retry fails, skip total reach calculation
-                                return True  # Still return success as daily data was written
-                        else:
-                            print(f"⚠️ batch_get failed: {e}")
-                            # For other errors, skip total reach but continue
-                            return True
+                        # Daily data was already written successfully above -
+                        # don't fail the whole section just because the
+                        # total/reach summary row couldn't be computed.
+                        print(f"⚠️ Failed to compute total reach after retries, skipping it (daily data still written): {e}")
+                        return True
 
                     # Sum ALL impressions in table
                     total_impressions = 0
@@ -1437,6 +1406,11 @@ class GoogleSheetsClient:
             print(f"   Data start row: {data_start_row}")
             print(f"   Column mapping: {column_mapping}")
             print(f"   Daily data count: {len(daily_data)}")
+            if _is_quota_error(e):
+                # Let the real quota error propagate instead of masking it
+                # behind a generic False - callers show/log the real reason
+                # and some have their own quota-specific messaging already.
+                raise
             return False
 
     def write_total_report_data(
