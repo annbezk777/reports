@@ -173,29 +173,32 @@ class GoogleSheetsClient:
                 return False
 
         try:
-            # Use cached worksheet if provided to avoid API quota
-            if cached_worksheet is not None:
-                worksheet = cached_worksheet
-                print(f"✅ Using cached worksheet (saves API quota)")
+            # Extract spreadsheet ID
+            sheet_id = self.extract_sheet_id(sheet_url)
+            if not sheet_id:
+                print("Invalid Google Sheets URL")
+                return False
+
+            # Open spreadsheet
+            spreadsheet = self._call_with_quota_retry(
+                lambda: self.client.open_by_key(sheet_id), "open spreadsheet for update_cells"
+            )
+
+            # Select worksheet
+            if sheet_name:
+                worksheet = self._call_with_quota_retry(
+                    lambda: spreadsheet.worksheet(sheet_name), "get worksheet for update_cells"
+                )
             else:
-                # Extract spreadsheet ID
-                sheet_id = self.extract_sheet_id(sheet_url)
-                if not sheet_id:
-                    print("Invalid Google Sheets URL")
-                    return False
-
-                # Open spreadsheet
-                spreadsheet = self.client.open_by_key(sheet_id)
-
-                # Select worksheet
-                if sheet_name:
-                    worksheet = spreadsheet.worksheet(sheet_name)
-                else:
-                    worksheet = spreadsheet.get_worksheet(0)  # First sheet
+                worksheet = self._call_with_quota_retry(
+                    lambda: spreadsheet.get_worksheet(0), "get first worksheet for update_cells"
+                )  # First sheet
 
             # Update cells
             for cell_address, value in cell_values.items():
-                worksheet.update(cell_address, value)
+                self._call_with_quota_retry(
+                    lambda: worksheet.update(cell_address, value), "update cell"
+                )
 
             return True
 
