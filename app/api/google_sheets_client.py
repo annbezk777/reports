@@ -751,13 +751,19 @@ class GoogleSheetsClient:
                 return None
 
             # Open spreadsheet
-            spreadsheet = self.client.open_by_key(sheet_id)
+            spreadsheet = self._call_with_quota_retry(
+                lambda: self.client.open_by_key(sheet_id), "open spreadsheet for structure detection"
+            )
 
             # Select worksheet
             if sheet_name:
-                worksheet = spreadsheet.worksheet(sheet_name)
+                worksheet = self._call_with_quota_retry(
+                    lambda: spreadsheet.worksheet(sheet_name), "get worksheet for structure detection"
+                )
             else:
-                worksheet = spreadsheet.get_worksheet(0)
+                worksheet = self._call_with_quota_retry(
+                    lambda: spreadsheet.get_worksheet(0), "get first worksheet for structure detection"
+                )
 
             # Read data (use cache if available to save API calls)
             print(f"🔍 Searching for campaign ID: {campaign_id}...")
@@ -774,7 +780,9 @@ class GoogleSheetsClient:
                         first_row_sample = [str(cell)[:30] for cell in all_data[0][:5] if cell]
                     print(f"📋 First row sample: {first_row_sample[:3] if first_row_sample else 'EMPTY'}")
             else:
-                all_data = worksheet.get('A1:DZ300')
+                all_data = self._call_with_quota_retry(
+                    lambda: worksheet.get('A1:DZ300'), "read worksheet data for structure detection"
+                )
                 print(f"📊 Read from API: {len(all_data)} rows")
 
             # DEBUG: Find all 6-digit IDs in entire table to help troubleshoot
@@ -1479,8 +1487,13 @@ class GoogleSheetsClient:
                 print(f"❌ Invalid sheet URL: {sheet_url}")
                 return False
 
-            spreadsheet = self.client.open_by_key(sheet_id)
-            worksheet = spreadsheet.worksheet(sheet_name) if sheet_name else spreadsheet.sheet1
+            spreadsheet = self._call_with_quota_retry(
+                lambda: self.client.open_by_key(sheet_id), "open spreadsheet for total report"
+            )
+            worksheet = self._call_with_quota_retry(
+                lambda: (spreadsheet.worksheet(sheet_name) if sheet_name else spreadsheet.sheet1),
+                "get worksheet for total report"
+            )
 
             print(f"\n{'='*60}")
             print(f"📊 TOTAL REPORT: Writing data for {len(campaigns_data)} campaigns")
@@ -1490,7 +1503,9 @@ class GoogleSheetsClient:
 
             # Read entire table to find IDs and detect column structure
             # Read enough rows and columns to cover multiple tables
-            all_data = worksheet.get('A1:Z100')
+            all_data = self._call_with_quota_retry(
+                lambda: worksheet.get('A1:Z100'), "read worksheet for total report"
+            )
 
             print(f"📖 Read {len(all_data)} rows from sheet '{sheet_name}'")
             if all_data and len(all_data) > 0:
@@ -1706,7 +1721,9 @@ class GoogleSheetsClient:
 
                 # Write all updates for this cell
                 if updates:
-                    worksheet.batch_update(updates)
+                    self._call_with_quota_retry(
+                        lambda: worksheet.batch_update(updates), "batch_update for total report"
+                    )
                     updates_made += 1
                     print(f"   ✅ Updated row {row_num}, cols {shows_col}/{clicks_col} with {len(updates)} values")
                 else:
@@ -1778,8 +1795,13 @@ class GoogleSheetsClient:
                 print(f"❌ Invalid sheet URL: {sheet_url}")
                 return False
 
-            spreadsheet = self.client.open_by_key(sheet_id)
-            worksheet = spreadsheet.worksheet(sheet_name) if sheet_name else spreadsheet.sheet1
+            spreadsheet = self._call_with_quota_retry(
+                lambda: self.client.open_by_key(sheet_id), "open spreadsheet for video report"
+            )
+            worksheet = self._call_with_quota_retry(
+                lambda: (spreadsheet.worksheet(sheet_name) if sheet_name else spreadsheet.sheet1),
+                "get worksheet for video report"
+            )
 
             print(f"\n{'='*60}")
             print(f"📊 REALWEB VIDEO DETAILED REPORT")
@@ -1852,7 +1874,9 @@ class GoogleSheetsClient:
             # APPEND MODE: Find last row and add new data after it
             # Read existing data to find where to append
             existing_range = f"A{data_start_row}:M{data_start_row + 1000}"
-            existing_data = worksheet.get(existing_range)
+            existing_data = self._call_with_quota_retry(
+                lambda: worksheet.get(existing_range), "read existing rows for video report append"
+            )
 
             # Find last non-empty row
             last_row = data_start_row - 1
@@ -1867,7 +1891,10 @@ class GoogleSheetsClient:
 
             # Write all data at once (batch append)
             write_range = f"A{append_start_row}:M{append_start_row + len(rows_to_write) - 1}"
-            worksheet.update(write_range, rows_to_write, value_input_option='USER_ENTERED')
+            self._call_with_quota_retry(
+                lambda: worksheet.update(write_range, rows_to_write, value_input_option='USER_ENTERED'),
+                "append rows for video report"
+            )
 
             print(f"✅ Successfully ADDED {len(rows_to_write)} new rows to {write_range}")
             print(f"   Previous data preserved. New data starts at row {append_start_row}")
