@@ -248,6 +248,7 @@ class MonitoringCampaign(db.Model):
     # Post-click targets (Yandex Metrika)
     plan_visits = db.Column(db.Integer, nullable=True)  # Плановые визиты
     plan_conversions = db.Column(db.Integer, nullable=True)  # Плановые конверсии
+    plan_leads = db.Column(db.Integer, nullable=True)  # Плановые лиды (задача #56, ручной ввод)
     plan_bounce_rate = db.Column(db.Float, nullable=True)  # Плановый % отказов (например, 45.5)
     plan_time_on_site = db.Column(db.Float, nullable=True)  # Плановое время на сайте (сек.)
     plan_page_depth = db.Column(db.Float, nullable=True)  # Плановая глубина просмотра (стр.)
@@ -264,6 +265,7 @@ class MonitoringCampaign(db.Model):
     fact_clicks = db.Column(db.Integer, nullable=True)  # Фактические клики
     fact_visits = db.Column(db.Integer, nullable=True)  # Фактические визиты
     fact_conversions = db.Column(db.Integer, nullable=True)  # Фактические конверсии
+    fact_leads = db.Column(db.Integer, nullable=True)  # Фактические лиды (задача #56, ручной ввод)
     fact_bounce_rate = db.Column(db.Float, nullable=True)  # Фактический % отказов
     fact_time_on_site = db.Column(db.Float, nullable=True)  # Фактическое время на сайте (сек.)
     fact_page_depth = db.Column(db.Float, nullable=True)  # Фактическая глубина просмотра
@@ -355,8 +357,54 @@ class MonitoringCampaign(db.Model):
     #   the account-manager role (otherwise view-only everywhere else in
     #   monitoring) - the one deliberate write exception for that role,
     #   and only while the card is already frozen.
+    # completed (legacy bool) - superseded by completion_status below, kept
+    # only so old rows/queries written before the tri-state field existed
+    # still have *a* value; nothing new reads or writes it.
     completed = db.Column(db.Boolean, nullable=True)
     churned = db.Column(db.Boolean, nullable=True)
+
+    # Unified "Dropdown Badge" status fields (5 of them, see monitoring.html
+    # .dropdown-badge/.status-badge-menu) - all gated to frozen-only, all
+    # editable by admin + account-менеджер via their own /monitoring/<id>/...
+    # POST route, all instant-save (no separate "Save" button).
+    COMPLETION_STATUS_CHOICES = (
+        ('completed', 'Выполнено'),
+        ('in_progress', 'В работе'),
+        ('not_completed', 'Не выполнено'),
+    )
+    completion_status = db.Column(db.String(20), nullable=True)
+
+    # Задача #44 - тип размещения / тип клиента, проставляются для
+    # завершённых РК (как и churned - тот же редактируемый-только-когда-
+    # frozen паттерн, доступен администратору и account-менеджеру).
+    PLACEMENT_TYPE_CHOICES = (
+        ('flight', 'Флайт'),
+        ('test', 'Тест'),
+        ('one_off', 'Разовый'),
+    )
+    placement_type = db.Column(db.String(20), nullable=True)
+
+    CLIENT_TYPE_CHOICES = (
+        ('permanent', 'Постоянный'),
+        ('test', 'Тестовый'),
+        ('one_off', 'Разовый'),
+    )
+    client_type = db.Column(db.String(20), nullable=True)
+
+    # Задача #43 - решение сейлза/БДМ по завершённой карточке (Пролонгация/
+    # Отказ от сотрудничества/На паузе) + комментарий. Как и остальные
+    # 4 бейджа выше - доступно только когда карточка уже frozen.
+    # updated_at/updated_by - не полноценный лог изменений (это отдельная
+    # задача #57), а просто "когда/кем выставлено текущее значение".
+    SALES_STATUS_CHOICES = (
+        ('prolongation', 'Пролонгация'),
+        ('churn_risk', 'Отказ'),
+        ('on_hold', 'На паузе'),
+    )
+    sales_status = db.Column(db.String(20), nullable=True)
+    sales_comment = db.Column(db.Text, nullable=True)
+    sales_status_updated_at = db.Column(db.DateTime, nullable=True)
+    sales_status_updated_by = db.Column(db.String(255), nullable=True)
 
     # Ручная настройка видимых столбцов статистики на карточке (задача #46,
     # переключается через значок-шестерёнку прямо на карточке) - None
@@ -505,6 +553,25 @@ class MonitoringCampaign(db.Model):
             return None
         return AD_FORMAT_LABELS.get(campaigns[0].format_type, 'Баннер')
 
+    def get_placement_type_label(self):
+        return dict(self.PLACEMENT_TYPE_CHOICES).get(self.placement_type)
+
+    def get_client_type_label(self):
+        return dict(self.CLIENT_TYPE_CHOICES).get(self.client_type)
+
+    def get_completion_status_label(self):
+        return dict(self.COMPLETION_STATUS_CHOICES).get(self.completion_status)
+
+    def get_sales_status_label(self):
+        return dict(self.SALES_STATUS_CHOICES).get(self.sales_status)
+
+    def needs_sales_decision(self):
+        """True when this card is already frozen (завершена) and nobody
+        has set a sales_status (Статус БДМ) yet - the highlight/dashboard-
+        notification condition for задача #43. Статус БДМ only exists on
+        frozen cards (same gate as churned/placement_type/client_type)."""
+        return bool(self.frozen and not self.sales_status)
+
     def get_fact_vr(self):
         """Get actual VTR (Video Through Rate) for video formats or VR for banners"""
         return self.fact_vtr
@@ -529,6 +596,7 @@ class MonitoringCampaign(db.Model):
         ('pi', 'PI'),
         ('conversions', 'Conv'),
         ('cr', 'CR'),
+        ('leads', 'Лиды'),
         ('ivt', 'IVT'),
         ('givt', 'GIVT'),
         ('sivt', 'SIVT'),
@@ -911,6 +979,11 @@ class MonitoringWeeklyStat(db.Model):
     pi = db.Column(db.Float, nullable=True)
     conversions = db.Column(db.Integer, nullable=True)
     cr = db.Column(db.Float, nullable=True)
+    # Лиды (задача #56) - единственное ручное поле в этой иначе полностью
+    # авто-считаемой таблице; scheduled_compute_weekly_monitoring_stats
+    # никогда не пишет в этот столбец, так что ручное значение переживает
+    # любой последующий пересчёт недели.
+    leads = db.Column(db.Integer, nullable=True)
 
     # IVT quality (TargetAds API or Adriver file, whichever the monitoring uses)
     ivt_impressions_percent = db.Column(db.Float, nullable=True)

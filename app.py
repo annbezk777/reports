@@ -983,6 +983,19 @@ def dashboard():
         for mo in ending_soon
     ]
 
+    # 6b. Задача #43 - уже завершённые (frozen) карточки без решения БДМ
+    # (пролонгация/отказ от сотрудничества/на паузе) - тот же gate, что и
+    # у Отвала/Типа размещения/Типа клиента (только на frozen карточках).
+    needs_sales_decision = MonitoringCampaign.query.filter(
+        MonitoringCampaign.frozen == True,
+        MonitoringCampaign.sales_status.is_(None)
+    ).order_by(MonitoringCampaign.frozen_at.desc()).all()
+    needs_sales_decision_data = [
+        {'id': mo.id, 'name': mo.name, 'frozen_at': mo.frozen_at,
+         'days_ago': (now.date() - mo.frozen_at.date()).days if mo.frozen_at else None}
+        for mo in needs_sales_decision
+    ]
+
     # 7. Conversions overview (план/факт) - CR считается от визитов, сумма
     # по кампаниям, где заполнена соответствующая пара (конверсии + визиты),
     # а не "конверсии / визиты любой кампании" - иначе кампании без плана
@@ -1017,7 +1030,8 @@ def dashboard():
                          ivt_counts={k: len(v) for k, v in ivt_by_source.items()},
                          ivt_details=ivt_details,
                          problem_reports=problem_reports,
-                         ending_soon_data=ending_soon_data)
+                         ending_soon_data=ending_soon_data,
+                         needs_sales_decision_data=needs_sales_decision_data)
 
 
 @app.route('/accounts')
@@ -1901,6 +1915,7 @@ def copy_monitoring(monitoring_id):
         plan_clicks=original.plan_clicks,
         plan_visits=original.plan_visits,
         plan_conversions=original.plan_conversions,
+        plan_leads=original.plan_leads,
         plan_bounce_rate=original.plan_bounce_rate,
         plan_page_depth=original.plan_page_depth,
         plan_robotness=original.plan_robotness,
@@ -1923,6 +1938,7 @@ def copy_monitoring(monitoring_id):
         fact_clicks=None,
         fact_visits=None,
         fact_conversions=None,
+        fact_leads=None,
         fact_bounce_rate=None,
         fact_time_on_site=None,
         fact_page_depth=None,
@@ -1979,10 +1995,10 @@ def finish_monitoring_month(monitoring_id):
     except ValueError:
         return jsonify({'success': False, 'error': 'Некорректная дата отсечки'}), 400
 
-    completed_str = data.get('completed')
-    if completed_str not in ('true', 'false', True, False):
-        return jsonify({'success': False, 'error': 'Укажите, выполнена кампания или нет'}), 400
-    completed = completed_str in ('true', True)
+    completion_status = data.get('completion_status')
+    valid_completion_values = {key for key, _ in MonitoringCampaign.COMPLETION_STATUS_CHOICES}
+    if completion_status not in valid_completion_values:
+        return jsonify({'success': False, 'error': 'Укажите статус выполнения'}), 400
 
     yesterday = (datetime.now() - timedelta(days=1)).date()
     if freeze_as_of > yesterday:
@@ -2028,7 +2044,15 @@ def finish_monitoring_month(monitoring_id):
     monitoring.frozen = True
     monitoring.frozen_at = datetime.utcnow()
     monitoring.frozen_period = freeze_as_of.strftime('%Y-%m')
-    monitoring.completed = completed
+    monitoring.completion_status = completion_status
+
+    # "Кампания продолжается" = трафик-менеджер уже принял решение о
+    # пролонгации прямо здесь - не заставляем потом отдельно проставлять
+    # то же самое через бейдж "Статус БДМ".
+    if rollover:
+        monitoring.sales_status = 'prolongation'
+        monitoring.sales_status_updated_at = datetime.utcnow()
+        monitoring.sales_status_updated_by = session.get('user_email')
 
     report = monitoring.report_config
     report_freezing = False
@@ -2170,6 +2194,115 @@ def set_monitoring_churn_status(monitoring_id):
     return jsonify({'success': True, 'churned': monitoring.churned})
 
 
+@app.route('/monitoring/<int:monitoring_id>/placement-type', methods=['POST'])
+@login_required
+def set_monitoring_placement_type(monitoring_id):
+    """Задача #44: тип размещения (Постоянный/Тест/Флайт) для завершённой
+    карточки - тот же паттерн доступа и тот же frozen-гейт, что и
+    churn-status выше."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+    user_role = session.get('user_role')
+    if user_role != ROLE_ACCOUNT_MANAGER and session.get('user_email') != ADMIN_EMAIL:
+        abort(404)
+    if not monitoring.frozen:
+        return jsonify({'success': False, 'error': 'Доступно только для завершённых карточек'}), 400
+
+    data = request.get_json(silent=True) or {}
+    placement_type = data.get('placement_type') or None
+    valid_values = {key for key, _ in MonitoringCampaign.PLACEMENT_TYPE_CHOICES}
+    if placement_type is not None and placement_type not in valid_values:
+        return jsonify({'success': False, 'error': 'Некорректное значение'}), 400
+    monitoring.placement_type = placement_type
+    db.session.commit()
+
+    return jsonify({'success': True, 'placement_type': monitoring.placement_type})
+
+
+@app.route('/monitoring/<int:monitoring_id>/client-type', methods=['POST'])
+@login_required
+def set_monitoring_client_type(monitoring_id):
+    """Тип клиента (Постоянный/Тестовый/Разовый) для завершённой карточки -
+    тот же паттерн доступа и frozen-гейт, что и placement-type выше."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+    user_role = session.get('user_role')
+    if user_role != ROLE_ACCOUNT_MANAGER and session.get('user_email') != ADMIN_EMAIL:
+        abort(404)
+    if not monitoring.frozen:
+        return jsonify({'success': False, 'error': 'Доступно только для завершённых карточек'}), 400
+
+    data = request.get_json(silent=True) or {}
+    client_type = data.get('client_type') or None
+    valid_values = {key for key, _ in MonitoringCampaign.CLIENT_TYPE_CHOICES}
+    if client_type is not None and client_type not in valid_values:
+        return jsonify({'success': False, 'error': 'Некорректное значение'}), 400
+    monitoring.client_type = client_type
+    db.session.commit()
+
+    return jsonify({'success': True, 'client_type': monitoring.client_type})
+
+
+@app.route('/monitoring/<int:monitoring_id>/completion-status', methods=['POST'])
+@login_required
+def set_monitoring_completion_status(monitoring_id):
+    """Выполнение (Выполнено/В работе/Не выполнено) для завершённой
+    карточки - заменяет старое bool-поле completed тремя состояниями,
+    тот же паттерн доступа и frozen-гейт, что и placement-type выше."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+    user_role = session.get('user_role')
+    if user_role != ROLE_ACCOUNT_MANAGER and session.get('user_email') != ADMIN_EMAIL:
+        abort(404)
+    if not monitoring.frozen:
+        return jsonify({'success': False, 'error': 'Доступно только для завершённых карточек'}), 400
+
+    data = request.get_json(silent=True) or {}
+    completion_status = data.get('completion_status') or None
+    valid_values = {key for key, _ in MonitoringCampaign.COMPLETION_STATUS_CHOICES}
+    if completion_status is not None and completion_status not in valid_values:
+        return jsonify({'success': False, 'error': 'Некорректное значение'}), 400
+    monitoring.completion_status = completion_status
+    db.session.commit()
+
+    return jsonify({'success': True, 'completion_status': monitoring.completion_status})
+
+
+@app.route('/monitoring/<int:monitoring_id>/sales-status', methods=['POST'])
+@login_required
+def set_monitoring_sales_status(monitoring_id):
+    """Задача #43: решение БДМ (Пролонгация/Отказы/
+    На паузе) + комментарий. Тот же паттерн доступа и frozen-гейт, что и
+    churn-status/placement-type выше - доступно только для завершённых
+    карточек."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+
+    user_role = session.get('user_role')
+    if user_role != ROLE_ACCOUNT_MANAGER and session.get('user_email') != ADMIN_EMAIL:
+        abort(404)
+    if not monitoring.frozen:
+        return jsonify({'success': False, 'error': 'Доступно только для завершённых карточек'}), 400
+
+    data = request.get_json(silent=True) or {}
+    sales_status = data.get('sales_status') or None
+    valid_values = {key for key, _ in MonitoringCampaign.SALES_STATUS_CHOICES}
+    if sales_status is not None and sales_status not in valid_values:
+        return jsonify({'success': False, 'error': 'Некорректное значение'}), 400
+
+    monitoring.sales_status = sales_status
+    monitoring.sales_comment = (data.get('sales_comment') or '').strip() or None
+    monitoring.sales_status_updated_at = datetime.utcnow()
+    monitoring.sales_status_updated_by = session.get('user_email')
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'sales_status': monitoring.sales_status,
+        'sales_status_label': monitoring.get_sales_status_label(),
+        'sales_comment': monitoring.sales_comment,
+    })
+
+
 @app.route('/monitoring/<int:monitoring_id>/visible-columns', methods=['POST'])
 @login_required
 @block_account_manager
@@ -2187,6 +2320,73 @@ def set_monitoring_visible_columns(monitoring_id):
     monitoring.visible_columns = [c for c in columns if c in valid_keys]
     db.session.commit()
     return jsonify({'success': True, 'visible_columns': monitoring.visible_columns})
+
+
+@app.route('/monitoring/<int:monitoring_id>/weekly-leads', methods=['POST'])
+@login_required
+def set_monitoring_weekly_leads(monitoring_id):
+    """Задача #56: Лиды на уровне понедельной динамики - единственное
+    ручное поле в MonitoringWeeklyStat (всё остальное там считает
+    scheduled_compute_weekly_monitoring_stats). Намеренно БЕЗ
+    @block_account_manager - лиды чаще всего вносит именно account-менеджер
+    (БДМ), особенно на уже завершённых карточках; не блокируется и
+    _reject_if_frozen - как и gear/visible-columns выше, это не пересчёт
+    факта кампании."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    data = request.get_json(silent=True) or {}
+    week_start_raw = data.get('week_start')
+    try:
+        week_start = datetime.strptime(week_start_raw, '%Y-%m-%d').date()
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Некорректная дата недели'}), 400
+
+    stat = MonitoringWeeklyStat.query.filter_by(monitoring_id=monitoring.id, week_start=week_start).first()
+    if not stat:
+        return jsonify({'success': False, 'error': 'Неделя не найдена'}), 404
+
+    leads = data.get('leads')
+    if leads in (None, ''):
+        stat.leads = None
+    else:
+        try:
+            stat.leads = int(leads)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Некорректное значение'}), 400
+    db.session.commit()
+    return jsonify({'success': True, 'leads': stat.leads})
+
+
+@app.route('/monitoring/<int:monitoring_id>/total-leads', methods=['POST'])
+@login_required
+def set_monitoring_total_leads(monitoring_id):
+    """Задача #56: план/факт лидов на итоговой карточке - редактируется
+    прямо на карточке (без формы), одинаково на активных и завершённых
+    (edit_monitoring целиком блокирует frozen-карточки даже для admin,
+    а лиды - как и понедельные выше - нужно вносить и ПОСЛЕ заморозки
+    месяца, так что для них отдельный маршрут везде, не только когда
+    заморожено), тем же ролям, что редактируют остальные frozen-поля
+    (Статус БДМ и т.д.)."""
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    if session.get('user_role') != ROLE_ACCOUNT_MANAGER and session.get('user_email') != ADMIN_EMAIL:
+        abort(404)
+
+    data = request.get_json(silent=True) or {}
+    field = data.get('field')
+    if field not in ('plan', 'fact'):
+        return jsonify({'success': False, 'error': 'Некорректное поле'}), 400
+
+    value = data.get('value')
+    try:
+        parsed = int(value) if value not in (None, '') else None
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Некорректное значение'}), 400
+
+    if field == 'plan':
+        monitoring.plan_leads = parsed
+    else:
+        monitoring.fact_leads = parsed
+    db.session.commit()
+    return jsonify({'success': True, 'plan_leads': monitoring.plan_leads, 'fact_leads': monitoring.fact_leads})
 
 
 @app.route('/monitoring/<int:monitoring_id>/delete', methods=['POST'])
@@ -2411,6 +2611,7 @@ def create_monitoring():
         # Post-click KPIs
         plan_visits = request.form.get('plan_visits')
         plan_conversions = request.form.get('plan_conversions')
+        plan_leads = request.form.get('plan_leads')
         plan_bounce_rate = request.form.get('plan_bounce_rate')
         plan_time_on_site = request.form.get('plan_time_on_site')
         plan_page_depth = request.form.get('plan_page_depth')
@@ -2418,9 +2619,12 @@ def create_monitoring():
 
         # Postclick facts (manual entry - usually overwritten by the next
         # Yandex Metrika auto-refresh, but lets a manager fill them in
-        # when Metrika isn't configured or needs a manual correction)
+        # when Metrika isn't configured or needs a manual correction).
+        # fact_leads is the exception - задача #56, purely manual, nothing
+        # ever auto-pulls or overwrites it.
         fact_visits = request.form.get('fact_visits')
         fact_conversions = request.form.get('fact_conversions')
+        fact_leads = request.form.get('fact_leads')
         fact_bounce_rate = request.form.get('fact_bounce_rate')
         fact_time_on_site = request.form.get('fact_time_on_site')
         fact_page_depth = request.form.get('fact_page_depth')
@@ -2452,12 +2656,14 @@ def create_monitoring():
             plan_clicks=int(plan_clicks) if plan_clicks else None,
             plan_visits=int(plan_visits) if plan_visits else None,
             plan_conversions=int(plan_conversions) if plan_conversions else None,
+            plan_leads=int(plan_leads) if plan_leads else None,
             plan_bounce_rate=float(plan_bounce_rate) if plan_bounce_rate else None,
             plan_time_on_site=float(plan_time_on_site) if plan_time_on_site else None,
             plan_page_depth=float(plan_page_depth) if plan_page_depth else None,
             plan_robotness=float(plan_robotness) if plan_robotness else None,
             fact_visits=int(fact_visits) if fact_visits else None,
             fact_conversions=int(fact_conversions) if fact_conversions else None,
+            fact_leads=int(fact_leads) if fact_leads else None,
             fact_bounce_rate=float(fact_bounce_rate) if fact_bounce_rate else None,
             fact_time_on_site=float(fact_time_on_site) if fact_time_on_site else None,
             fact_page_depth=float(fact_page_depth) if fact_page_depth else None,
@@ -2560,12 +2766,14 @@ def edit_monitoring(monitoring_id):
         # Post-click KPIs
         plan_visits = request.form.get('plan_visits')
         plan_conversions = request.form.get('plan_conversions')
+        plan_leads = request.form.get('plan_leads')
         plan_bounce_rate = request.form.get('plan_bounce_rate')
         plan_time_on_site = request.form.get('plan_time_on_site')
         plan_page_depth = request.form.get('plan_page_depth')
         plan_robotness = request.form.get('plan_robotness')
         fact_visits = request.form.get('fact_visits')
         fact_conversions = request.form.get('fact_conversions')
+        fact_leads = request.form.get('fact_leads')
         fact_bounce_rate = request.form.get('fact_bounce_rate')
         fact_time_on_site = request.form.get('fact_time_on_site')
         fact_page_depth = request.form.get('fact_page_depth')
@@ -2573,12 +2781,14 @@ def edit_monitoring(monitoring_id):
 
         monitoring.plan_visits = int(plan_visits) if plan_visits else None
         monitoring.plan_conversions = int(plan_conversions) if plan_conversions else None
+        monitoring.plan_leads = int(plan_leads) if plan_leads else None
         monitoring.plan_bounce_rate = float(plan_bounce_rate) if plan_bounce_rate else None
         monitoring.plan_time_on_site = float(plan_time_on_site) if plan_time_on_site else None
         monitoring.plan_page_depth = float(plan_page_depth) if plan_page_depth else None
         monitoring.plan_robotness = float(plan_robotness) if plan_robotness else None
         monitoring.fact_visits = int(fact_visits) if fact_visits else None
         monitoring.fact_conversions = int(fact_conversions) if fact_conversions else None
+        monitoring.fact_leads = int(fact_leads) if fact_leads else None
         monitoring.fact_bounce_rate = float(fact_bounce_rate) if fact_bounce_rate else None
         monitoring.fact_time_on_site = float(fact_time_on_site) if fact_time_on_site else None
         monitoring.fact_page_depth = float(fact_page_depth) if fact_page_depth else None
@@ -2767,6 +2977,7 @@ def get_monitoring_data(monitoring_id):
             'plan_clicks': monitoring.plan_clicks,
             'plan_visits': monitoring.plan_visits,
             'plan_conversions': monitoring.plan_conversions,
+            'plan_leads': monitoring.plan_leads,
             'plan_bounce_rate': monitoring.plan_bounce_rate,
             'plan_time_on_site': monitoring.plan_time_on_site,
             'plan_page_depth': monitoring.plan_page_depth,
@@ -2774,6 +2985,7 @@ def get_monitoring_data(monitoring_id):
             'plan_pi': monitoring.plan_pi,
             'fact_visits': monitoring.fact_visits,
             'fact_conversions': monitoring.fact_conversions,
+            'fact_leads': monitoring.fact_leads,
             'fact_bounce_rate': monitoring.fact_bounce_rate,
             'fact_time_on_site': monitoring.fact_time_on_site,
             'fact_page_depth': monitoring.fact_page_depth,

@@ -181,11 +181,8 @@
                 <p style="text-align: center; color: var(--text-secondary); padding: 40px 0; margin: 0;">Нет кампаний</p>
             {% endif %}
         </div>
-    </div>
 
-    <!-- Monitoring Performance Row -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
-        <!-- Plan Fulfillment -->
+        <!-- Plan Fulfillment (moved up into this row, задача dashboard-reorg) -->
         <div class="metric-card">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
                 <div style="width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--peach-light) 0%, var(--peach-bg) 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
@@ -259,6 +256,33 @@
             {% endif %}
         </div>
 
+        <!-- Needs Sales Decision (задача #43) -->
+        <div class="metric-card">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                <div style="width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--peach-light) 0%, var(--peach-bg) 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg width="16" height="16" fill="none" stroke="var(--primary-orange)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9h8M8 13h6m-9 8h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14l3-3z"/></svg>
+                </div>
+                <div>
+                    <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">Завершены, статус БДМ не выставлен</h3>
+                </div>
+            </div>
+            {% if needs_sales_decision_data %}
+            <div style="max-height: 195px; overflow-y: auto; margin-top: 14px;">
+                {% for e in needs_sales_decision_data %}
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border-color);">
+                    <a href="{{ url_for('monitoring', tab='frozen', open=e.id) }}" style="font-size: 13px; color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color='var(--primary-orange)';" onmouseout="this.style.color='var(--text-primary)';">{{ e.name }}</a>
+                    <span style="font-size: 11px; font-weight: 700; color: #fff; background: {{ '#dc2626' if e.days_ago and e.days_ago >= 7 else 'var(--primary-orange)' }}; border-radius: 10px; padding: 3px 9px; white-space: nowrap; margin-left: 8px;">{{ (e.days_ago ~ ' дн. назад') if e.days_ago is not none else '—' }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+                <p style="text-align: center; color: var(--text-secondary); padding: 40px 0; margin: 0;">Нет карточек без решения</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Monitoring Performance Row -->
+    <div style="display: grid; grid-template-columns: 1fr; gap: 24px; margin-bottom: 32px;">
         <!-- Verifier Discrepancies -->
         <div class="metric-card">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
@@ -326,37 +350,7 @@
 
 
     <!-- Traffic Quality Row -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;">
-        <!-- Reports by Manager -->
-        <div class="metric-card">
-            <div style="margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">
-                    По менеджерам
-                </h3>
-                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
-                    Активные отчеты
-                </p>
-            </div>
-            <div style="max-height: 200px; overflow-y: auto;">
-                {% set max_count = stats.reports_by_manager.values()|list|max if stats.reports_by_manager else 1 %}
-                {% for manager, count in stats.reports_by_manager.items() %}
-                <div style="padding: 12px 0; border-bottom: 1px solid var(--border-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 14px; font-weight: 500; color: var(--text-primary);">
-                            {{ manager if manager else 'Не назначен' }}
-                        </span>
-                        <span style="font-size: 14px; font-weight: 600; color: var(--text-primary);">
-                            {{ count }}
-                        </span>
-                    </div>
-                    <div style="width: 100%; height: 4px; background: var(--bg-light); border-radius: 2px; overflow: hidden;">
-                        <div style="width: {{ (count / max_count * 100)|int }}%; height: 100%; background: var(--primary-orange); border-radius: 2px;"></div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-
+    <div style="display: grid; grid-template-columns: 1fr; gap: 24px; margin-bottom: 32px;">
         <!-- Traffic Quality, by verifier source -->
         <div class="metric-card">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
