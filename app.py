@@ -7013,15 +7013,16 @@ def _weborama_links_due_today(now_moscow):
 
 def needs_weborama_attention():
     """Monitorings with at least one Weborama pixel that's still stale
-    (not fetched today) PAST the 10:00 Moscow automatic-retry cutoff
-    (scheduler_tick.py retries every 10 min from 08:30-09:50) - the
-    automatic retries are done for today, so a human needs to look.
-    Returns [] before 10:00 (still mid-retry, not yet an error state -
-    showing a warning during the normal retry window would just be
-    noise). One entry per monitoring (not per link), with the list of
-    its still-stale link labels attached for display."""
+    (not fetched today) PAST the automatic-retry cutoff (scheduler_tick.py
+    tries at 08:30, then once more at 08:40 - two tries is enough to tell
+    a transient hiccup, which clears on the first retry, from a real
+    problem that a third+ attempt wouldn't fix either). Returns [] before
+    08:50 (small buffer so the 08:40 attempt has time to actually finish
+    - showing a warning mid-retry would just be noise). One entry per
+    monitoring (not per link), with the list of its still-stale link
+    labels attached for display."""
     now = datetime.now(pytz.timezone('Europe/Moscow'))
-    if now.hour < 10:
+    if (now.hour, now.minute) < (8, 50):
         return []
     due = _weborama_links_due_today(now)
     by_monitoring = {}
@@ -7044,14 +7045,15 @@ def scheduled_refresh_weborama_verifiers():
     caught, logged, and skipped without blocking the rest of the links
     or crashing the job.
 
-    Called repeatedly by scheduler_tick.py across a retry window
-    (08:30-09:50 Moscow, every 10 minutes - see that file) instead of
-    just once at 08:30: a transient failure (SAPE/Weborama hiccup, quota,
-    etc.) used to mean that link simply never got refreshed that whole
-    day. Only links that HAVEN'T already succeeded today are touched on
-    each call (_weborama_links_due_today), so a retry after a successful
-    first attempt is a cheap no-op, not a redundant full re-fetch of
-    everything.
+    Called twice by scheduler_tick.py - 08:30 and 08:40 Moscow (see that
+    file) - instead of just once: a transient failure (SAPE/Weborama
+    hiccup, quota, etc.) used to mean that link simply never got
+    refreshed that whole day. Two tries, not more - if it's still broken
+    after one retry it's not a blip, and hammering the same broken
+    permalink repeatedly all morning wouldn't change that. Only links
+    that HAVEN'T already succeeded today are touched on each call
+    (_weborama_links_due_today), so the 08:40 call after a successful
+    08:30 is a cheap no-op, not a redundant full re-fetch of everything.
     """
     with app.app_context():
         now = datetime.now(pytz.timezone('Europe/Moscow'))
@@ -7165,23 +7167,18 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
             max_instances=1  # Don't run multiple instances simultaneously
         )
 
-        # Add daily Weborama verifier refresh at 08:30 - after the SAPE
-        # fact refresh above, so discrepancy % compares against fresh data
-        scheduler.add_job(
-            func=scheduled_refresh_weborama_verifiers,
-            trigger=CronTrigger(hour=8, minute=30),
-            id='daily_weborama_verifier_refresh',
-            name='Автообновление верификаторов Weborama',
-            replace_existing=True,
-            misfire_grace_time=3600,
-            coalesce=True,
-            max_instances=1
-        )
+        # Weborama verifier refresh is NOT scheduled here - it moved to
+        # scheduler_tick.py (08:30 + 08:40 retry), which this in-process
+        # scheduler can't replicate (it only fires once per CronTrigger,
+        # not a short retry window). This block only runs at all when
+        # ENABLE_AUTO_SYNC=1, which is off everywhere now that
+        # scheduler_tick.py owns all scheduled jobs - see its own
+        # docstring.
 
         # Add weekly monitoring dynamics (task #22) at Monday 09:35 - after
-        # the daily monitoring refresh (08:00) and Weborama verifier
-        # refresh (08:30) above, so the week being closed out already has
-        # that day's fresh fact instead of yesterday's.
+        # the daily monitoring refresh (08:00) above, so the week being
+        # closed out already has that day's fresh fact instead of
+        # yesterday's.
         scheduler.add_job(
             func=scheduled_compute_weekly_monitoring_stats,
             trigger=CronTrigger(day_of_week='mon', hour=9, minute=35),
@@ -7199,7 +7196,6 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
         logging.info("   - Weekday account sync at 09:00 Moscow time (Mon-Fri)")
         logging.info("   - Hourly report schedule check (every hour at :00)")
         logging.info("   - Daily monitoring refresh at 08:00 Moscow time (every day)")
-        logging.info("   - Daily Weborama verifier refresh at 08:30 Moscow time (every day)")
         logging.info("   - Weekly monitoring dynamics at Monday 09:35 Moscow time")
 
         # Check if we need to sync on startup (if last sync was >24h ago)
