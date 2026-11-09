@@ -271,19 +271,27 @@ class GoogleSheetsClient:
             if not sheet_id:
                 return None
 
-            spreadsheet = self.client.open_by_key(sheet_id)
+            spreadsheet = self._call_with_quota_retry(
+                lambda: self.client.open_by_key(sheet_id), "open spreadsheet"
+            )
 
             if sheet_name:
                 try:
-                    worksheet = spreadsheet.worksheet(sheet_name)
+                    worksheet = self._call_with_quota_retry(
+                        lambda: spreadsheet.worksheet(sheet_name), "get worksheet by name"
+                    )
                 except gspread.exceptions.WorksheetNotFound:
                     if gid is None:
                         raise
                     print(f"⚠️ Worksheet '{sheet_name}' not found by name - falling back to saved gid {gid} (tab was likely renamed)")
-                    worksheet = spreadsheet.get_worksheet_by_id(gid)
+                    worksheet = self._call_with_quota_retry(
+                        lambda: spreadsheet.get_worksheet_by_id(gid), "get worksheet by gid"
+                    )
                     print(f"✅ Resolved via gid: tab is now named '{worksheet.title}'")
             else:
-                worksheet = spreadsheet.get_worksheet(0)
+                worksheet = self._call_with_quota_retry(
+                    lambda: spreadsheet.get_worksheet(0), "get first worksheet"
+                )
 
             return worksheet
 
@@ -322,7 +330,9 @@ class GoogleSheetsClient:
 
             # Read first 10 rows, all columns A-Z
             print(f"🔍 Searching for 'Бренд' in first 10 rows...")
-            data = worksheet.get('A1:Z10')
+            data = self._call_with_quota_retry(
+                lambda: worksheet.get('A1:Z10'), "read for brand extraction"
+            )
 
             if not data:
                 print(f"⚠️ No data found in first 10 rows")
@@ -460,19 +470,27 @@ class GoogleSheetsClient:
                 return []
 
             # Open spreadsheet
-            spreadsheet = self.client.open_by_key(sheet_id)
+            spreadsheet = self._call_with_quota_retry(
+                lambda: self.client.open_by_key(sheet_id), "open spreadsheet for structure detection"
+            )
 
             # Select worksheet
             if sheet_name:
-                worksheet = spreadsheet.worksheet(sheet_name)
+                worksheet = self._call_with_quota_retry(
+                    lambda: spreadsheet.worksheet(sheet_name), "get worksheet for structure detection"
+                )
             else:
-                worksheet = spreadsheet.get_worksheet(0)
+                worksheet = self._call_with_quota_retry(
+                    lambda: spreadsheet.get_worksheet(0), "get first worksheet for structure detection"
+                )
 
             # Read data
             if cached_data is not None:
                 all_data = cached_data
             else:
-                all_data = worksheet.get('A1:DZ300')
+                all_data = self._call_with_quota_retry(
+                    lambda: worksheet.get('A1:DZ300'), "read worksheet data for structure detection"
+                )
 
             # Find ALL headers containing this campaign ID
             found_sections = []
