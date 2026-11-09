@@ -114,10 +114,14 @@ class GoogleSheetsClient:
                 return None
 
             # Open spreadsheet
-            spreadsheet = client.client.open_by_key(sheet_id)
+            spreadsheet = client._call_with_quota_retry(
+                lambda: client.client.open_by_key(sheet_id), "open spreadsheet for worksheet list"
+            )
 
             # Get all worksheets (exclude hidden ones)
-            all_worksheets = spreadsheet.worksheets(exclude_hidden=True)
+            all_worksheets = client._call_with_quota_retry(
+                lambda: spreadsheet.worksheets(exclude_hidden=True), "list worksheets"
+            )
 
             # Filter active (non-archived) worksheets
             active_worksheet_names = []
