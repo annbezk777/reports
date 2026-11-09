@@ -1012,6 +1012,8 @@ def dashboard():
         'fact_cr': round(fact_conv_total / fact_cr_visits * 100, 2) if fact_cr_visits else None,
     }
 
+    weborama_attention_data = needs_weborama_attention()
+
     return render_template('dashboard.html',
                          stats=stats,
                          conversions_stats=conversions_stats,
@@ -1032,7 +1034,8 @@ def dashboard():
                          ivt_details=ivt_details,
                          problem_reports=problem_reports,
                          ending_soon_data=ending_soon_data,
-                         needs_sales_decision_data=needs_sales_decision_data)
+                         needs_sales_decision_data=needs_sales_decision_data,
+                         weborama_attention_data=weborama_attention_data)
 
 
 @app.route('/accounts')
@@ -1850,7 +1853,10 @@ def monitoring():
                          month_filter=month_filter,
                          frozen_months=frozen_months,
                          accounts=accounts,
-                         admin_email=ADMIN_EMAIL)
+                         admin_email=ADMIN_EMAIL,
+                         weborama_stale_monitoring_ids={
+                             entry['monitoring'].id for entry in needs_weborama_attention()
+                         })
 
 
 @app.route('/monitoring/<int:monitoring_id>')
@@ -6979,6 +6985,54 @@ def scheduled_refresh_all_monitorings():
         logging.info(f"{'='*60}\n")
 
 
+def _weborama_links_due_today(now_moscow):
+    """Active Weborama permalinks that haven't successfully fetched YET
+    today (Moscow calendar day). Shared by the scheduled refresh (so
+    repeated calls only touch what's still stale - see
+    scheduled_refresh_weborama_verifiers' retry-window docstring) and the
+    dashboard/monitoring "stale pixel" indicators below."""
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    today = now_moscow.date()
+    links = (VerifierLink.query
+             .join(MonitoringCampaign)
+             .filter(VerifierLink.verifier_type == 'weborama')
+             .filter(VerifierLink.permalink_url.isnot(None))
+             .filter(MonitoringCampaign.archived == False)
+             .filter(MonitoringCampaign.date_to >= today)
+             .all())
+    due = []
+    for link in links:
+        if link.last_fetched_at is None:
+            due.append(link)
+            continue
+        fetched_moscow_date = pytz.UTC.localize(link.last_fetched_at).astimezone(moscow_tz).date()
+        if fetched_moscow_date < today:
+            due.append(link)
+    return due
+
+
+def needs_weborama_attention():
+    """Monitorings with at least one Weborama pixel that's still stale
+    (not fetched today) PAST the 10:00 Moscow automatic-retry cutoff
+    (scheduler_tick.py retries every 10 min from 08:30-09:50) - the
+    automatic retries are done for today, so a human needs to look.
+    Returns [] before 10:00 (still mid-retry, not yet an error state -
+    showing a warning during the normal retry window would just be
+    noise). One entry per monitoring (not per link), with the list of
+    its still-stale link labels attached for display."""
+    now = datetime.now(pytz.timezone('Europe/Moscow'))
+    if now.hour < 10:
+        return []
+    due = _weborama_links_due_today(now)
+    by_monitoring = {}
+    for link in due:
+        by_monitoring.setdefault(link.monitoring, []).append(link.label or f'Пиксель #{link.id}')
+    return [
+        {'monitoring': monitoring, 'stale_labels': labels}
+        for monitoring, labels in by_monitoring.items()
+    ]
+
+
 def scheduled_refresh_weborama_verifiers():
     """
     Scheduled task to refresh every Weborama verifier permalink daily.
@@ -6988,9 +7042,16 @@ def scheduled_refresh_weborama_verifiers():
     browser session (~20-25s) run one at a time - this IS the queue: a
     plain sequential loop where a single broken/unreachable permalink is
     caught, logged, and skipped without blocking the rest of the links
-    or crashing the job. No external queue/worker needed - the daily
-    cron interval already de-duplicates retries, and misfire_grace_time
-    on the job below covers a missed run.
+    or crashing the job.
+
+    Called repeatedly by scheduler_tick.py across a retry window
+    (08:30-09:50 Moscow, every 10 minutes - see that file) instead of
+    just once at 08:30: a transient failure (SAPE/Weborama hiccup, quota,
+    etc.) used to mean that link simply never got refreshed that whole
+    day. Only links that HAVEN'T already succeeded today are touched on
+    each call (_weborama_links_due_today), so a retry after a successful
+    first attempt is a cheap no-op, not a redundant full re-fetch of
+    everything.
     """
     with app.app_context():
         now = datetime.now(pytz.timezone('Europe/Moscow'))
@@ -6998,38 +7059,34 @@ def scheduled_refresh_weborama_verifiers():
         logging.info(f"⏰ SCHEDULED WEBORAMA VERIFIER REFRESH - {now.strftime('%Y-%m-%d %H:%M:%S')}")
         logging.info(f"{'='*60}")
 
-        links = (VerifierLink.query
-                 .join(MonitoringCampaign)
-                 .filter(VerifierLink.verifier_type == 'weborama')
-                 .filter(VerifierLink.permalink_url.isnot(None))
-                 .filter(MonitoringCampaign.archived == False)
-                 .filter(MonitoringCampaign.date_to >= now.date())
-                 .all())
+        links = _weborama_links_due_today(now)
 
         if not links:
-            logging.info("ℹ️ No Weborama verifier permalinks found")
+            logging.info("ℹ️ No Weborama verifier permalinks still due today")
             return
 
-        logging.info(f"📋 Found {len(links)} Weborama permalink(s) to refresh")
+        logging.info(f"📋 Found {len(links)} Weborama permalink(s) still due today")
 
         import time
         updated = 0
         failed = 0
 
         for link in links:
+            link_id = link.id
+            monitoring_name = link.monitoring.name  # resolve once, before any try/except - a lazy-load triggered FROM an except handler isn't caught by it and crashes the whole job
             try:
                 result = _fetch_and_apply_weborama_link(link)
                 mapping_summary = ', '.join(
                     f"{m.get('insertion_name') or ('mapping ' + str(m['id']))}={'OK' if m['success'] else 'ERR'}"
                     for m in result['mappings']
                 ) or 'нет сопоставлений'
-                logging.info(f"✅ Weborama link {link.id} ({link.monitoring.name}): {mapping_summary}")
+                logging.info(f"✅ Weborama link {link_id} ({monitoring_name}): {mapping_summary}")
                 updated += 1
             except WeboramaLinkFetchError as e:
-                logging.warning(f"⚠️ Weborama link {link.id} ({link.monitoring.name}) skipped: {e}")
+                logging.warning(f"⚠️ Weborama link {link_id} ({monitoring_name}) skipped: {e}")
                 failed += 1
             except Exception as e:
-                logging.error(f"❌ Weborama link {link.id} ({link.monitoring.name}) failed: {e}")
+                logging.error(f"❌ Weborama link {link_id} ({monitoring_name}) failed: {e}")
                 db.session.rollback()
                 failed += 1
 

@@ -23,7 +23,14 @@ once, then exits:
   - scheduled_update_reports(): every tick (each report checks its own
     schedule_time/schedule_days internally)
   - scheduled_refresh_all_monitorings(): daily at 08:00 Moscow
-  - scheduled_refresh_weborama_verifiers(): daily at 08:30 Moscow
+  - scheduled_refresh_weborama_verifiers(): daily, retried every 10 min
+    from 08:30 through 09:50 Moscow - a transient failure (SAPE hiccup,
+    Sheets/Weborama quota, etc.) used to mean that pixel just never got
+    refreshed for the rest of the day. The function itself only touches
+    links that haven't already succeeded today, so a retry after a
+    successful first attempt is a cheap no-op. If still stale past 10:00,
+    it stays stale until tomorrow - see needs_weborama_attention() in
+    app.py for the dashboard/monitoring-card indicators that flag this.
   - scheduled_sync_all_accounts(): Mon-Fri at 09:00 Moscow
   - scheduled_compute_weekly_monitoring_stats(): Mon at 09:30 Moscow - after
     the other morning jobs so monitoring facts are fresh. Can run long
@@ -63,7 +70,11 @@ def run_tick():
     if now.hour == 8 and now.minute == 0:
         main.scheduled_refresh_all_monitorings()
 
-    if now.hour == 8 and now.minute == 30:
+    # Retry window: 08:30 through 09:50 Moscow, every 10 minutes. The
+    # function itself skips anything already fresh today, so repeated
+    # calls are cheap once things start succeeding.
+    in_weborama_window = (now.hour == 8 and now.minute >= 30) or now.hour == 9
+    if in_weborama_window and now.minute % 10 == 0:
         main.scheduled_refresh_weborama_verifiers()
 
     if now.isoweekday() <= 5 and now.hour == 9 and now.minute == 0:

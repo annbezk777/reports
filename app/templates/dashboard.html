@@ -16,6 +16,23 @@
 
 <!-- Content Body -->
 <div class="content-body">
+    <!-- Weborama не смогла обновиться сегодня (автоповтор 08:30-09:50 мск
+         исчерпан, см. needs_weborama_attention() в app.py) -->
+    {% if weborama_attention_data %}
+    <div style="margin-bottom: 24px; padding: 14px 18px; border-radius: 10px; background: var(--peach-bg); border: 1px solid var(--primary-orange); display: flex; align-items: flex-start; gap: 12px;">
+        <svg width="20" height="20" fill="none" stroke="var(--primary-orange)" viewBox="0 0 24 24" style="flex-shrink: 0; margin-top: 1px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <div>
+            <strong style="font-size: 14px; color: var(--text-primary);">Weborama не обновилась сегодня для {{ weborama_attention_data|length }} мониторинг{{ 'а' if weborama_attention_data|length in [2,3,4] else ('ов' if weborama_attention_data|length > 4 else '') }}</strong>
+            <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);">Автоматические повторы (08:30-09:50 мск) не помогли — обновите вручную на карточке мониторинга.</p>
+            <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;">
+                {% for entry in weborama_attention_data %}
+                <a href="{{ url_for('monitoring', open=entry.monitoring.id) }}" title="{{ entry.stale_labels|join(', ') }}" style="font-size: 12px; font-weight: 600; color: var(--primary-orange); background: white; border-radius: 999px; padding: 4px 12px; text-decoration: none; border: 1px solid var(--primary-orange);">{{ entry.monitoring.name }}</a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Metrics Grid -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-bottom: 32px;">
         <!-- Total Reports -->
