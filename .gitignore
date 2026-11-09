@@ -21,6 +21,9 @@ uploads/
 *.log
 logs/
 
+# Runtime state (not code)
+.report_retry_cooldown.json
+
 # Credentials
 google_credentials.json
 service_account.json

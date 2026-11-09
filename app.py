@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime, timedelta
 import os
+import json
 import hashlib
 import random
 import smtplib
@@ -6680,13 +6681,41 @@ def run_report_update(report, date_from=None, date_to=None):
         return False
 
 
-# In-memory per-process retry cooldown for scheduled_update_reports - not
-# persisted to the DB on purpose. A failed/overdue report should be retried
-# again soon, but not literally every single minute while e.g. SAPE is
-# down - this throttles retries without needing a migration, and a worker
-# restart just means one retry happens a bit earlier than usual (harmless).
-_report_retry_cooldown = {}  # {report_id: last attempt datetime (Europe/Moscow, aware)}
+# Retry cooldown for scheduled_update_reports - MUST be persisted to disk,
+# not just in-memory: since scheduler_tick.py (systemd timer, see that
+# file's docstring) imports this module fresh and exits every single
+# minute, an in-memory dict is wiped every tick and the cooldown check
+# below always sees it empty - every due-but-failing report then gets
+# retried every single minute all day instead of every 30, hammering SAPE/
+# Google Sheets and burning through the Sheets API's 60-req/min quota
+# (confirmed in prod logs: e.g. report 97 logged ~885 attempts in one day).
+# A plain JSON file keyed by report_id survives across those per-minute
+# process restarts, which is all that's needed here - this was fine as a
+# pure in-memory dict back when the old scheduler ran as one long-lived
+# in-process APScheduler job (a worker restart was a rare, harmless event
+# then); it silently stopped working when the execution model changed to
+# "fresh process every tick" on 2026-10-26.
+_REPORT_RETRY_COOLDOWN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.report_retry_cooldown.json')
 _REPORT_RETRY_COOLDOWN_MINUTES = 30
+
+
+def _load_report_retry_cooldown():
+    try:
+        with open(_REPORT_RETRY_COOLDOWN_FILE) as f:
+            raw = json.load(f)
+        return {int(k): datetime.fromisoformat(v) for k, v in raw.items()}
+    except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
+        return {}
+
+
+def _save_report_retry_cooldown(cooldown):
+    tmp_path = _REPORT_RETRY_COOLDOWN_FILE + '.tmp'
+    try:
+        with open(tmp_path, 'w') as f:
+            json.dump({str(k): v.isoformat() for k, v in cooldown.items()}, f)
+        os.replace(tmp_path, _REPORT_RETRY_COOLDOWN_FILE)
+    except OSError as e:
+        logging.warning(f"⚠️ Could not persist report retry cooldown: {e}")
 
 
 def scheduled_update_reports():
@@ -6703,13 +6732,15 @@ def scheduled_update_reports():
     incident where 3 reports' exact minute ticked by while a slower
     Monday account sync + several SAPE timeouts kept this job from
     running for ~4 minutes straight through. "Due since" with a cooldown
-    (see _report_retry_cooldown) fixes that and also retries real
+    (see _load_report_retry_cooldown/_save_report_retry_cooldown) fixes
+    that and also retries real
     failures (e.g. a SAPE timeout) a bit later instead of giving up for
     the week.
     """
     with app.app_context():
         now = datetime.now(pytz.timezone('Europe/Moscow'))
         current_day = now.isoweekday()  # 1=Monday, 7=Sunday
+        retry_cooldown = _load_report_retry_cooldown()
 
         logging.info(f"\n{'='*60}")
         logging.info(f"⏰ SCHEDULED REPORT CHECK - {now.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -6775,14 +6806,18 @@ def scheduled_update_reports():
                     continue
 
             # Due, but don't hammer a possibly-down API every single minute
-            last_attempt = _report_retry_cooldown.get(report.id)
+            last_attempt = retry_cooldown.get(report.id)
             if last_attempt and (now - last_attempt) < timedelta(minutes=_REPORT_RETRY_COOLDOWN_MINUTES):
                 logging.debug(f"⏭️ Skipping report {report.id}: retried {(now - last_attempt).seconds // 60}m ago, cooldown is {_REPORT_RETRY_COOLDOWN_MINUTES}m")
                 reports_skipped += 1
                 continue
 
             logging.info(f"✅ Report {report.id} ({report.name or 'Unnamed'}) is due - scheduled {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][current_day-1]} {scheduled_hour:02d}:{scheduled_minute:02d}, now {now.strftime('%H:%M:%S')}")
-            _report_retry_cooldown[report.id] = now
+            retry_cooldown[report.id] = now
+            # Persist BEFORE the (possibly slow/failing) update call itself,
+            # so even if this tick crashes or times out mid-update, the next
+            # tick still sees the mark and won't retry early.
+            _save_report_retry_cooldown(retry_cooldown)
 
             success = run_report_update(report)
             if success:
