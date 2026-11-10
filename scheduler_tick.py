@@ -23,6 +23,14 @@ once, then exits:
   - scheduled_update_reports(): every tick (each report checks its own
     schedule_time/schedule_days internally)
   - scheduled_refresh_all_monitorings(): daily at 08:00 Moscow
+  - scheduled_compute_current_week_stats(): daily at 08:05 Moscow, right
+    after the monitoring refresh above so its SAPE facts are fresh - the
+    CURRENT, still-in-progress Mon-Sun week's numbers through yesterday
+    (task #73), so the понедельная динамика table shows the week that's
+    happening right now, updating day by day, instead of only appearing
+    once scheduled_compute_weekly_monitoring_stats freezes it the
+    following Monday. No-ops on Mondays themselves (today IS the new
+    week's Monday - nothing of it has happened yet).
   - scheduled_refresh_weborama_verifiers(): daily at 08:30, retried once
     more at 08:40 - a transient failure (SAPE hiccup, Sheets/Weborama
     quota, etc.) used to mean that pixel just never got refreshed for
@@ -70,6 +78,9 @@ def run_tick():
 
     if now.hour == 8 and now.minute == 0:
         main.scheduled_refresh_all_monitorings()
+
+    if now.hour == 8 and now.minute == 5:
+        main.scheduled_compute_current_week_stats()
 
     # 08:30 first attempt, 08:40 one retry. The function itself skips
     # anything already fresh today, so the second call is cheap once

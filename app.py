@@ -1846,6 +1846,14 @@ def monitoring():
             ).all()
         }, reverse=True)
 
+    # Task #73 - which week_start value(s) are the still-in-progress
+    # current week (updated daily, not yet frozen by Monday's job) -
+    # used by the weekly dynamics table to mark that row as live/partial
+    # instead of letting it look like an ordinary completed week.
+    current_week_starts = {
+        chunk_start for chunk_start, _ in get_current_week_chunks(datetime.now(pytz.timezone('Europe/Moscow')).date())
+    }
+
     return render_template('monitoring.html',
                          monitorings=all_monitorings,
                          manager_filter=manager_filter,
@@ -1859,7 +1867,8 @@ def monitoring():
                          admin_email=ADMIN_EMAIL,
                          weborama_stale_monitoring_ids={
                              entry['monitoring'].id for entry in needs_weborama_attention()
-                         })
+                         },
+                         current_week_starts=current_week_starts)
 
 
 @app.route('/monitoring/<int:monitoring_id>')
@@ -3352,6 +3361,31 @@ def get_last_completed_week_chunks(today):
     return [(last_monday, month_end), (next_month_start, last_sunday)]
 
 
+def get_current_week_chunks(today):
+    """The CURRENT, still-in-progress Mon-Sun week - from this week's
+    Monday through YESTERDAY (today's own data isn't settled yet, same
+    reasoning as the daily monitoring refresh), split at a month
+    boundary the same way get_last_completed_week_chunks splits an
+    already-completed week (task #73 - Аня wants this in-progress week
+    visible and updating day by day instead of only appearing once
+    Monday's job freezes it after the fact).
+
+    Returns [] when today itself IS the week's Monday - no days of this
+    week have passed yet to show (yesterday still belongs to last
+    week, already covered by the completed-week job)."""
+    import calendar
+    this_monday = today - timedelta(days=today.weekday())
+    yesterday = today - timedelta(days=1)
+    if yesterday < this_monday:
+        return []
+    if (this_monday.year, this_monday.month) == (yesterday.year, yesterday.month):
+        return [(this_monday, yesterday)]
+    last_day_of_start_month = calendar.monthrange(this_monday.year, this_monday.month)[1]
+    month_end = this_monday.replace(day=last_day_of_start_month)
+    next_month_start = month_end + timedelta(days=1)
+    return [(this_monday, month_end), (next_month_start, yesterday)]
+
+
 def compute_monitoring_week_stats(monitoring, week_start, week_end):
     """Compute and upsert one Mon-Sun week's fact numbers for a monitoring
     (task #22 - понедельная динамика). Own SAPE/Metrika metrics plus every
@@ -3643,6 +3677,68 @@ def scheduled_compute_weekly_monitoring_stats(today=None):
             total_failed += failed
 
         logging.info(f"\n✅ WEEKLY DYNAMICS COMPUTE COMPLETED: {total_updated} updated, {total_failed} failed")
+        logging.info(f"{'='*60}\n")
+
+
+def scheduled_compute_current_week_stats(today=None):
+    """Runs daily (not just Monday) - computes the CURRENT, still-in-
+    progress week's numbers through yesterday for every monitoring whose
+    campaign period overlaps it (task #73). Reuses
+    compute_monitoring_week_stats() exactly as the weekly job does - same
+    upsert key (monitoring_id, week_start), so today's call just
+    overwrites yesterday's partial numbers for the same in-progress week.
+    Once the week is actually over, the regular Monday job
+    (scheduled_compute_weekly_monitoring_stats) takes over computing
+    that now-completed week_start going forward; this job's own
+    get_current_week_chunks naturally returns [] for that week from then
+    on, since it's no longer "this week".
+
+    today: override for backfilling/testing, same convention as
+    scheduled_compute_weekly_monitoring_stats. Defaults to the real
+    current date."""
+    with app.app_context():
+        import time as _time
+        if today is None:
+            today = datetime.now(pytz.timezone('Europe/Moscow')).date()
+        chunks = get_current_week_chunks(today)
+        if not chunks:
+            logging.info("ℹ️ Current week stats: nothing to compute yet today (today IS this week's Monday)")
+            return
+
+        total_updated = 0
+        total_failed = 0
+        for week_start, week_end in chunks:
+            monitorings = MonitoringCampaign.query.filter(
+                MonitoringCampaign.archived == False,
+                MonitoringCampaign.date_from <= week_end,
+                MonitoringCampaign.date_to >= week_start
+            ).all()
+
+            logging.info(f"\n{'='*60}")
+            logging.info(f"📅 CURRENT WEEK STATS - week {week_start}..{week_end}, {len(monitorings)} monitorings")
+            logging.info(f"{'='*60}")
+
+            updated = 0
+            failed = 0
+            for monitoring in monitorings:
+                try:
+                    result = compute_monitoring_week_stats(monitoring, week_start, week_end)
+                    if result:
+                        updated += 1
+                    else:
+                        failed += 1
+                        logging.warning(f"⚠️ Could not compute current week stats for monitoring {monitoring.id}")
+                except Exception as e:
+                    logging.error(f"❌ Current week stats failed for monitoring {monitoring.id}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    failed += 1
+                _time.sleep(1)
+
+            total_updated += updated
+            total_failed += failed
+
+        logging.info(f"\n✅ CURRENT WEEK STATS COMPLETED: {total_updated} updated, {total_failed} failed")
         logging.info(f"{'='*60}\n")
 
 
