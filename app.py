@@ -3451,7 +3451,12 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
         stat.time_on_site = total.get('avgVisitDuration', 0.0)
         stat.page_depth = total.get('avgPostclickPageDepth', 0.0)
         stat.robotness = total.get('avgPostclickRobot', 0.0)
-        stat.pi = total.get('passingIndex', 0.0)
+        # НЕ брать total.get('passingIndex') напрямую - у SAPE этот показатель
+        # считается не так, как "ФАКТ" PI на карточке (визиты/клики), и для
+        # одного и того же периода с одинаковыми визитами/кликами даёт другое
+        # число (проверено: 176/333 показывает 52.9% в тотале, но passingIndex
+        # за тот же период - 46.2%). Пересчитываем сами, так же как get_fact_pi().
+        stat.pi = round(stat.visits / stat.clicks * 100, 2) if stat.clicks else None
         goals = total.get('goals')
         if goals is not None:
             stat.conversions = sum(g.get('count', 0) for g in goals)
