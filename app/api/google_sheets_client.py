@@ -15,6 +15,21 @@ def _is_quota_error(e: Exception) -> bool:
     return '429' in msg or 'Quota exceeded' in msg or 'RATE_LIMIT_EXCEEDED' in msg
 
 
+def extract_sheet_id(url: Optional[str]) -> Optional[str]:
+    """Spreadsheet ID from a Google Sheets URL - plain string parsing, no
+    credentials/API call needed. Module-level (not just the identical
+    GoogleSheetsClient.extract_sheet_id instance method below) so callers
+    that just need to compare "is this the same spreadsheet" - e.g. the
+    duplicate-report check in app.py - don't have to construct a full
+    client. Two URLs for the same sheet commonly differ in everything
+    EXCEPT this ID (gid fragment, trailing /edit, ?usp=sharing, etc.), so
+    comparing raw URL strings for "same sheet" is wrong."""
+    if not url:
+        return None
+    match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', url)
+    return match.group(1) if match else None
+
+
 # Same sqlite file the rest of the app uses (see config.py's
 # SQLALCHEMY_DATABASE_URI) - accessed here via a raw sqlite3 connection,
 # not Flask-SQLAlchemy, so this low-level API client doesn't have to
@@ -129,18 +144,11 @@ class GoogleSheetsClient:
             return False
 
     def extract_sheet_id(self, url: str) -> Optional[str]:
-        """
-        Extract spreadsheet ID from Google Sheets URL
-
-        Args:
-            url: Google Sheets URL
-
-        Returns:
-            str: Spreadsheet ID or None
-        """
-        pattern = r'/spreadsheets/d/([a-zA-Z0-9-_]+)'
-        match = re.search(pattern, url)
-        return match.group(1) if match else None
+        """Extract spreadsheet ID from a Google Sheets URL - see the
+        module-level extract_sheet_id() above (same logic, kept as a
+        method too since every call site in this file already calls it
+        as self.extract_sheet_id(...))."""
+        return extract_sheet_id(url)
 
     @staticmethod
     def get_worksheet_names(sheet_url: str) -> Optional[List[str]]:

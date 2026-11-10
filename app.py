@@ -67,7 +67,7 @@ class AsanaSyncError(Exception):
 
 # Import API clients
 from app.api.sape_client import SapeAPIClient
-from app.api.google_sheets_client import GoogleSheetsClient, sheets_api_calls_in_last_seconds
+from app.api.google_sheets_client import GoogleSheetsClient, sheets_api_calls_in_last_seconds, extract_sheet_id
 
 # Template filters
 @app.template_filter('format_month')
@@ -4892,6 +4892,62 @@ def update_by_sheet():
         return jsonify({'error': str(e)}), 500
 
 
+def _find_duplicate_report(campaign_ids, campaign_mode, google_sheet_url, worksheet_name, exclude_report_id=None):
+    """Find an existing ACTIVE report that's an exact 1:1 duplicate of the
+    one being created/edited - same campaign_ids SET, same campaign_mode,
+    same google_sheet_url + worksheet_name. A report covering a different
+    subset of campaigns, a different campaign_mode (combined vs separate),
+    or a different sheet/worksheet is NOT a duplicate even if it shares
+    some campaigns - per Аня's spec: "может быть с разным набором
+    кампаний или с разным выбором формата отчета или с разным набором
+    листов но одним и тем же списком. Но когда очевидно 1в1 не даем
+    сохранить".
+
+    If more than one existing report happens to match (shouldn't normally
+    happen once this check is in place going forward, but legacy
+    duplicates can still exist), picks ONE to report back using the
+    agreed priority: prefer the one with a monitoring already set up,
+    then prefer one whose monitoring's sales_status is 'prolongation'.
+    Returns None if nothing matches.
+
+    Compares the SPREADSHEET ID extracted from google_sheet_url, not the
+    raw URL string - two URLs for the exact same sheet commonly differ in
+    everything else (?gid=...#gid=... fragment, trailing /edit, ?usp=
+    sharing, with/without a trailing slash). A raw-string comparison let
+    a real duplicate through in testing: same campaign, same sheet, same
+    worksheet tab name, but one URL had a #gid= suffix and the other
+    didn't - see extract_sheet_id() in google_sheets_client.py."""
+    target_ids = frozenset(int(c) for c in campaign_ids)
+    target_sheet_id = extract_sheet_id(google_sheet_url)
+    if not target_ids or not target_sheet_id:
+        return None
+
+    candidates = ReportConfig.query.filter(
+        ReportConfig.archived == False,
+        ReportConfig.campaign_mode == campaign_mode,
+        ReportConfig.worksheet_name == worksheet_name,
+    )
+    if exclude_report_id:
+        candidates = candidates.filter(ReportConfig.id != exclude_report_id)
+
+    matches = [
+        r for r in candidates.all()
+        if frozenset(int(c) for c in (r.campaign_ids or [])) == target_ids
+        and extract_sheet_id(r.google_sheet_url) == target_sheet_id
+    ]
+    if not matches:
+        return None
+
+    def priority_key(r):
+        monitoring = MonitoringCampaign.query.filter_by(report_config_id=r.id).first()
+        has_monitoring = monitoring is not None
+        is_prolongation = bool(monitoring and monitoring.sales_status == 'prolongation')
+        return (has_monitoring, is_prolongation)
+
+    matches.sort(key=priority_key, reverse=True)
+    return matches[0]
+
+
 @app.route('/reports/add', methods=['GET', 'POST'])
 @login_required
 @block_account_manager
@@ -4917,6 +4973,11 @@ def add_report():
 
         # Convert to integers
         campaign_ids = [int(cid) for cid in campaign_ids_str]
+
+        duplicate = _find_duplicate_report(campaign_ids, campaign_mode, google_sheet_url, worksheet_name)
+        if duplicate:
+            flash(f'Такой отчёт уже есть: «{duplicate.name or duplicate.id}» — тот же набор кампаний, формат и лист уже используются.', 'error')
+            return redirect(url_for('reports'))
 
         # Get campaign settings (frequencies, variances) and formats for each campaign
         campaign_settings = {}
@@ -6253,6 +6314,22 @@ def edit_report(report_id):
         worksheet_name = request.form.get('worksheet_name', '').strip() or None
         campaign_ids_str = request.form.getlist('campaign_ids')
         campaign_mode = request.form.get('campaign_mode', 'separate')
+
+        # Checked against the EFFECTIVE post-save values (falling back to
+        # the report's current value for anything not submitted, same as
+        # the mutation logic below) and BEFORE any mutation/Sheets API
+        # call happens, so a blocked duplicate never touches
+        # report.google_sheet_url/worksheet_name or runs auto-detect.
+        effective_campaign_ids = [int(cid) for cid in campaign_ids_str] if campaign_ids_str else report.campaign_ids
+        effective_google_sheet_url = google_sheet_url or report.google_sheet_url
+        effective_worksheet_name = worksheet_name or report.worksheet_name
+        duplicate = _find_duplicate_report(
+            effective_campaign_ids, campaign_mode, effective_google_sheet_url, effective_worksheet_name,
+            exclude_report_id=report.id
+        )
+        if duplicate:
+            flash(f'Такой отчёт уже есть: «{duplicate.name or duplicate.id}» — тот же набор кампаний, формат и лист уже используются.', 'error')
+            return redirect(url_for('reports'))
 
         # Schedule
         schedule_days = request.form.get('schedule_days')
