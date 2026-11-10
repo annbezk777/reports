@@ -1,8 +1,10 @@
 import gspread
 from google.oauth2.service_account import Credentials
 from typing import Dict, Optional, List
+import os
 import random
 import re
+import sqlite3
 import time
 from datetime import datetime
 
@@ -11,6 +13,62 @@ def _is_quota_error(e: Exception) -> bool:
     """Google Sheets API 429 'Read/Write requests per minute' limit."""
     msg = str(e)
     return '429' in msg or 'Quota exceeded' in msg or 'RATE_LIMIT_EXCEEDED' in msg
+
+
+# Same sqlite file the rest of the app uses (see config.py's
+# SQLALCHEMY_DATABASE_URI) - accessed here via a raw sqlite3 connection,
+# not Flask-SQLAlchemy, so this low-level API client doesn't have to
+# depend on the app's model layer just to log a timestamp. SQLite's own
+# file locking makes concurrent inserts from the 4 gunicorn workers and
+# scheduler_tick.py's fresh-per-minute process safe without extra
+# coordination - the volume here (a handful of rows per report refresh)
+# is far below where that would ever contend.
+_SHEETS_CALL_LOG_DB = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', '..', 'database', 'sape_reports.db'
+)
+
+
+def _record_sheets_api_call(label: str):
+    """Log one successful Sheets API call for the rate-visibility counter
+    (task #64 - we burned the 60 reads/min/project/user quota multiple
+    times this session with no way to see it coming). Best-effort: a
+    failure here must never break the actual Sheets call it's logging."""
+    try:
+        conn = sqlite3.connect(_SHEETS_CALL_LOG_DB, timeout=5)
+        try:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS sheets_api_call_log (ts REAL NOT NULL, label TEXT)"
+            )
+            now = time.time()
+            conn.execute("INSERT INTO sheets_api_call_log (ts, label) VALUES (?, ?)", (now, label))
+            # Prune anything older than an hour on every insert - keeps the
+            # table small without needing a separate cleanup job; cheap
+            # since at most ~60/min ever accumulate.
+            conn.execute("DELETE FROM sheets_api_call_log WHERE ts < ?", (now - 3600,))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+def sheets_api_calls_in_last_seconds(seconds: int = 60) -> int:
+    """How many Sheets API calls (across every process) completed in the
+    last N seconds - the number to watch against the 60/min quota
+    ceiling. Read-only, safe to call often (e.g. on every dashboard
+    load)."""
+    try:
+        conn = sqlite3.connect(_SHEETS_CALL_LOG_DB, timeout=5)
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM sheets_api_call_log WHERE ts >= ?",
+                (time.time() - seconds,)
+            ).fetchone()
+            return row[0] if row else 0
+        finally:
+            conn.close()
+    except Exception:
+        return 0
 
 
 class GoogleSheetsClient:
@@ -28,7 +86,9 @@ class GoogleSheetsClient:
         attempt = 0
         while True:
             try:
-                return fn()
+                result = fn()
+                _record_sheets_api_call(label)
+                return result
             except Exception as e:
                 if not _is_quota_error(e) or attempt >= max_retries:
                     raise

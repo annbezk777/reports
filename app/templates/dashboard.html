@@ -33,6 +33,18 @@
     </div>
     {% endif %}
 
+    <!-- Google Sheets API call-rate visibility (task #64) - admin-only,
+         so Трафик/Account-менеджеры don't see an ops metric that means
+         nothing to them. Quota is 60 reads/min/user and 60 writes/min/user
+         (per-project cap is higher) - see sheets_api_calls_in_last_seconds()
+         in google_sheets_client.py. -->
+    {% if session.get('user_email') == admin_email %}
+    <div style="margin-bottom: 24px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary);">
+        <span>Google Sheets API за последнюю минуту:</span>
+        <strong style="color: {% if sheets_calls_last_minute >= 55 %}#dc2626{% elif sheets_calls_last_minute >= 40 %}#f59e0b{% else %}#16a34a{% endif %};">{{ sheets_calls_last_minute }}/60</strong>
+    </div>
+    {% endif %}
+
     <!-- Metrics Grid -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-bottom: 32px;">
         <!-- Total Reports -->

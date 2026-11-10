@@ -67,7 +67,7 @@ class AsanaSyncError(Exception):
 
 # Import API clients
 from app.api.sape_client import SapeAPIClient
-from app.api.google_sheets_client import GoogleSheetsClient
+from app.api.google_sheets_client import GoogleSheetsClient, sheets_api_calls_in_last_seconds
 
 # Template filters
 @app.template_filter('format_month')
@@ -1013,8 +1013,11 @@ def dashboard():
     }
 
     weborama_attention_data = needs_weborama_attention()
+    sheets_calls_last_minute = sheets_api_calls_in_last_seconds(60)
 
     return render_template('dashboard.html',
+                         admin_email=ADMIN_EMAIL,
+                         sheets_calls_last_minute=sheets_calls_last_minute,
                          stats=stats,
                          conversions_stats=conversions_stats,
                          chart_data=chart_data,
