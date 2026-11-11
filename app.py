@@ -2059,6 +2059,25 @@ def finish_monitoring_month(monitoring_id):
         # session in a broken state that crashes the very next query below.
         db.session.rollback()
 
+    # Backfill any week in [date_from, freeze_as_of] that never got
+    # computed by a live Monday run - a card created mid-month, or one
+    # frozen before the next Monday's scheduled_compute_weekly_monitoring_stats
+    # could reach it, would otherwise keep an empty понедельная dynamics
+    # table forever (that job only ever looks at archived==False cards).
+    existing_week_starts = {
+        ws for (ws,) in db.session.query(MonitoringWeeklyStat.week_start)
+            .filter(MonitoringWeeklyStat.monitoring_id == monitoring.id).all()
+    }
+    for chunk_start, chunk_end in get_week_chunks_for_range(monitoring.date_from, freeze_as_of):
+        q_start = max(chunk_start, monitoring.date_from)
+        q_end = min(chunk_end, freeze_as_of)
+        if q_start > q_end or q_start in existing_week_starts:
+            continue
+        try:
+            compute_monitoring_week_stats(monitoring, chunk_start, chunk_end)
+        except Exception as e:
+            logger.error(f"⚠️ Backfilling week {chunk_start}..{chunk_end} for monitoring {monitoring_id} failed: {e}")
+
     monitoring.archived = True
     monitoring.frozen = True
     monitoring.frozen_at = datetime.utcnow()
@@ -3310,7 +3329,18 @@ def _refresh_weekly_adriver_stats(monitoring_id, daily_rows):
     straight from AdriverDailyStat for every already-computed week the
     upload's dates overlap - same aggregation compute_monitoring_week_stats
     itself does for the no-TargetAds branch, but without re-hitting SAPE/
-    Weborama synchronously inside this upload request."""
+    Weborama synchronously inside this upload request.
+
+    Also refreshes the partial-week coverage bookkeeping (adriver_partial_week/
+    coverage_start/coverage_end/scoped_*) - an upload that extends or
+    completes a week's coverage must update these too, or the diff badge
+    keeps comparing the NEW (bigger) adriver total against the OLD scoped
+    SAPE baseline captured before this upload (e.g. this morning's daily
+    job only saw 1 day of Adriver data for the still-in-progress current
+    week and scoped SAPE to that 1 day; an upload this afternoon that adds
+    a 2nd day grows adriver_impressions to 2 days' worth but, without this,
+    would leave the 1-day scoped SAPE figure in place - comparing 2 days
+    against 1 produces a false double-digit "discrepancy")."""
     dates = [row['date'] for row in daily_rows if row.get('date')]
     if not dates:
         return
@@ -3319,6 +3349,14 @@ def _refresh_weekly_adriver_stats(monitoring_id, daily_rows):
         MonitoringWeeklyStat.week_start <= max(dates),
         MonitoringWeeklyStat.week_end >= min(dates),
     ).all()
+    if not affected:
+        return
+
+    monitoring = None
+    sape_client = None
+    campaign_ids = None
+    client_ready = False
+
     for stat in affected:
         week_rows = AdriverDailyStat.query.filter(
             AdriverDailyStat.monitoring_id == monitoring_id,
@@ -3333,6 +3371,44 @@ def _refresh_weekly_adriver_stats(monitoring_id, daily_rows):
             weighted = _weighted_daily_percent(week_rows, field, _ADRIVER_PERCENT_WEIGHT_FIELD[field])
             if weighted is not None:
                 setattr(stat, field, weighted)
+
+        covered_dates = sorted(r.date for r in week_rows)
+        coverage_start, coverage_end = covered_dates[0], covered_dates[-1]
+        full_days = (stat.week_end - stat.week_start).days + 1
+        if coverage_start > stat.week_start or coverage_end < stat.week_end or len(week_rows) < full_days:
+            stat.adriver_partial_week = True
+            stat.adriver_coverage_start = coverage_start
+            stat.adriver_coverage_end = coverage_end
+            if not client_ready:
+                client_ready = True
+                monitoring = MonitoringCampaign.query.get(monitoring_id)
+                account = monitoring.account if monitoring else None
+                if account and account.api_token:
+                    sape_client = SapeAPIClient(login=account.login, token=account.api_token)
+                    if sape_client.authenticate():
+                        campaign_ids = [int(c.campaign_id) for c in monitoring.get_campaigns()]
+                    else:
+                        sape_client = None
+            if sape_client and campaign_ids:
+                try:
+                    scoped_stats = sape_client.get_stats(
+                        campaign_ids=campaign_ids,
+                        date_from=datetime.combine(coverage_start, datetime.min.time()),
+                        date_to=datetime.combine(coverage_end, datetime.min.time()),
+                        fields=None
+                    )
+                    if scoped_stats:
+                        scoped_total = scoped_stats.get('total', {})
+                        stat.adriver_scoped_impressions = scoped_total.get('shows', 0)
+                        stat.adriver_scoped_clicks = scoped_total.get('clicks', 0)
+                except Exception as e:
+                    logger.error(f"⚠️ Scoped SAPE fetch for partial Adriver week failed (upload refresh), monitoring {monitoring_id}, week {stat.week_start}: {e}")
+        else:
+            stat.adriver_partial_week = False
+            stat.adriver_coverage_start = None
+            stat.adriver_coverage_end = None
+            stat.adriver_scoped_impressions = None
+            stat.adriver_scoped_clicks = None
 
 
 def get_last_completed_week_chunks(today):
@@ -3384,6 +3460,35 @@ def get_current_week_chunks(today):
     month_end = this_monday.replace(day=last_day_of_start_month)
     next_month_start = month_end + timedelta(days=1)
     return [(this_monday, month_end), (next_month_start, yesterday)]
+
+
+def get_week_chunks_for_range(date_from, date_to):
+    """Every Mon-Sun week chunk (month-boundary split, same convention as
+    get_last_completed_week_chunks) that overlaps [date_from, date_to] -
+    used by finish_monitoring_month to backfill any week a monitoring
+    never saw a live Monday run for (created late in the month, or
+    frozen before the next Monday's scheduled_compute_weekly_monitoring_stats
+    could reach it - that job skips archived==True cards forever after).
+
+    Returns RAW Mon-Sun pairs, not yet clipped to date_from/date_to -
+    compute_monitoring_week_stats does that clipping itself and no-ops
+    when the clipped range is empty, so a chunk straddling the range's
+    edge is safe to pass through unclipped."""
+    import calendar
+    chunks = []
+    cursor = date_from - timedelta(days=date_from.weekday())
+    while cursor <= date_to:
+        week_sunday = cursor + timedelta(days=6)
+        if (cursor.year, cursor.month) == (week_sunday.year, week_sunday.month):
+            chunks.append((cursor, week_sunday))
+        else:
+            last_day = calendar.monthrange(cursor.year, cursor.month)[1]
+            month_end = cursor.replace(day=last_day)
+            next_month_start = month_end + timedelta(days=1)
+            chunks.append((cursor, month_end))
+            chunks.append((next_month_start, week_sunday))
+        cursor += timedelta(days=7)
+    return chunks
 
 
 def compute_monitoring_week_stats(monitoring, week_start, week_end):
