@@ -242,6 +242,17 @@ class MonitoringCampaign(db.Model):
     date_to = db.Column(db.Date, nullable=False)
 
     # Media plan targets (SAPE statistics)
+    # CPC campaigns are bought/billed by clicks - any показы number on them
+    # is informational, not a commitment, so "% выполнения показов" on such
+    # a campaign is meaningless and shouldn't be colored red/green like a
+    # real KPI miss. Before this field existed, the only signal was "is
+    # plan_impressions blank" - fragile, since nothing stopped someone from
+    # filling it in anyway for reference on a CPC campaign (task #20).
+    PLAN_FORMAT_CHOICES = (
+        ('cpm', 'CPM'),
+        ('cpc', 'CPC'),
+    )
+    plan_format = db.Column(db.String(10), nullable=True)  # 'cpm' / 'cpc' - None treated as CPM (legacy rows)
     plan_impressions = db.Column(db.Integer, nullable=True)  # Плановые показы
     plan_clicks = db.Column(db.Integer, nullable=True)  # Плановые клики
 
@@ -462,6 +473,15 @@ class MonitoringCampaign(db.Model):
         # Normal case: count from start to yesterday
         delta = yesterday - self.date_from
         return delta.days + 1  # Include both start and yesterday
+
+    def get_impressions_performance_percent(self):
+        """% выполнения плана по показам - None on a CPC campaign (task
+        #20) regardless of whether plan_impressions happens to be filled
+        in, since показы there is informational, not a commitment the
+        card should flag red/green for."""
+        if self.plan_format == 'cpc':
+            return None
+        return self.get_uniform_performance_percent(self.fact_impressions, self.plan_impressions)
 
     def get_uniform_performance_percent(self, fact_value, plan_value):
         """

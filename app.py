@@ -634,16 +634,15 @@ def dashboard():
     # 1. Plan fulfillment overview (same 100/80 thresholds as the
     # monitoring table's own "Выполнение" row) - keep both the counts (for
     # the donut) and the actual monitoring names per bucket (for drill-down).
-    # Показы is the metric when a plan for it is set; CPC-type campaigns
-    # often only have a clicks plan (показы plan intentionally left blank),
-    # so fall back to клики rather than dropping them into "без плана"
-    # entirely - interim until campaigns carry an explicit МП format
-    # (task #20) that says which metric is the binding one.
+    # Показы is the metric for CPM campaigns; CPC campaigns are billed by
+    # clicks, so показы there is informational (not a commitment) even
+    # when someone fills the field in for reference - plan_format (task
+    # #20) is the explicit signal, not "is plan_impressions blank".
     performance_buckets = {'green': 0, 'yellow': 0, 'red': 0, 'none': 0}
     performance_details = {'green': [], 'yellow': [], 'red': []}
     for mo in active_monitorings:
         metric = 'показы'
-        perf = mo.get_uniform_performance_percent(mo.fact_impressions, mo.plan_impressions)
+        perf = mo.get_impressions_performance_percent()
         if perf is None:
             metric = 'клики'
             perf = mo.get_uniform_performance_percent(mo.fact_clicks, mo.plan_clicks)
@@ -1930,6 +1929,7 @@ def copy_monitoring(monitoring_id):
         campaign_ids=original.campaign_ids,
         date_from=original.date_from,
         date_to=original.date_to,
+        plan_format=original.plan_format,
         plan_impressions=original.plan_impressions,
         plan_clicks=original.plan_clicks,
         plan_visits=original.plan_visits,
@@ -2127,6 +2127,7 @@ def finish_monitoring_month(monitoring_id):
             campaign_ids=monitoring.campaign_ids,
             date_from=new_date_from,
             date_to=new_date_to,
+            plan_format=monitoring.plan_format,
             plan_impressions=monitoring.plan_impressions,
             plan_clicks=monitoring.plan_clicks,
             plan_visits=monitoring.plan_visits,
@@ -2643,6 +2644,7 @@ def create_monitoring():
         date_to = request.form.get('date_to')
 
         # Media plan
+        plan_format = request.form.get('plan_format') or 'cpm'
         plan_impressions = request.form.get('plan_impressions')
         plan_clicks = request.form.get('plan_clicks')
 
@@ -2690,6 +2692,7 @@ def create_monitoring():
             campaign_ids=campaign_ids,
             date_from=datetime.strptime(date_from, '%Y-%m-%d').date(),
             date_to=datetime.strptime(date_to, '%Y-%m-%d').date(),
+            plan_format=plan_format,
             plan_impressions=int(plan_impressions) if plan_impressions else None,
             plan_clicks=int(plan_clicks) if plan_clicks else None,
             plan_visits=int(plan_visits) if plan_visits else None,
@@ -2772,6 +2775,31 @@ def create_monitoring():
         return redirect(url_for('monitoring'))
 
 
+@app.route('/monitoring/<int:monitoring_id>/admin-plan-volumes', methods=['POST'])
+@login_required
+def update_admin_plan_volumes(monitoring_id):
+    """Аня-only exception to correct plan показы/клики on an ALREADY
+    FROZEN card without unfreezing it - e.g. a prolongation where the
+    real contracted volume for the closed month only becomes clear after
+    it's already been finished. Deliberately narrower than the regular
+    edit_monitoring route: only these two fields, nothing else about a
+    frozen card is touched, and it's not gated by monitoring.frozen at
+    all (works the same on an active card too, just redundant there)."""
+    if session.get('user_email') != ADMIN_EMAIL:
+        abort(404)
+    monitoring = MonitoringCampaign.query.get_or_404(monitoring_id)
+    data = request.get_json(silent=True) or {}
+    plan_impressions = data.get('plan_impressions')
+    plan_clicks = data.get('plan_clicks')
+    try:
+        monitoring.plan_impressions = int(plan_impressions) if plan_impressions not in (None, '') else None
+        monitoring.plan_clicks = int(plan_clicks) if plan_clicks not in (None, '') else None
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Показы и клики должны быть числами'}), 400
+    db.session.commit()
+    return jsonify({'success': True, 'plan_impressions': monitoring.plan_impressions, 'plan_clicks': monitoring.plan_clicks})
+
+
 @app.route('/monitoring/<int:monitoring_id>/edit', methods=['POST'])
 @login_required
 @block_account_manager
@@ -2796,6 +2824,7 @@ def edit_monitoring(monitoring_id):
         monitoring.date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
 
         # Media plan
+        monitoring.plan_format = request.form.get('plan_format') or 'cpm'
         plan_impressions = request.form.get('plan_impressions')
         plan_clicks = request.form.get('plan_clicks')
         monitoring.plan_impressions = int(plan_impressions) if plan_impressions else None
@@ -3011,6 +3040,7 @@ def get_monitoring_data(monitoring_id):
             'campaign_ids': monitoring.campaign_ids,
             'date_from': monitoring.date_from.strftime('%Y-%m-%d'),
             'date_to': monitoring.date_to.strftime('%Y-%m-%d'),
+            'plan_format': monitoring.plan_format or 'cpm',
             'plan_impressions': monitoring.plan_impressions,
             'plan_clicks': monitoring.plan_clicks,
             'plan_visits': monitoring.plan_visits,

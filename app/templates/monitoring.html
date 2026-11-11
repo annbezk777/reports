@@ -1374,6 +1374,15 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                                     Восстановить
                                                 </button>
                                             </form>
+                                            {% if monitoring.frozen and session.get('user_email') == admin_email %}
+                                            <div class="kebab-divider"></div>
+                                            <button onclick="openAdminPlanVolumesPrompt({{ monitoring.id }}, {{ monitoring.plan_impressions|default(0) }}, {{ monitoring.plan_clicks|default(0) }})" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
+                                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                                </svg>
+                                                План показы/клики (admin)
+                                            </button>
+                                            {% endif %}
                                             {% else %}
                                             <form action="{{ url_for('archive_monitoring', monitoring_id=monitoring.id) }}" method="POST" style="margin: 0;">
                                                 <button type="submit" class="kebab-item" style="width: 100%; text-align: left; border: none; background: none; cursor: pointer;">
@@ -1632,7 +1641,7 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                     <tr style="background: rgba(250, 250, 249, 0.3);">
                                         <td style="padding: 6px 8px; font-weight: 600; color: #78716c; background: rgba(250, 250, 249, 0.5); position: sticky; left: 0; z-index: 10; border-right: 1px solid #e7e5e4; text-transform: uppercase; font-size: 8px;">Выполнение</td>
 
-                                        {% set perf_imp = monitoring.get_uniform_performance_percent(monitoring.fact_impressions, monitoring.plan_impressions) %}
+                                        {% set perf_imp = monitoring.get_impressions_performance_percent() %}
                                         <td class="vcol-impressions{% if not monitoring.is_column_visible('impressions') %} vcol-hidden{% endif %}" data-col="impressions" style="padding: 6px 8px; text-align: left; font-size: 8px; font-weight: 600; {% if perf_imp %}color: {% if perf_imp > 115 or perf_imp < 85 %}#dc2626{% elif perf_imp >= 100 %}#16a34a{% else %}#f59e0b{% endif %};{% else %}color: #a8a29e;{% endif %}">{{ ('%.0f%%' % perf_imp) if perf_imp else '—' }}</td>
 
                                         {% set perf_clicks = monitoring.get_uniform_performance_percent(monitoring.fact_clicks, monitoring.plan_clicks) %}
@@ -2705,6 +2714,14 @@ function refreshAllMonitorings() {
 
                 <div class="form-row">
                     <div class="form-group">
+                        <label for="plan_format">Формат медиаплана</label>
+                        <select id="plan_format" name="plan_format">
+                            <option value="cpm">CPM</option>
+                            <option value="cpc">CPC</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
                         <label for="plan_impressions">Показы</label>
                         <input type="number" id="plan_impressions" name="plan_impressions" placeholder="0">
                     </div>
@@ -3029,6 +3046,7 @@ function openMonitoringModal(monitoringId = null) {
                 document.getElementById('date_to').value = data.date_to || '';
 
                 // Plan values
+                document.getElementById('plan_format').value = data.plan_format || 'cpm';
                 document.getElementById('plan_impressions').value = data.plan_impressions || '';
                 document.getElementById('plan_clicks').value = data.plan_clicks || '';
                 document.getElementById('plan_visits').value = data.plan_visits || '';
@@ -3832,6 +3850,31 @@ function setFinishCompleted(value) {
 }
 
 let finishMonthHasReport = false;
+
+function openAdminPlanVolumesPrompt(monitoringId, currentImpressions, currentClicks) {
+    const impressions = prompt('План показов (число):', currentImpressions || '');
+    if (impressions === null) return;
+    const clicks = prompt('План кликов (число):', currentClicks || '');
+    if (clicks === null) return;
+
+    fetch(`/monitoring/${monitoringId}/admin-plan-volumes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_impressions: impressions, plan_clicks: clicks })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (data.error || 'неизвестная ошибка'));
+        }
+    })
+    .catch(error => {
+        console.error('Error updating admin plan volumes:', error);
+        alert('Ошибка обновления данных. Попробуйте позже.');
+    });
+}
 
 function openFinishMonthModal(monitoringId, monitoringName, hasReport) {
     finishMonthMonitoringId = monitoringId;
