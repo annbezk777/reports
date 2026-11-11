@@ -349,6 +349,8 @@
                                 <span style="color: var(--primary-orange); font-weight: 600;">данные в файле по {{ v.as_of_date.strftime('%d.%m') }} — обновите выгрузку</span>
                                 {% elif v.is_stale %}
                                 <span style="color: var(--primary-orange); font-weight: 600;">не обновлялось {{ v.days_stale }} дн.</span>
+                                {% elif v.as_of_date %}
+                                <span>данные по {{ v.as_of_date.strftime('%d.%m') }}</span>
                                 {% elif v.days_stale == 0 %}
                                 <span>обновлено сегодня</span>
                                 {% elif v.days_stale == 1 %}
