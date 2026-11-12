@@ -782,24 +782,27 @@ class MonitoringCampaign(db.Model):
         return self.fact_impressions, self.fact_clicks
 
     def get_adriver_impressions_diff_percent(self):
-        """% = (Adriver − SAPE) / Adriver × 100 - отрицательное значение,
+        """% = (Adriver − SAPE) / SAPE × 100 - отрицательное значение,
         когда у нас в платформе (SAPE) показов больше, чем у верификатора.
-        Делитель (Adriver) обязан быть ненулевым - делить на 0 нельзя. А
-        вот SAPE-факт, равный ровно 0, валиден и не должен блокировать
-        расчёт (поэтому is None, а не truthy-проверка)."""
+        База - SAPE (наш факт, источник истины), а не Adriver - по
+        просьбе Ани, тот же принцип, что и для Weborama (см.
+        get_weborama_impressions_diff_percent). Делитель (SAPE) обязан
+        быть ненулевым - делить на 0 нельзя. А вот Adriver, равный ровно
+        0, валиден и не должен блокировать расчёт (поэтому is None, а не
+        truthy-проверка)."""
         sape_impressions, _ = self._adriver_sape_facts()
-        if not self.adriver_impressions or not sape_impressions:
+        if self.adriver_impressions is None or not sape_impressions:
             return None
-        return round((self.adriver_impressions - sape_impressions) / self.adriver_impressions * 100, 1)
+        return round((self.adriver_impressions - sape_impressions) / sape_impressions * 100, 1)
 
     def get_adriver_clicks_diff_percent(self):
-        """% = (Adriver − SAPE) / Adriver × 100 - same sign convention as
+        """% = (Adriver − SAPE) / SAPE × 100 - same sign convention as
         impressions (see get_adriver_impressions_diff_percent): positive
-        when the verifier (кабинет) shows more than SAPE."""
+        when the verifier (кабинет) shows more than SAPE. База - SAPE."""
         _, sape_clicks = self._adriver_sape_facts()
-        if not self.adriver_clicks or not sape_clicks:
+        if self.adriver_clicks is None or not sape_clicks:
             return None
-        return round((self.adriver_clicks - sape_clicks) / self.adriver_clicks * 100, 1)
+        return round((self.adriver_clicks - sape_clicks) / sape_clicks * 100, 1)
 
     def get_weborama_impressions(self):
         """Sum of показы across every Weborama mapping on this monitoring -
@@ -882,27 +885,32 @@ class MonitoringCampaign(db.Model):
         return total if found else None
 
     def get_weborama_impressions_diff_percent(self):
-        """% = (Weborama − SAPE) / Weborama × 100, scoped to just the
-        mapped campaigns' own SAPE fact (see get_weborama_sape_fact_impressions).
+        """% = (Weborama − SAPE) / SAPE × 100, scoped to just the mapped
+        campaigns' own SAPE fact (see get_weborama_sape_fact_impressions).
         Positive when the verifier (кабинет) shows more than SAPE - same
         sign convention as clicks (see get_weborama_clicks_diff_percent).
-        Делитель (Weborama) обязан быть ненулевым, но SAPE-факт, равный
-        ровно 0, валиден и не должен блокировать расчёт."""
+        База - SAPE (наш факт), а не Weborama: по просьбе Ани, т.к. SAPE -
+        источник истины, а Weborama - просто сверка (было наоборот -
+        делили на Weborama - это давало другой % при той же абсолютной
+        разнице и путало с ручным расчётом "от суммы кликов"). Делитель
+        (SAPE) обязан быть ненулевым; Weborama, равный ровно 0, валиден и
+        не должен блокировать расчёт."""
         imp = self.get_weborama_impressions()
         sape_fact = self.get_weborama_sape_fact_impressions()
-        if not imp or not sape_fact:
+        if imp is None or not sape_fact:
             return None
-        return round((imp - sape_fact) / imp * 100, 1)
+        return round((imp - sape_fact) / sape_fact * 100, 1)
 
     def get_weborama_clicks_diff_percent(self):
-        """% = (Weborama − SAPE) / Weborama × 100 - same sign convention as
+        """% = (Weborama − SAPE) / SAPE × 100 - same sign convention as
         impressions (see get_weborama_impressions_diff_percent): positive
-        when the verifier (кабинет) shows more than SAPE."""
+        when the verifier (кабинет) shows more than SAPE. База - SAPE,
+        см. комментарий выше."""
         clk = self.get_weborama_clicks()
         sape_fact = self.get_weborama_sape_fact_clicks()
-        if not clk or not sape_fact:
+        if clk is None or not sape_fact:
             return None
-        return round((clk - sape_fact) / clk * 100, 1)
+        return round((clk - sape_fact) / sape_fact * 100, 1)
 
 
 class AdriverFileUpload(db.Model):
@@ -1184,15 +1192,20 @@ class VerifierLinkMapping(db.Model):
         return monitoring.fact_impressions, monitoring.fact_clicks
 
     def get_impressions_diff_percent(self):
-        """% = (SAPE − верификатор) / верификатор × 100"""
+        """% = (верификатор − SAPE) / SAPE × 100 - положительное, когда
+        верификатор показывает больше SAPE (та же база и тот же знак, что
+        и у monitoring-level get_weborama_impressions_diff_percent/
+        get_adriver_impressions_diff_percent - раньше здесь была и база
+        по верификатору, И перевёрнутый числитель, из-за чего знак не
+        совпадал с остальными местами при одной и той же ситуации)."""
         sape_impressions, _ = self._sape_facts()
-        if not self.verifier_impressions or not sape_impressions:
+        if self.verifier_impressions is None or not sape_impressions:
             return None
-        return round((sape_impressions - self.verifier_impressions) / self.verifier_impressions * 100, 1)
+        return round((self.verifier_impressions - sape_impressions) / sape_impressions * 100, 1)
 
     def get_clicks_diff_percent(self):
-        """% = (SAPE − верификатор) / верификатор × 100"""
+        """% = (верификатор − SAPE) / SAPE × 100, см. get_impressions_diff_percent."""
         _, sape_clicks = self._sape_facts()
-        if not self.verifier_clicks or not sape_clicks:
+        if self.verifier_clicks is None or not sape_clicks:
             return None
-        return round((sape_clicks - self.verifier_clicks) / self.verifier_clicks * 100, 1)
+        return round((self.verifier_clicks - sape_clicks) / sape_clicks * 100, 1)

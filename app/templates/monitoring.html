@@ -1162,8 +1162,8 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
            как в основной таблице/ВЫПОЛНЕНИИ) - приближение, может слегка
            плыть у мониторингов с несколькими РК и верификатором лишь на
            часть из них. Тот же порог ±15%, что и в основной таблице. #}
-        {% if verifier_value and sape_value %}
-            {% set diff = (verifier_value - sape_value) / verifier_value * 100 %}
+        {% if verifier_value is not none and sape_value %}
+            {% set diff = (verifier_value - sape_value) / sape_value * 100 %}
             <span style="color: {{ '#dc2626' if diff|abs > 15 else '#16a34a' }}; margin-left: 2px; white-space: nowrap;">{{ '+%.0f%%' % diff if diff > 0 else '%.0f%%' % diff }}</span>
         {% endif %}
     {% endmacro %}
