@@ -1214,8 +1214,10 @@ class GoogleSheetsClient:
             date_col = column_mapping.get('date_column', 'A')
 
             # First, find the "Всего" row to determine section boundary
-            # Read up to 50 rows to find section end
-            search_range = f"{date_col}{data_start_row}:{date_col}{data_start_row + 50}"
+            # Read up to 120 rows to find section end - a single section can
+            # span several months in one continuous table (e.g. a report
+            # covering Oct-Dec in one sheet), so 50 rows is not always enough.
+            search_range = f"{date_col}{data_start_row}:{date_col}{data_start_row + 120}"
 
             search_dates = self._call_with_quota_retry(
                 lambda: worksheet.get(search_range), "search for 'Всего'"
@@ -1366,7 +1368,7 @@ class GoogleSheetsClient:
                     # Fallback: If somehow not found earlier, search now
                     print(f"⚠️ total_row not cached, searching for 'Всего' row (fallback)...")
                     date_col = column_mapping.get('date_column', 'A')
-                    search_range = f"{date_col}{data_start_row}:{date_col}{data_start_row + 50}"
+                    search_range = f"{date_col}{data_start_row}:{date_col}{data_start_row + 120}"
                     search_results = worksheet.get(search_range)
 
                     for i, row in enumerate(search_results):
