@@ -6874,6 +6874,22 @@ def edit_report(report_id):
                     if monitoring.account_manager:
                         report.account_manager = monitoring.account_manager
                     db.session.commit()
+
+                    # Same reasoning as the direct /monitoring/create route
+                    # (task #72 testing surfaced this gap): if the Asana task's
+                    # own dates push date_from into the past, the weekly
+                    # "понедельная динамика" table would otherwise stay empty
+                    # until the next Monday's scheduled job reaches it.
+                    try:
+                        yesterday = datetime.now().date() - timedelta(days=1)
+                        backfill_to = min(monitoring.date_to, yesterday)
+                        if monitoring.date_from <= backfill_to:
+                            for week_start, week_end in get_week_chunks_for_range(monitoring.date_from, backfill_to):
+                                compute_monitoring_week_stats(monitoring, week_start, week_end)
+                    except Exception as backfill_error:
+                        logging.error(f"⚠️ Weekly-stats backfill for monitoring {monitoring.id} (auto-created from report {report.id}) failed: {backfill_error}")
+                        db.session.rollback()
+
                     flash(f'Отчет обновлён. План из Asana подтянут в мониторинг ({", ".join(asana_result["updated_fields"])})', 'success')
                     asana_flash_shown = True
                 except AsanaSyncError as e:
