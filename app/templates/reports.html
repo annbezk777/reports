@@ -483,8 +483,11 @@
     background: #E67951;
 }
 
-/* Orange checkboxes in modal */
-#formCampaignsTable input[type="checkbox"] {
+/* Orange checkboxes in modal. Second-account table (#formCampaignsTable2,
+   task #72) shares the exact same rule so it's pixel-identical to the
+   primary table's checkbox, not a near-match. */
+#formCampaignsTable input[type="checkbox"],
+#formCampaignsTable2 input[type="checkbox"] {
     appearance: none;
     width: 18px;
     height: 18px;
@@ -493,18 +496,25 @@
     cursor: pointer;
     position: relative;
     transition: all 0.2s;
+    /* Scale the whole box (border + checkmark together) down uniformly
+       instead of hand-recalculating width/height/checkmark offsets
+       separately - that's what made it look squished last time. */
+    transform: scale(0.8);
 }
 
-#formCampaignsTable input[type="checkbox"]:hover {
+#formCampaignsTable input[type="checkbox"]:hover,
+#formCampaignsTable2 input[type="checkbox"]:hover {
     border-color: var(--primary-orange);
 }
 
-#formCampaignsTable input[type="checkbox"]:checked {
+#formCampaignsTable input[type="checkbox"]:checked,
+#formCampaignsTable2 input[type="checkbox"]:checked {
     background: var(--primary-orange);
     border-color: var(--primary-orange);
 }
 
-#formCampaignsTable input[type="checkbox"]:checked::after {
+#formCampaignsTable input[type="checkbox"]:checked::after,
+#formCampaignsTable2 input[type="checkbox"]:checked::after {
     content: '';
     position: absolute;
     left: 5px;
@@ -1446,18 +1456,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
 
                     <!-- Campaigns Table -->
-                    <div style="height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
-                        <table style="width: 100%; min-width: 820px; border-collapse: collapse;" id="formCampaignsTable">
+                    <div style="height: 172px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
+                        <table style="width: 100%; min-width: 820px; table-layout: fixed; border-collapse: collapse;" id="formCampaignsTable">
                             <thead style="position: sticky; top: 0; background: var(--bg-light); border-bottom: 2px solid var(--border-color);">
                                 <tr>
-                                    <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 40px;"></th>
-                                    <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary);">КАМПАНИЯ</th>
-                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 90px;">ФОРМАТ</th>
-                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ДНЕВНАЯ</th>
-                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
-                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ТОТАЛ</th>
-                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
-                                    <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 110px;" title="Если не выбрано - используется общий лист отчёта ниже">ЛИСТ</th>
+                                    <th style="padding: 5px 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 40px;"></th>
+                                    <th style="padding: 5px 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary);">КАМПАНИЯ</th>
+                                    <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 90px;">ФОРМАТ</th>
+                                    <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ДНЕВНАЯ</th>
+                                    <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
+                                    <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ТОТАЛ</th>
+                                    <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
+                                    <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 110px;" title="Если не выбрано - используется общий лист отчёта ниже">ЛИСТ</th>
                                 </tr>
                             </thead>
                             <tbody id="formCampaignsList">
@@ -1514,18 +1524,18 @@ document.addEventListener('DOMContentLoaded', () => {
                                 Снять все
                             </button>
                         </div>
-                        <div style="height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
-                            <table style="width: 100%; min-width: 820px; border-collapse: collapse;" id="formCampaignsTable2">
+                        <div style="height: 172px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
+                            <table style="width: 100%; min-width: 820px; table-layout: fixed; border-collapse: collapse;" id="formCampaignsTable2">
                                 <thead style="position: sticky; top: 0; background: var(--bg-light); border-bottom: 2px solid var(--border-color);">
                                     <tr>
-                                        <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 40px;"></th>
-                                        <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary);">КАМПАНИЯ</th>
-                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 90px;">ФОРМАТ</th>
-                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ДНЕВНАЯ</th>
-                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
-                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ТОТАЛ</th>
-                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
-                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 110px;" title="Если не выбрано - используется общий лист отчёта ниже">ЛИСТ</th>
+                                        <th style="padding: 5px 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 40px;"></th>
+                                        <th style="padding: 5px 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary);">КАМПАНИЯ</th>
+                                        <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 90px;">ФОРМАТ</th>
+                                        <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ДНЕВНАЯ</th>
+                                        <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
+                                        <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ТОТАЛ</th>
+                                        <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
+                                        <th style="padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 110px;" title="Если не выбрано - используется общий лист отчёта ниже">ЛИСТ</th>
                                     </tr>
                                 </thead>
                                 <tbody id="formCampaignsList2">
@@ -1903,19 +1913,19 @@ function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings
 
                 html += `
                     <tr style="border-bottom: 1px solid var(--border-color);" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='white'">
-                        <td style="padding: 8px; text-align: center;">
+                        <td style="padding: 5px 8px; text-align: center;">
                             <input type="checkbox" name="campaign_ids" value="${campaign.id}"
                                    data-sape-id="${campaign.campaign_id}"
                                    ${isChecked ? 'checked' : ''}
                                    onchange="handleFormCampaignChange()">
                         </td>
-                        <td style="padding: 8px;">
-                            <div style="font-size: 13px; color: var(--text-primary); margin-bottom: 2px;">
+                        <td style="padding: 5px 8px; max-width: 0;">
+                            <div style="font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                 <code style="background: var(--peach-light); color: var(--primary-orange); padding: 2px 5px; border-radius: 3px; font-size: 10px; margin-right: 6px;">${campaign.campaign_id}</code>
-                                ${campaign.name.substring(0, 40)}${campaign.name.length > 40 ? '...' : ''}
+                                ${campaign.name}
                             </div>
                         </td>
-                        <td style="padding: 8px; text-align: center;">
+                        <td style="padding: 5px 8px; text-align: center;">
                             <select name="format_${campaign.id}" style="padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; font-weight: 600;">
                                 <option value="B" ${format === 'B' ? 'selected' : ''}>B</option>
                                 <option value="V" ${format === 'V' ? 'selected' : ''}>V</option>
@@ -1923,23 +1933,23 @@ function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings
                                 <option value="TGB" ${format === 'TGB' ? 'selected' : ''}>TGB</option>
                             </select>
                         </td>
-                        <td style="padding: 8px; text-align: center;">
+                        <td style="padding: 5px 8px; text-align: center;">
                             <input type="number" name="daily_freq_${campaign.id}" value="${dailyFreq}" step="0.1" min="1" max="10"
                                    style="width: 60px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; text-align: center;">
                         </td>
-                        <td style="padding: 8px; text-align: center;">
+                        <td style="padding: 5px 8px; text-align: center;">
                             <input type="number" name="daily_var_${campaign.id}" value="${dailyVar}" step="0.01" min="0" max="2"
                                    style="width: 50px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; text-align: center;">
                         </td>
-                        <td style="padding: 8px; text-align: center;">
+                        <td style="padding: 5px 8px; text-align: center;">
                             <input type="number" name="total_freq_${campaign.id}" value="${totalFreq}" step="0.1" min="1" max="10"
                                    style="width: 60px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; text-align: center;">
                         </td>
-                        <td style="padding: 8px; text-align: center;">
+                        <td style="padding: 5px 8px; text-align: center;">
                             <input type="number" name="total_var_${campaign.id}" value="${totalVar}" step="0.01" min="0" max="2"
                                    style="width: 50px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; text-align: center;">
                         </td>
-                        <td style="padding: 8px; text-align: center;">
+                        <td style="padding: 5px 8px; text-align: center;">
                             <select name="worksheet_${campaign.id}" class="form-campaign-worksheet-select" data-current-value="${settings.worksheet_name || ''}"
                                     onchange="updateGeneralWorksheetLock()"
                                     style="width: 100px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px;">

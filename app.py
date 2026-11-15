@@ -2763,6 +2763,22 @@ def create_monitoring():
             logger.error(f"⚠️ Initial refresh for newly created monitoring {monitoring.id} failed: {e}")
             db.session.rollback()
 
+        # If date_from is already in the past (e.g. a monitoring created
+        # mid-month for a campaign that's been running for a couple of
+        # weeks), the weekly "понедельная динамика" table would otherwise
+        # stay empty until the next Monday's scheduled job reaches it -
+        # backfill every Mon-Sun chunk that's already elapsed right away,
+        # same helper finish_monitoring_month uses for the same reason.
+        try:
+            yesterday = datetime.now().date() - timedelta(days=1)
+            backfill_to = min(monitoring.date_to, yesterday)
+            if monitoring.date_from <= backfill_to:
+                for week_start, week_end in get_week_chunks_for_range(monitoring.date_from, backfill_to):
+                    compute_monitoring_week_stats(monitoring, week_start, week_end)
+        except Exception as e:
+            logger.error(f"⚠️ Initial weekly-stats backfill for newly created monitoring {monitoring.id} failed: {e}")
+            db.session.rollback()
+
         if asana_warning:
             flash(f'Мониторинг создан, но не удалось подтянуть план из Asana: {asana_warning}', 'error')
         else:
