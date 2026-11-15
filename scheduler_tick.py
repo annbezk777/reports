@@ -31,15 +31,21 @@ once, then exits:
     once scheduled_compute_weekly_monitoring_stats freezes it the
     following Monday. No-ops on Mondays themselves (today IS the new
     week's Monday - nothing of it has happened yet).
-  - scheduled_refresh_weborama_verifiers(): daily at 08:30, retried once
-    more at 08:40 - a transient failure (SAPE hiccup, Sheets/Weborama
+  - scheduled_refresh_weborama_verifiers(): daily at 09:30, retried once
+    more at 09:40 - kept the same 30/40-minute offset from the monitoring
+    refresh above when that moved from 08:00 to 09:00, since this job's
+    own docstring requires running AFTER it (discrepancy % needs fresh
+    SAPE facts). A transient failure (SAPE hiccup, Sheets/Weborama
     quota, etc.) used to mean that pixel just never got refreshed for
     the rest of the day. The function itself only touches links that
-    haven't already succeeded today, so the 08:40 call after a
-    successful 08:30 is a cheap no-op. Two tries is enough to tell a
-    blip from a real problem - if still stale past 08:50, it stays stale
+    haven't already succeeded today, so the 09:40 call after a
+    successful 09:30 is a cheap no-op. Two tries is enough to tell a
+    blip from a real problem - if still stale past 09:50, it stays stale
     until tomorrow - see needs_weborama_attention() in app.py for the
-    dashboard/monitoring-card indicators that flag this.
+    dashboard/monitoring-card indicators that flag this. Note: on Mondays
+    this now shares its 09:30 slot with scheduled_compute_weekly_monitoring_stats
+    below - both still run (sequential within the same tick), just back
+    to back instead of spaced apart.
   - scheduled_sync_all_accounts(): Mon-Fri at 09:00 Moscow
   - scheduled_compute_weekly_monitoring_stats(): Mon at 09:30 Moscow - after
     the other morning jobs so monitoring facts are fresh. Can run long
@@ -82,10 +88,10 @@ def run_tick():
     if now.hour == 9 and now.minute == 5:
         main.scheduled_compute_current_week_stats()
 
-    # 08:30 first attempt, 08:40 one retry. The function itself skips
+    # 09:30 first attempt, 09:40 one retry. The function itself skips
     # anything already fresh today, so the second call is cheap once
-    # 08:30 already succeeded.
-    if now.hour == 8 and now.minute in (30, 40):
+    # 09:30 already succeeded.
+    if now.hour == 9 and now.minute in (30, 40):
         main.scheduled_refresh_weborama_verifiers()
 
     if now.isoweekday() <= 5 and now.hour == 9 and now.minute == 0:
