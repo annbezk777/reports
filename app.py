@@ -7500,13 +7500,13 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
             max_instances=1  # Don't run multiple instances simultaneously
         )
 
-        # Add daily monitoring refresh at 08:00 - pushed later than the
+        # Add daily monitoring refresh at 09:00 - pushed later than the
         # original 03:00 because SAPE's own report data for "yesterday"
         # isn't fully settled that early; running at 03:00 risked pulling
         # a partial fact.
         scheduler.add_job(
             func=scheduled_refresh_all_monitorings,
-            trigger=CronTrigger(hour=8, minute=0),
+            trigger=CronTrigger(hour=9, minute=0),
             id='daily_monitoring_refresh',
             name='Автообновление данных мониторинга',
             replace_existing=True,
@@ -7524,7 +7524,7 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
         # docstring.
 
         # Add weekly monitoring dynamics (task #22) at Monday 09:35 - after
-        # the daily monitoring refresh (08:00) above, so the week being
+        # the daily monitoring refresh (09:00) above, so the week being
         # closed out already has that day's fresh fact instead of
         # yesterday's.
         scheduler.add_job(
@@ -7543,7 +7543,7 @@ if 'flask' not in sys.argv[0] and ENABLE_AUTO_SYNC and _scheduler_lock_acquired:
         logging.info("✅ Scheduler started:")
         logging.info("   - Weekday account sync at 09:00 Moscow time (Mon-Fri)")
         logging.info("   - Hourly report schedule check (every hour at :00)")
-        logging.info("   - Daily monitoring refresh at 08:00 Moscow time (every day)")
+        logging.info("   - Daily monitoring refresh at 09:00 Moscow time (every day)")
         logging.info("   - Weekly monitoring dynamics at Monday 09:35 Moscow time")
 
         # Check if we need to sync on startup (if last sync was >24h ago)

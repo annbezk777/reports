@@ -22,8 +22,8 @@ exactly the checks the old in-process scheduler.add_job() calls did,
 once, then exits:
   - scheduled_update_reports(): every tick (each report checks its own
     schedule_time/schedule_days internally)
-  - scheduled_refresh_all_monitorings(): daily at 08:00 Moscow
-  - scheduled_compute_current_week_stats(): daily at 08:05 Moscow, right
+  - scheduled_refresh_all_monitorings(): daily at 09:00 Moscow
+  - scheduled_compute_current_week_stats(): daily at 09:05 Moscow, right
     after the monitoring refresh above so its SAPE facts are fresh - the
     CURRENT, still-in-progress Mon-Sun week's numbers through yesterday
     (task #73), so the понедельная динамика table shows the week that's
@@ -76,10 +76,10 @@ def run_tick():
 
     main.scheduled_update_reports()
 
-    if now.hour == 8 and now.minute == 0:
+    if now.hour == 9 and now.minute == 0:
         main.scheduled_refresh_all_monitorings()
 
-    if now.hour == 8 and now.minute == 5:
+    if now.hour == 9 and now.minute == 5:
         main.scheduled_compute_current_week_stats()
 
     # 08:30 first attempt, 08:40 one retry. The function itself skips
