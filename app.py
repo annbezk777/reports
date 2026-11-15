@@ -3037,6 +3037,7 @@ def get_monitoring_data(monitoring_id):
             'id': monitoring.id,
             'name': monitoring.name,
             'account_id': monitoring.account_id,
+            'account_ids': [a.id for a in monitoring.get_accounts()],
             'campaign_ids': monitoring.campaign_ids,
             'date_from': monitoring.date_from.strftime('%Y-%m-%d'),
             'date_to': monitoring.date_to.strftime('%Y-%m-%d'),
@@ -3105,7 +3106,136 @@ def get_monitoring_data(monitoring_id):
         return jsonify({'error': str(e)}), 500
 
 
-def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to, only_link_id=None):
+def _merge_sape_totals(totals_list):
+    """Combine several SAPE get_stats() 'total' dicts (one per account)
+    into one, the way a single-account call would have reported it if the
+    campaigns had all lived under one account. Raw counters sum directly;
+    rate/average fields are weighted by their natural denominator (vtr/vr
+    by показы, the avgPostclick*/avgVisitDuration fields by визиты) rather
+    than flat-averaged across accounts - a flat average would be wrong
+    whenever the two accounts' volumes differ, same reasoning as
+    _weighted_daily_percent elsewhere in this file. ctr/passingIndex are
+    recomputed from the summed raw numbers, same formula
+    compute_monitoring_week_stats already uses for a single account."""
+    def weighted(field, weight_field):
+        total_weight = sum(t.get(weight_field, 0) or 0 for t in totals_list)
+        if not total_weight:
+            return 0.0
+        return sum((t.get(field, 0) or 0) * (t.get(weight_field, 0) or 0) for t in totals_list) / total_weight
+
+    shows = sum(t.get('shows', 0) or 0 for t in totals_list)
+    clicks = sum(t.get('clicks', 0) or 0 for t in totals_list)
+    visits = sum(t.get('visits', 0) or 0 for t in totals_list)
+    amount = sum(t.get('amount', 0) or 0 for t in totals_list)
+
+    merged_goals = {}
+    any_goals = False
+    for t in totals_list:
+        goals = t.get('goals')
+        if goals is None:
+            continue
+        any_goals = True
+        for g in goals:
+            name = g.get('name')
+            merged_goals[name] = merged_goals.get(name, 0) + (g.get('count', 0) or 0)
+
+    return {
+        'shows': shows,
+        'clicks': clicks,
+        'visits': visits,
+        'amount': amount,
+        'ctr': round(clicks / shows * 100, 3) if shows else 0,
+        'vtr': weighted('vtr', 'shows'),
+        'vr': weighted('vr', 'shows'),
+        'avgPostclickBounceRate': weighted('avgPostclickBounceRate', 'visits'),
+        'avgVisitDuration': weighted('avgVisitDuration', 'visits'),
+        'avgPostclickPageDepth': weighted('avgPostclickPageDepth', 'visits'),
+        'avgPostclickRobot': weighted('avgPostclickRobot', 'visits'),
+        'passingIndex': round(visits / clicks * 100, 2) if clicks else 0,
+        'goals': [{'name': k, 'count': v} for k, v in merged_goals.items()] if any_goals else None,
+    }
+
+
+def _merge_sape_daily_statistics(statistics_lists):
+    """Same idea as _merge_sape_totals but for the per-day 'statistics'
+    rows (used when callers pass group_by_date - e.g. the backfill
+    helper): sums each date's rows across accounts, key by eventDate."""
+    by_date = {}
+    for rows in statistics_lists:
+        for row in rows:
+            d = row.get('eventDate')
+            if d not in by_date:
+                by_date[d] = []
+            by_date[d].append(row)
+    merged = []
+    for d, rows in sorted(by_date.items()):
+        merged_row = _merge_sape_totals(rows)
+        merged_row['eventDate'] = d
+        merged.append(merged_row)
+    return merged
+
+
+def sape_get_stats_multi_account(campaigns, date_from, date_to, fields=None, group_by_date=False):
+    """Fan a get_stats() call out across however many SAPE accounts the
+    given Campaign objects actually belong to (task #72 - one report or
+    monitoring combining 2 accounts), then merge the results into the
+    same shape get_stats() itself returns. For a single-account campaign
+    list (every report/monitoring before this feature existed) this makes
+    exactly one get_stats() call and returns its result completely
+    unchanged - zero behavior change for the existing, overwhelmingly
+    common case.
+
+    Returns the merged dict, with 'partial': True and 'failed_accounts'
+    (list of account ids) added when some but not all account groups
+    succeeded. Returns None only when EVERY group failed or no campaigns
+    were passed - matching get_stats()'s own "no data" contract, so
+    existing `if not stats: ...` checks at call sites keep working."""
+    groups = {}
+    for c in campaigns:
+        group = groups.setdefault(c.account_id, {'account': c.account, 'campaign_ids': []})
+        group['campaign_ids'].append(int(c.campaign_id))
+
+    if not groups:
+        return None
+
+    results = []
+    failed_accounts = []
+    for account_id, group in groups.items():
+        account = group['account']
+        if not account or not account.api_token:
+            failed_accounts.append(account_id)
+            continue
+        client = SapeAPIClient(login=account.login, token=account.api_token)
+        if not client.authenticate():
+            logger.error(f"⚠️ SAPE auth failed for account {account_id} in multi-account fetch")
+            failed_accounts.append(account_id)
+            continue
+        try:
+            stats = client.get_stats(campaign_ids=group['campaign_ids'], date_from=date_from, date_to=date_to, fields=fields)
+        except Exception as e:
+            logger.error(f"⚠️ SAPE get_stats failed for account {account_id} in multi-account fetch: {e}")
+            stats = None
+        if stats:
+            results.append(stats)
+        else:
+            failed_accounts.append(account_id)
+
+    if not results:
+        return None
+
+    if len(results) == 1 and not failed_accounts:
+        return results[0]
+
+    merged = {'total': _merge_sape_totals([r.get('total', {}) for r in results])}
+    if group_by_date:
+        merged['statistics'] = _merge_sape_daily_statistics([r.get('statistics', []) for r in results])
+    if failed_accounts:
+        merged['partial'] = True
+        merged['failed_accounts'] = failed_accounts
+    return merged
+
+
+def _refresh_verifier_campaign_facts(monitoring, date_from, date_to, only_link_id=None):
     """Fetch SAPE fact показы/клики for exactly the campaigns that have a
     Weborama verifier mapping, one API call per mapping (SAPE's
     multi-campaign stats call groups by date, not by campaign, so there's
@@ -3123,7 +3253,12 @@ def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to, onl
 
     only_link_id restricts this to one link's own mappings - used when
     refreshing a single verifier card (so its SAPE side stays in sync
-    with its own compare_date_from, not just the whole monitoring)."""
+    with its own compare_date_from, not just the whole monitoring).
+
+    No longer takes a `client` - a mapping's campaigns could in principle
+    span 2 accounts same as the monitoring itself (task #72), so this
+    resolves accounts per-mapping via sape_get_stats_multi_account()
+    instead of assuming the caller's one client covers everything."""
     mappings = [
         m for link in monitoring.verifier_links if link.verifier_type == 'weborama'
         and (only_link_id is None or link.id == only_link_id)
@@ -3147,12 +3282,7 @@ def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to, onl
         if mapping_date_from > date_to:
             continue
         try:
-            stats = client.get_stats(
-                campaign_ids=[int(c.campaign_id) for c in campaigns],
-                date_from=mapping_date_from,
-                date_to=date_to,
-                fields=None
-            )
+            stats = sape_get_stats_multi_account(campaigns, mapping_date_from, date_to, fields=None)
             if not stats:
                 continue
             total = stats.get('total', {})
@@ -3163,13 +3293,14 @@ def _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to, onl
             logger.error(f"⚠️ Failed to fetch SAPE fact for mapping {mapping.id} (campaigns {[c.campaign_id for c in campaigns]}): {e}")
 
 
-def _refresh_adriver_fact(monitoring, client, date_to):
+def _refresh_adriver_fact(monitoring, date_to):
     """Same idea as _refresh_verifier_campaign_facts but for the single
     Adriver/Target Ads total on the monitoring itself - only runs when
     adriver_compare_date_from is set (the pixel went live after the
     campaign's own start date), fetching SAPE's fact scoped to that same
     shifted window so the discrepancy % isn't comparing a partial-period
-    Adriver number against a full-period SAPE one."""
+    Adriver number against a full-period SAPE one. No longer takes a
+    `client` - uses sape_get_stats_multi_account() (task #72)."""
     if not monitoring.adriver_compare_date_from:
         return
     campaigns = monitoring.get_campaigns()
@@ -3179,12 +3310,7 @@ def _refresh_adriver_fact(monitoring, client, date_to):
     if date_from > date_to:
         return
     try:
-        stats = client.get_stats(
-            campaign_ids=[int(c.campaign_id) for c in campaigns],
-            date_from=date_from,
-            date_to=date_to,
-            fields=None
-        )
+        stats = sape_get_stats_multi_account(campaigns, date_from, date_to, fields=None)
         if not stats:
             return
         total = stats.get('total', {})
@@ -3211,22 +3337,15 @@ def _refresh_adriver_fact_for_upload(monitoring, as_of_date):
     campaigns = monitoring.get_campaigns()
     if not campaigns:
         return
-    account = monitoring.account
-    if not account or not account.api_token:
-        return
     date_from = monitoring.adriver_compare_date_from or monitoring.date_from
     date_to = min(as_of_date, monitoring.date_to)
     if date_from > date_to:
         return
     try:
-        client = SapeAPIClient(login=account.login, token=account.api_token)
-        if not client.authenticate():
-            logger.error(f"⚠️ SAPE auth failed scoping Adriver fact for monitoring {monitoring.id}")
-            return
-        stats = client.get_stats(
-            campaign_ids=[int(c.campaign_id) for c in campaigns],
-            date_from=datetime.combine(date_from, datetime.min.time()),
-            date_to=datetime.combine(date_to, datetime.min.time()),
+        stats = sape_get_stats_multi_account(
+            campaigns,
+            datetime.combine(date_from, datetime.min.time()),
+            datetime.combine(date_to, datetime.min.time()),
             fields=None
         )
         if not stats:
@@ -3383,8 +3502,7 @@ def _refresh_weekly_adriver_stats(monitoring_id, daily_rows):
         return
 
     monitoring = None
-    sape_client = None
-    campaign_ids = None
+    campaigns_for_scope = None
     client_ready = False
 
     for stat in affected:
@@ -3412,19 +3530,13 @@ def _refresh_weekly_adriver_stats(monitoring_id, daily_rows):
             if not client_ready:
                 client_ready = True
                 monitoring = MonitoringCampaign.query.get(monitoring_id)
-                account = monitoring.account if monitoring else None
-                if account and account.api_token:
-                    sape_client = SapeAPIClient(login=account.login, token=account.api_token)
-                    if sape_client.authenticate():
-                        campaign_ids = [int(c.campaign_id) for c in monitoring.get_campaigns()]
-                    else:
-                        sape_client = None
-            if sape_client and campaign_ids:
+                campaigns_for_scope = monitoring.get_campaigns() if monitoring else None
+            if campaigns_for_scope:
                 try:
-                    scoped_stats = sape_client.get_stats(
-                        campaign_ids=campaign_ids,
-                        date_from=datetime.combine(coverage_start, datetime.min.time()),
-                        date_to=datetime.combine(coverage_end, datetime.min.time()),
+                    scoped_stats = sape_get_stats_multi_account(
+                        campaigns_for_scope,
+                        datetime.combine(coverage_start, datetime.min.time()),
+                        datetime.combine(coverage_end, datetime.min.time()),
                         fields=None
                     )
                     if scoped_stats:
@@ -3542,9 +3654,6 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
     campaigns = monitoring.get_campaigns()
     if not campaigns:
         return None
-    account = monitoring.account
-    if not account or not account.api_token:
-        return None
 
     # Clipped to the campaign's own period - stored as the week's
     # label too (not the raw Mon-Sun args), so a campaign starting/ending
@@ -3563,18 +3672,17 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
         stat.week_end = q_end
 
     # --- SAPE / Metrika ---
-    client = SapeAPIClient(login=account.login, token=account.api_token)
-    if not client.authenticate():
-        logger.error(f"⚠️ SAPE auth failed computing week {week_start} for monitoring {monitoring.id}")
-        return None
-
-    campaign_ids = [int(c.campaign_id) for c in campaigns]
-    stats = client.get_stats(
-        campaign_ids=campaign_ids,
-        date_from=datetime.combine(q_start, datetime.min.time()),
-        date_to=datetime.combine(q_end, datetime.min.time()),
+    stats = sape_get_stats_multi_account(
+        campaigns,
+        datetime.combine(q_start, datetime.min.time()),
+        datetime.combine(q_end, datetime.min.time()),
         fields=None
     )
+    if stats is None:
+        logger.error(f"⚠️ SAPE fetch failed computing week {week_start} for monitoring {monitoring.id}")
+        return None
+    if stats.get('partial'):
+        logger.error(f"⚠️ Partial SAPE data computing week {week_start} for monitoring {monitoring.id} - accounts failed: {stats.get('failed_accounts')}")
     if stats:
         total = stats.get('total', {})
         stat.impressions = total.get('shows', 0)
@@ -3648,10 +3756,10 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
                 stat.adriver_coverage_start = coverage_start
                 stat.adriver_coverage_end = coverage_end
                 try:
-                    scoped_stats = client.get_stats(
-                        campaign_ids=campaign_ids,
-                        date_from=datetime.combine(coverage_start, datetime.min.time()),
-                        date_to=datetime.combine(coverage_end, datetime.min.time()),
+                    scoped_stats = sape_get_stats_multi_account(
+                        campaigns,
+                        datetime.combine(coverage_start, datetime.min.time()),
+                        datetime.combine(coverage_end, datetime.min.time()),
                         fields=None
                     )
                     if scoped_stats:
@@ -3746,10 +3854,10 @@ def compute_monitoring_week_stats(monitoring, week_start, week_end):
                 # call, so the % the template shows is a fair comparison
                 # instead of being hidden outright.
                 try:
-                    scoped_stats = client.get_stats(
-                        campaign_ids=campaign_ids,
-                        date_from=datetime.combine(wcm_coverage_start, datetime.min.time()),
-                        date_to=datetime.combine(q_end, datetime.min.time()),
+                    scoped_stats = sape_get_stats_multi_account(
+                        campaigns,
+                        datetime.combine(wcm_coverage_start, datetime.min.time()),
+                        datetime.combine(q_end, datetime.min.time()),
                         fields=None
                     )
                     if scoped_stats:
@@ -3968,39 +4076,17 @@ def refresh_monitoring_data(monitoring_id):
         if not campaigns:
             return jsonify({'success': False, 'error': 'No campaigns found'}), 400
 
-        # Get account
-        account = monitoring.account
-        if not account or not account.api_token:
-            return jsonify({'success': False, 'error': 'Account not configured'}), 400
-
-        # Initialize SAPE client
-        client = SapeAPIClient(login=account.login, token=account.api_token)
-
-        if not client.authenticate():
-            return jsonify({'success': False, 'error': 'SAPE authentication failed'}), 401
-
         # Get data from date_from to yesterday
         from datetime import timedelta
         yesterday = datetime.now() - timedelta(days=1)
         date_to = min(yesterday, datetime.combine(monitoring.date_to, datetime.min.time()))
         date_from = datetime.combine(monitoring.date_from, datetime.min.time())
 
-        # Get campaign IDs
-        campaign_ids = [int(c.campaign_id) for c in campaigns]
-
-        # First, check what fields are available in SAPE API
-        available_fields = client.get_available_stat_fields()
-        if available_fields:
-            logger.info(f"📋 Available statistic fields from SAPE API")
-
-        # Request stats with extended fields
-        # First, let's request without fields to see what's available
-        stats = client.get_stats(
-            campaign_ids=campaign_ids,
-            date_from=date_from,
-            date_to=date_to,
-            fields=None  # Request all available fields
-        )
+        # sape_get_stats_multi_account (task #72) fans this out across
+        # however many SAPE accounts `campaigns` actually belong to - one
+        # account (the common case today) makes exactly one call, same as
+        # the old direct client.get_stats() did.
+        stats = sape_get_stats_multi_account(campaigns, date_from, date_to, fields=None)
 
         if not stats:
             return jsonify({'success': False, 'error': 'Failed to get stats from SAPE'}), 500
@@ -4009,12 +4095,8 @@ def refresh_monitoring_data(monitoring_id):
         total = stats.get('total', {})
         logger.info(f"📊 SAPE API Response - Available fields in 'total': {list(total.keys())}")
         logger.info(f"📊 Full total data: {total}")
-
-        # Also check if there are per-campaign statistics with more fields
-        statistics = stats.get('statistics', [])
-        if statistics and len(statistics) > 0:
-            logger.info(f"📊 Sample statistics record fields: {list(statistics[0].keys())}")
-            logger.info(f"📊 Sample statistics record: {statistics[0]}")
+        if stats.get('partial'):
+            logger.error(f"⚠️ Partial SAPE data for monitoring {monitoring_id} - accounts failed: {stats.get('failed_accounts')}")
 
         # Update monitoring with actual data
         # SAPE API field names from web interface (traffic.sape.ru/reports)
@@ -4053,8 +4135,8 @@ def refresh_monitoring_data(monitoring_id):
             monitoring.fact_vtr = round(vr_value, 1) if vr_value else None
             logger.info(f"🎯 Banner/TGB format detected, loaded VR: {monitoring.fact_vtr}%")
 
-        _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
-        _refresh_adriver_fact(monitoring, client, date_to)
+        _refresh_verifier_campaign_facts(monitoring, date_from, date_to)
+        _refresh_adriver_fact(monitoring, date_to)
 
         # "Обновить сейчас" must refresh the verifier side too, not just the
         # SAPE fact - re-scrape every Weborama permalink on this monitoring
@@ -4210,19 +4292,34 @@ def refresh_all_monitorings():
                     date_to = min(yesterday, datetime.combine(monitoring.date_to, datetime.min.time()))
                     date_from = datetime.combine(monitoring.date_from, datetime.min.time())
 
-                    campaign_ids = [int(c.campaign_id) for c in campaigns]
-
-                    stats = client.get_stats(
-                        campaign_ids=campaign_ids,
-                        date_from=date_from,
-                        date_to=date_to,
-                        fields=None
-                    )
+                    # monitorings_by_account above groups by the stored
+                    # monitoring.account_id, which is only ONE of a
+                    # dual-account card's accounts (task #72) - the outer
+                    # `client` is authenticated for that one account only,
+                    # so campaigns belonging to the OTHER account would
+                    # silently get wrong/empty numbers from it. Detect that
+                    # case and fall back to the multi-account helper (which
+                    # re-authenticates per real account) only when needed -
+                    # every single-account monitoring (still the vast
+                    # majority) keeps reusing the outer batch's one client,
+                    # unchanged.
+                    if len(monitoring.get_accounts()) > 1:
+                        stats = sape_get_stats_multi_account(campaigns, date_from, date_to, fields=None)
+                    else:
+                        campaign_ids = [int(c.campaign_id) for c in campaigns]
+                        stats = client.get_stats(
+                            campaign_ids=campaign_ids,
+                            date_from=date_from,
+                            date_to=date_to,
+                            fields=None
+                        )
 
                     if not stats:
                         logger.error(f"❌ Failed to get stats from SAPE for monitoring {monitoring.id}")
                         failed_count += 1
                         continue
+                    if stats.get('partial'):
+                        logger.error(f"⚠️ Partial SAPE data for monitoring {monitoring.id} - accounts failed: {stats.get('failed_accounts')}")
 
                     # Extract totals
                     total = stats.get('total', {})
@@ -4245,8 +4342,8 @@ def refresh_all_monitorings():
                         vr_value = total.get('vr', 0.0)
                         monitoring.fact_vtr = round(vr_value, 1) if vr_value else None
 
-                    _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
-                    _refresh_adriver_fact(monitoring, client, date_to)
+                    _refresh_verifier_campaign_facts(monitoring, date_from, date_to)
+                    _refresh_adriver_fact(monitoring, date_to)
 
                     if monitoring.targetads_report_url:
                         try:
@@ -4814,19 +4911,15 @@ def _fetch_and_apply_weborama_link(link):
     # discrepancy % by a full day's traffic for no real reason. Best
     # effort - a failure here shouldn't block the Weborama numbers that
     # already succeeded above.
-    account = monitoring.account
-    if account and account.api_token:
-        try:
-            sape_client = SapeAPIClient(login=account.login, token=account.api_token)
-            if sape_client.authenticate():
-                _refresh_verifier_campaign_facts(
-                    monitoring, sape_client,
-                    datetime.combine(date_from, datetime.min.time()),
-                    datetime.combine(date_to, datetime.min.time()),
-                    only_link_id=link.id,
-                )
-        except Exception as e:
-            logger.error(f"⚠️ Failed to sync SAPE fact alongside Weborama fetch for link {link.id}: {e}")
+    try:
+        _refresh_verifier_campaign_facts(
+            monitoring,
+            datetime.combine(date_from, datetime.min.time()),
+            datetime.combine(date_to, datetime.min.time()),
+            only_link_id=link.id,
+        )
+    except Exception as e:
+        logger.error(f"⚠️ Failed to sync SAPE fact alongside Weborama fetch for link {link.id}: {e}")
 
     db.session.commit()
 
@@ -5031,6 +5124,7 @@ def get_report_data(report_id):
             'id': report.id,
             'name': report.name,
             'account_id': report.campaign.account_id,
+            'account_ids': [a.id for a in report.get_accounts()],
             'campaign_ids': report.campaign_ids,
             'campaign_settings': report.campaign_settings or {},
             'manager': report.manager,
@@ -5453,16 +5547,17 @@ def execute_run_report(report_id):
                     yield f"data: {json.dumps({'type': 'complete', 'success': False, 'error': 'Не найдены кампании для отчета'})}\n\n"
                     return
 
-                # Get account from first campaign
-                account = campaigns[0].account
-
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Подключение к SAPE API...'})}\n\n"
 
-                # Initialize SAPE client
-                sape_client = SapeAPIClient(login=account.login, token=account.api_token)
-                if not sape_client.authenticate():
-                    yield f"data: {json.dumps({'type': 'complete', 'success': False, 'error': 'Ошибка авторизации в SAPE'})}\n\n"
-                    return
+                # Preflight auth check against EVERY account the report's
+                # campaigns actually belong to (task #72 - a report can
+                # combine 2 accounts), not just the first campaign's -
+                # the real fetch below still happens in run_report_old.
+                for account in report.get_accounts():
+                    sape_client = SapeAPIClient(login=account.login, token=account.api_token)
+                    if not sape_client.authenticate():
+                        yield f"data: {json.dumps({'type': 'complete', 'success': False, 'error': f'Ошибка авторизации в SAPE для аккаунта {account.login}'})}\n\n"
+                        return
 
                 # Get date range from request or use last 7 days
                 date_from_str = request.args.get('date_from')
@@ -5556,16 +5651,29 @@ def run_report_old(report_id):
         flash('Не найдены кампании для отчета', 'error')
         return redirect(url_for('reports'))
 
-    # Get account from first campaign (all campaigns should be from same account)
-    account = campaigns[0].account
-
     try:
-        # Initialize SAPE client with login and token
-        sape_client = SapeAPIClient(login=account.login, token=account.api_token)
+        # Every get_daily_stats()/get_daily_stats_by_ad() call below is
+        # already scoped to exactly ONE campaign at a time (even the
+        # "combined section" branch fetches each campaign separately and
+        # sums the day-level numbers in Python) - so a report spanning 2
+        # SAPE accounts (task #72) just needs the RIGHT account's client
+        # picked per call, never a merge. Authenticate every account up
+        # front (same fail-fast behavior as the old single-account setup)
+        # and look the right one up per campaign via sape_client_for().
+        accounts = report.get_accounts()
+        if not accounts:
+            flash('Не найден аккаунт для кампаний отчета', 'error')
+            return redirect(url_for('reports'))
 
-        # Authenticate
-        if not sape_client.authenticate():
-            raise Exception("SAPE authentication failed")
+        sape_clients_by_account = {}
+        for acc in accounts:
+            c = SapeAPIClient(login=acc.login, token=acc.api_token)
+            if not c.authenticate():
+                raise Exception(f"SAPE authentication failed for account {acc.login}")
+            sape_clients_by_account[acc.id] = c
+
+        def sape_client_for(campaign):
+            return sape_clients_by_account[campaign.account_id]
 
         # Get date range from request or use last 7 days
         date_from_str = request.args.get('date_from')
@@ -5646,7 +5754,7 @@ def run_report_old(report_id):
                 print(f"📊 Processing campaign {campaign.campaign_id} ({campaign.name})")
 
                 # Get daily stats with video metrics
-                daily_data = sape_client.get_daily_stats(
+                daily_data = sape_client_for(campaign).get_daily_stats(
                     campaign_ids=[int(campaign.campaign_id)],
                     date_from=date_from,
                     date_to=date_to,
@@ -5753,7 +5861,7 @@ def run_report_old(report_id):
 
             for campaign in campaigns:
                 # Get data for this campaign for entire period
-                daily_data = sape_client.get_daily_stats(
+                daily_data = sape_client_for(campaign).get_daily_stats(
                     campaign_ids=[int(campaign.campaign_id)],
                     date_from=date_from,
                     date_to=date_to,
@@ -5893,7 +6001,7 @@ def run_report_old(report_id):
                 cache_entry = get_cached_worksheet(campaign_worksheet)
 
                 print(f"\n🔍 Fetching per-creative stats for campaign {campaign.campaign_id} ({campaign.name})")
-                ad_stats = sape_client.get_daily_stats_by_ad(
+                ad_stats = sape_client_for(campaign).get_daily_stats_by_ad(
                     campaign_ids=[int(campaign.campaign_id)],
                     date_from=date_from,
                     date_to=date_to
@@ -5934,7 +6042,7 @@ def run_report_old(report_id):
                         # Plain section matched on the campaign's own ID (no
                         # creative IDs in its header) - full campaign totals.
                         print(f"   📍 Section at row {structure['header_row']}, col {structure['header_col']}: whole campaign")
-                        daily_data_to_write = sape_client.get_daily_stats(
+                        daily_data_to_write = sape_client_for(campaign).get_daily_stats(
                             campaign_ids=[int(campaign.campaign_id)],
                             date_from=date_from,
                             date_to=date_to,
@@ -6195,7 +6303,7 @@ def run_report_old(report_id):
 
                         is_campaign_video = campaign.format_type in ['V', 'CTV']
 
-                        daily_data = sape_client.get_daily_stats(
+                        daily_data = sape_client_for(campaign).get_daily_stats(
                             campaign_ids=[int(campaign_sape_id)],
                             date_from=date_from,
                             date_to=date_to,
@@ -6316,7 +6424,7 @@ def run_report_old(report_id):
                     print(f"🔍 DEBUG: is_campaign_video = {is_campaign_video}")
 
                     print(f"🔍 DEBUG: About to call get_daily_stats...")
-                    daily_data_to_write = sape_client.get_daily_stats(
+                    daily_data_to_write = sape_client_for(campaign).get_daily_stats(
                         campaign_ids=[int(campaign.campaign_id)],
                         date_from=date_from,
                         date_to=date_to,
@@ -7271,19 +7379,28 @@ def scheduled_refresh_all_monitorings():
                     date_to = min(yesterday, datetime.combine(monitoring.date_to, datetime.min.time()))
                     date_from = datetime.combine(monitoring.date_from, datetime.min.time())
 
-                    campaign_ids = [int(c.campaign_id) for c in campaigns]
-
-                    stats = client.get_stats(
-                        campaign_ids=campaign_ids,
-                        date_from=date_from,
-                        date_to=date_to,
-                        fields=None
-                    )
+                    # See refresh_all_monitorings for why: monitorings_by_account
+                    # groups by the stored monitoring.account_id, only ONE of a
+                    # dual-account card's accounts (task #72) - fall back to the
+                    # multi-account helper only for those, keep reusing the
+                    # outer batch's one client for every single-account card.
+                    if len(monitoring.get_accounts()) > 1:
+                        stats = sape_get_stats_multi_account(campaigns, date_from, date_to, fields=None)
+                    else:
+                        campaign_ids = [int(c.campaign_id) for c in campaigns]
+                        stats = client.get_stats(
+                            campaign_ids=campaign_ids,
+                            date_from=date_from,
+                            date_to=date_to,
+                            fields=None
+                        )
 
                     if not stats:
                         logging.error(f"❌ Failed to get stats from SAPE for monitoring {monitoring.id}")
                         monitorings_failed += 1
                         continue
+                    if stats.get('partial'):
+                        logging.error(f"⚠️ Partial SAPE data for monitoring {monitoring.id} - accounts failed: {stats.get('failed_accounts')}")
 
                     # Extract totals
                     total = stats.get('total', {})
@@ -7297,8 +7414,8 @@ def scheduled_refresh_all_monitorings():
                     monitoring.fact_page_depth = total.get('avgPostclickPageDepth', 0.0)
                     monitoring.fact_robotness = total.get('avgPostclickRobot', 0.0)
 
-                    _refresh_verifier_campaign_facts(monitoring, client, date_from, date_to)
-                    _refresh_adriver_fact(monitoring, client, date_to)
+                    _refresh_verifier_campaign_facts(monitoring, date_from, date_to)
+                    _refresh_adriver_fact(monitoring, date_to)
 
                     if monitoring.targetads_report_url:
                         try:

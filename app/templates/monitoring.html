@@ -839,15 +839,16 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
     font-size: 11px;
     font-weight: 500;
     border-radius: 6px;
-    background: var(--bg-white);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+    background: var(--peach-light);
+    color: var(--primary-orange);
+    border: 1px solid transparent;
     cursor: pointer;
     transition: background 0.15s;
 }
 
 .btn-vl-compact:hover {
-    background: var(--bg-light);
+    background: var(--primary-orange);
+    color: white;
 }
 
 .btn-vl-compact-ghost {
@@ -1424,17 +1425,20 @@ Backup: monitoring.html.FINAL_LAYOUT_DO_NOT_TOUCH
                                 <!-- Account -->
                                 <div class="meta-field" style="display: flex; align-items: center; gap: 4px;">
                                     <span style="color: var(--text-secondary);">Кабинет:</span>
-                                    {% if monitoring.account.sape_user_id %}
-                                    <a href="https://cp.sapient.ru/users/sudo?uid={{ monitoring.account.sape_user_id }}&sid=15"
+                                    {% for acc in monitoring.get_accounts() %}
+                                    {% if not loop.first %}<span style="color: var(--text-secondary);">+</span>{% endif %}
+                                    {% if acc.sape_user_id %}
+                                    <a href="https://cp.sapient.ru/users/sudo?uid={{ acc.sape_user_id }}&sid=15"
                                        target="_blank"
                                        style="color: var(--text-primary); font-weight: 500; text-decoration: none; transition: color 0.2s;"
                                        onmouseover="this.style.color='var(--primary-orange)';"
                                        onmouseout="this.style.color='var(--text-primary)';">
-                                        {{ monitoring.account.login }}
+                                        {{ acc.login }}
                                     </a>
                                     {% else %}
-                                    <strong style="color: var(--text-primary); font-weight: 500;">{{ monitoring.account.login }}</strong>
+                                    <strong style="color: var(--text-primary); font-weight: 500;">{{ acc.login }}</strong>
                                     {% endif %}
+                                    {% endfor %}
                                 </div>
 
                                 {% if monitoring.manager %}
@@ -2551,28 +2555,10 @@ function refreshAllMonitorings() {
                     <input type="text" id="name" name="name" required placeholder="Например: AlfaDigital // Rossko октябрь">
                 </div>
 
-                <!-- Аккаунт и Период в одной строке -->
-                <div class="form-row">
-                    <div class="form-group" style="position: relative;">
-                        <label for="account_search">Аккаунт SAPE <span class="required">*</span></label>
-                        <input type="text" id="account_search" autocomplete="off" placeholder="Выберите аккаунт">
-                        <input type="hidden" id="account_id" name="account_id">
-                        <div id="accountDropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; background: white; border: 1px solid var(--border-color); border-radius: 8px; max-height: 240px; overflow-y: auto; z-index: 50; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);"></div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="manager">Менеджер</label>
-                        <input type="text" id="manager" name="manager" placeholder="Имя менеджера">
-                    </div>
-                </div>
-
-                <div class="form-row" id="monitoringClientSection" style="display: none;">
-                    <div class="form-group">
-                        <label for="monitoring_client_id">Фильтр по клиенту</label>
-                        <select id="monitoring_client_id" name="monitoring_client_id" onchange="filterMonitoringCampaignsByClient()">
-                            <option value="">Все клиенты</option>
-                        </select>
-                    </div>
+                <!-- Менеджер -->
+                <div class="form-group">
+                    <label for="manager">Менеджер</label>
+                    <input type="text" id="manager" name="manager" placeholder="Имя менеджера">
                 </div>
 
                 <div class="form-row">
@@ -2670,23 +2656,42 @@ function refreshAllMonitorings() {
                     </div>
                 </div>
 
+                <!-- Аккаунт + Клиент - right above the campaign table, same
+                     flow as the second-account block below (account combobox,
+                     then advertiser filter, then the table itself). -->
+                <div class="form-group" style="position: relative;">
+                    <label for="account_search">Аккаунт SAPE <span class="required">*</span></label>
+                    <input type="text" id="account_search" autocomplete="off" placeholder="Выберите аккаунт">
+                    <input type="hidden" id="account_id" name="account_id">
+                    <div id="accountDropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; background: white; border: 1px solid var(--border-color); border-radius: 8px; max-height: 240px; overflow-y: auto; z-index: 50; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);"></div>
+                </div>
+
+                <div class="form-row" id="monitoringClientSection" style="display: none;">
+                    <div class="form-group">
+                        <label for="monitoring_client_id">Клиент</label>
+                        <select id="monitoring_client_id" name="monitoring_client_id" onchange="filterMonitoringCampaignsByClient()">
+                            <option value="">Все клиенты</option>
+                        </select>
+                    </div>
+                </div>
+
                 <!-- Выбор кампаний -->
                 <div class="form-group">
-                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
                         Выберите кампании <span class="required">*</span>
                     </label>
                     <div style="margin-bottom: 12px; display: flex; gap: 8px;">
-                        <button type="button" onclick="openBulkMonitoringModal()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                        <button type="button" onclick="openBulkMonitoringModal()" class="btn btn-secondary" style="padding: 6px 10px; font-size: 11px; background: var(--peach-light); color: var(--primary-orange); border-color: transparent;">
                             Добавить массово
                         </button>
-                        <button type="button" onclick="selectAllCampaigns()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                        <button type="button" onclick="selectAllCampaigns()" class="btn btn-secondary" style="padding: 6px 10px; font-size: 11px; background: var(--peach-light); color: var(--primary-orange); border-color: transparent;">
                             Выбрать все
                         </button>
-                        <button type="button" onclick="deselectAllCampaigns()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                        <button type="button" onclick="deselectAllCampaigns()" class="btn btn-secondary" style="padding: 6px 10px; font-size: 11px; background: var(--peach-light); color: var(--primary-orange); border-color: transparent;">
                             Снять все
                         </button>
                     </div>
-                    <div id="campaignsLoading" style="display: none; color: #78716c; font-size: 14px; padding: 10px;">
+                    <div id="campaignsLoading" style="display: none; color: #78716c; font-size: 11px; padding: 10px;">
                         Загрузка кампаний...
                     </div>
                     <div style="height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
@@ -2700,12 +2705,64 @@ function refreshAllMonitorings() {
                             </thead>
                             <tbody id="campaignsList">
                                 <tr>
-                                    <td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+                                    <td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 11px;">
                                         Выберите аккаунт для загрузки кампаний
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                    <div style="margin-top: 6px;">
+                        <a href="#" id="secondAccountToggleLink" onclick="toggleSecondAccountBlock(event)" style="font-size: 11px; color: var(--primary-orange); text-decoration: none;">+ Добавить второй аккаунт</a>
+                    </div>
+                    <div id="secondAccountBlock" style="display: none; margin-top: 14px; padding: 14px; border: 1px dashed var(--border-color); border-radius: 8px;">
+                        <!-- Second account flow - mirrors the primary account's combobox +
+                             advertiser filter + campaign table exactly (task #72). -->
+                        <div class="form-group" style="position: relative;">
+                            <label for="account_search2">Второй аккаунт SAPE</label>
+                            <input type="text" id="account_search2" autocomplete="off" placeholder="Выберите аккаунт">
+                            <input type="hidden" id="account_id2" name="account_id2">
+                            <div id="accountDropdown2" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; background: white; border: 1px solid var(--border-color); border-radius: 8px; max-height: 240px; overflow-y: auto; z-index: 50; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);"></div>
+                        </div>
+
+                        <div class="form-row" id="monitoringClientSection2" style="display: none;">
+                            <div class="form-group">
+                                <label for="monitoring_client_id2">Клиент</label>
+                                <select id="monitoring_client_id2" name="monitoring_client_id2" onchange="filterMonitoringCampaignsByClient('2')">
+                                    <option value="">Все клиенты</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+                            <button type="button" onclick="openBulkMonitoringModal('2')" class="btn btn-secondary" style="padding: 6px 10px; font-size: 11px; background: var(--peach-light); color: var(--primary-orange); border-color: transparent;">
+                                Добавить массово
+                            </button>
+                            <button type="button" onclick="selectAllCampaigns('2')" class="btn btn-secondary" style="padding: 6px 10px; font-size: 11px; background: var(--peach-light); color: var(--primary-orange); border-color: transparent;">
+                                Выбрать все
+                            </button>
+                            <button type="button" onclick="deselectAllCampaigns('2')" class="btn btn-secondary" style="padding: 6px 10px; font-size: 11px; background: var(--peach-light); color: var(--primary-orange); border-color: transparent;">
+                                Снять все
+                            </button>
+                        </div>
+                        <div style="height: 220px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
+                            <table style="width: 100%; min-width: 450px; border-collapse: collapse;" id="campaignsTable2">
+                                <thead style="position: sticky; top: 0; background: var(--bg-light); border-bottom: 2px solid var(--border-color);">
+                                    <tr>
+                                        <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 40px;"></th>
+                                        <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary);">КАМПАНИЯ</th>
+                                        <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary);">КЛИЕНТ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="campaignsList2">
+                                    <tr>
+                                        <td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 11px;">
+                                            Выберите второй аккаунт
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -3042,6 +3099,26 @@ function openMonitoringModal(monitoringId = null) {
                 document.getElementById('manager').value = data.manager || '';
                 document.getElementById('asana_task_url').value = data.asana_task_url || '';
                 loadCampaignOptionsAndRenderVerifiers(data.account_id, (data.campaign_ids || []).map(id => parseInt(id)), data.verifier_links || []);
+
+                // Task #72 - a card whose campaign_ids actually span 2
+                // accounts: auto-reveal the second-account block and
+                // pre-select its own campaigns too, or editing without
+                // noticing it's collapsed would submit the form with
+                // that account's campaigns silently dropped.
+                const secondAccountId = (data.account_ids || [])[1];
+                document.getElementById('secondAccountBlock').style.display = secondAccountId ? 'block' : 'none';
+                if (secondAccountId) {
+                    document.getElementById('account_id2').value = secondAccountId;
+                    setMonitoringAccountDisplay(secondAccountId, '2');
+                    // loadCampaigns() calls loadMonitoringClients() itself, pre-selecting
+                    // the client of whichever campaigns come back checked below.
+                    loadCampaigns((data.campaign_ids || []).map(id => parseInt(id)), '2');
+                } else {
+                    document.getElementById('account_id2').value = '';
+                    document.getElementById('account_search2').value = '';
+                    document.getElementById('campaignsList2').innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Выберите второй аккаунт</td></tr>';
+                }
+
                 document.getElementById('date_from').value = data.date_from || '';
                 document.getElementById('date_to').value = data.date_to || '';
 
@@ -3094,7 +3171,8 @@ function openMonitoringModal(monitoringId = null) {
                 console.log('Monitoring data loaded:', data);
                 console.log('Campaign IDs to select:', data.campaign_ids);
                 if (data.account_id) {
-                    loadMonitoringClients();
+                    // loadCampaigns() calls loadMonitoringClients() itself, pre-selecting
+                    // the client of whichever campaigns come back checked below.
                     loadCampaigns(data.campaign_ids || []);
                 }
 
@@ -3117,9 +3195,16 @@ function openMonitoringModal(monitoringId = null) {
         renderVerifierLinks([]);
         hideAdriverFactCard();
         document.getElementById('adriverLastUpdated').textContent = '';
-        document.getElementById('campaignsList').innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Выберите аккаунт для загрузки кампаний</td></tr>';
+        document.getElementById('campaignsList').innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 11px;">Выберите аккаунт для загрузки кампаний</td></tr>';
         document.getElementById('monitoringClientSection').style.display = 'none';
         document.getElementById('monitoring_client_id').innerHTML = '<option value="">Все клиенты</option>';
+        document.getElementById('secondAccountBlock').style.display = 'none';
+        document.getElementById('account_id2').value = '';
+        document.getElementById('account_search2').value = '';
+        document.getElementById('accountDropdown2').style.display = 'none';
+        document.getElementById('monitoringClientSection2').style.display = 'none';
+        document.getElementById('monitoring_client_id2').innerHTML = '<option value="">Все клиенты</option>';
+        document.getElementById('campaignsList2').innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Выберите второй аккаунт</td></tr>';
     }
 
     modal.style.display = 'flex';
@@ -3191,7 +3276,11 @@ function syncAsanaPlan() {
             if (data.success) {
                 const prorationNote = data.prorated ? '\n⚠ Показы/клики распределены пропорционально на период мониторинга (задача в Asana покрывает более широкий диапазон дат).' : '';
                 alert(`Синхронизировано из Asana (${data.task_name}, формат: ${data.format}).\nОбновлены поля: ${data.updated_fields.join(', ')}${prorationNote}`);
-                window.location.reload();
+                // Re-populate the still-open edit form with the freshly synced
+                // values instead of reloading the whole page - a full reload
+                // closed the modal, forcing the user to reopen it just to see
+                // the result or keep editing.
+                openMonitoringModal(monitoringId);
             } else {
                 alert('Ошибка синхронизации: ' + (data.error || 'неизвестная ошибка'));
             }
@@ -4031,8 +4120,8 @@ const MONITORING_FORM_ACCOUNTS = [
     {% endfor %}
 ];
 
-function renderMonitoringAccountOptions(filterText) {
-    const dropdown = document.getElementById('accountDropdown');
+function renderMonitoringAccountOptions(filterText, suffix = '') {
+    const dropdown = document.getElementById('accountDropdown' + suffix);
     const needle = filterText.trim().toLowerCase();
     const filtered = needle
         ? MONITORING_FORM_ACCOUNTS.filter(a => a.label.toLowerCase().includes(needle))
@@ -4048,48 +4137,58 @@ function renderMonitoringAccountOptions(filterText) {
     dropdown.style.display = 'block';
 }
 
-function selectMonitoringAccount(id, label) {
-    document.getElementById('account_id').value = id;
-    document.getElementById('account_search').value = label;
-    document.getElementById('accountDropdown').style.display = 'none';
-    onMonitoringAccountChange();
+function selectMonitoringAccount(id, label, suffix = '') {
+    document.getElementById('account_id' + suffix).value = id;
+    document.getElementById('account_search' + suffix).value = label;
+    document.getElementById('accountDropdown' + suffix).style.display = 'none';
+    onMonitoringAccountChange(suffix);
 }
 
-function setMonitoringAccountDisplay(accountId) {
+function setMonitoringAccountDisplay(accountId, suffix = '') {
     const matched = MONITORING_FORM_ACCOUNTS.find(a => a.id === String(accountId));
-    document.getElementById('account_search').value = matched ? matched.label : '';
+    document.getElementById('account_search' + suffix).value = matched ? matched.label : '';
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('account_search');
-    const dropdown = document.getElementById('accountDropdown');
+// Wires up one account combobox (primary suffix='', second account
+// suffix='2' - task #72) - identical behavior for both, just a different
+// set of element ids.
+function setupMonitoringAccountCombobox(suffix) {
+    const searchInput = document.getElementById('account_search' + suffix);
+    const dropdown = document.getElementById('accountDropdown' + suffix);
     if (!searchInput || !dropdown) return;
 
-    searchInput.addEventListener('focus', () => renderMonitoringAccountOptions(searchInput.value));
-    searchInput.addEventListener('input', () => renderMonitoringAccountOptions(searchInput.value));
+    searchInput.addEventListener('focus', () => renderMonitoringAccountOptions(searchInput.value, suffix));
+    searchInput.addEventListener('input', () => renderMonitoringAccountOptions(searchInput.value, suffix));
 
     dropdown.addEventListener('click', (e) => {
         const opt = e.target.closest('.account-combobox-option');
         if (!opt) return;
-        selectMonitoringAccount(opt.dataset.id, opt.dataset.label);
+        selectMonitoringAccount(opt.dataset.id, opt.dataset.label, suffix);
     });
 
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('#account_search') && !e.target.closest('#accountDropdown')) {
+        if (!e.target.closest('#account_search' + suffix) && !e.target.closest('#accountDropdown' + suffix)) {
             dropdown.style.display = 'none';
         }
     });
-});
-
-function onMonitoringAccountChange() {
-    loadMonitoringClients();
-    loadCampaigns();
 }
 
-function loadMonitoringClients() {
-    const accountId = document.getElementById('account_id').value;
-    const clientSection = document.getElementById('monitoringClientSection');
-    const clientSelect = document.getElementById('monitoring_client_id');
+document.addEventListener('DOMContentLoaded', function() {
+    setupMonitoringAccountCombobox('');
+    setupMonitoringAccountCombobox('2');
+});
+
+function onMonitoringAccountChange(suffix = '') {
+    // loadCampaigns() calls loadMonitoringClients() itself once the campaign
+    // list (and any already-checked campaigns' client) is known - calling
+    // it again here would just race the same fetch with no selectedClientId.
+    loadCampaigns([], suffix);
+}
+
+function loadMonitoringClients(suffix = '', selectedClientId = '') {
+    const accountId = document.getElementById('account_id' + suffix).value;
+    const clientSection = document.getElementById('monitoringClientSection' + suffix);
+    const clientSelect = document.getElementById('monitoring_client_id' + suffix);
 
     clientSelect.innerHTML = '<option value="">Все клиенты</option>';
 
@@ -4109,6 +4208,14 @@ function loadMonitoringClients() {
                     clientSelect.appendChild(option);
                 });
                 clientSection.style.display = 'block';
+                // Auto-select the client of the campaigns already checked in
+                // the table (e.g. editing a monitoring whose campaigns were
+                // all pulled from one client/report) instead of leaving the
+                // filter on "Все клиенты" even though it's effectively
+                // scoped to one client already.
+                if (selectedClientId) {
+                    clientSelect.value = String(selectedClientId);
+                }
             } else {
                 clientSection.style.display = 'none';
             }
@@ -4119,25 +4226,26 @@ function loadMonitoringClients() {
         });
 }
 
-function filterMonitoringCampaignsByClient() {
+function filterMonitoringCampaignsByClient(suffix = '') {
     // Keep whatever's currently checked selected across the filter change
-    const checkedIds = Array.from(document.querySelectorAll('#campaignsList input[type="checkbox"]:checked'))
+    const checkedIds = Array.from(document.querySelectorAll('#campaignsList' + suffix + ' input[type="checkbox"]:checked'))
         .map(cb => parseInt(cb.value));
-    loadCampaigns(checkedIds);
+    loadCampaigns(checkedIds, suffix);
 }
 
-function loadCampaigns(selectedIds = []) {
-    const accountId = document.getElementById('account_id').value;
-    const clientId = document.getElementById('monitoring_client_id') ? document.getElementById('monitoring_client_id').value : '';
-    const campaignsList = document.getElementById('campaignsList');
-    const loadingDiv = document.getElementById('campaignsLoading');
+function loadCampaigns(selectedIds = [], suffix = '') {
+    const accountId = document.getElementById('account_id' + suffix).value;
+    const clientSelectEl = document.getElementById('monitoring_client_id' + suffix);
+    const clientId = clientSelectEl ? clientSelectEl.value : '';
+    const campaignsList = document.getElementById('campaignsList' + suffix);
+    const loadingDiv = document.getElementById('campaignsLoading' + suffix);
 
     if (!accountId) {
-        campaignsList.innerHTML = '<p style="color: #a8a29e; font-size: 14px;">Выберите аккаунт для загрузки кампаний</p>';
+        campaignsList.innerHTML = `<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 11px;">Выберите аккаунт для загрузки кампаний</td></tr>`;
         return;
     }
 
-    loadingDiv.style.display = 'block';
+    if (loadingDiv) loadingDiv.style.display = 'block';
     campaignsList.innerHTML = '';
 
     // Ensure selectedIds is an array and contains numbers
@@ -4161,10 +4269,10 @@ function loadCampaigns(selectedIds = []) {
     fetch(apiUrl)
         .then(response => response.json())
         .then(campaigns => {
-            loadingDiv.style.display = 'none';
+            if (loadingDiv) loadingDiv.style.display = 'none';
 
             if (campaigns.length === 0) {
-                campaignsList.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Нет доступных кампаний</td></tr>';
+                campaignsList.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 11px;">Нет доступных кампаний</td></tr>';
                 return;
             }
 
@@ -4192,35 +4300,65 @@ function loadCampaigns(selectedIds = []) {
                 html += `
                     <tr style="border-bottom: 1px solid var(--border-color);" onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='white'">
                         <td style="padding: 8px; text-align: center;">
-                            <input type="checkbox" name="campaign_ids" value="${campaign.id}" data-sape-id="${campaign.campaign_id}" ${isChecked} onchange="handleCampaignCheckboxChange(this)">
+                            <input type="checkbox" name="campaign_ids" value="${campaign.id}" data-sape-id="${campaign.campaign_id}" ${isChecked} onchange="handleCampaignCheckboxChange(this, '${suffix}')">
                         </td>
                         <td style="padding: 8px;">
-                            <div style="font-size: 13px; color: var(--text-primary); margin-bottom: 2px;">
-                                <code style="background: var(--peach-light); color: var(--primary-orange); padding: 2px 5px; border-radius: 3px; font-size: 10px; margin-right: 6px;">${campaign.campaign_id}</code>
+                            <div style="font-size: 11px; color: var(--text-primary); margin-bottom: 2px;">
+                                <code style="background: var(--peach-light); color: var(--primary-orange); padding: 2px 5px; border-radius: 3px; font-size: 11px; margin-right: 6px;">${campaign.campaign_id}</code>
                                 ${campaign.name}${inactiveLabel}
                             </div>
                         </td>
-                        <td style="padding: 8px; font-size: 12px; color: var(--text-secondary);">${campaign.client_name || '—'}</td>
+                        <td style="padding: 8px; font-size: 11px; color: var(--text-secondary);">${campaign.client_name || '—'}</td>
                     </tr>
                 `;
             });
 
             campaignsList.innerHTML = html;
+
+            // Auto-select the client filter to match the already-checked
+            // campaigns (e.g. a monitoring whose campaigns were all pulled
+            // from one client/report) instead of leaving it on "Все клиенты"
+            // even though every checked campaign is actually one client.
+            // Only when every CHECKED campaign shares exactly one client -
+            // a mixed selection leaves the filter on "Все клиенты" rather
+            // than guessing one of them.
+            const checkedClientIds = [...new Set(
+                campaigns
+                    .filter(c => selectedIdsArray.includes(parseInt(c.id)))
+                    .map(c => c.client_id)
+                    .filter(id => id !== null && id !== undefined)
+            )];
+            const autoClientId = checkedClientIds.length === 1 ? checkedClientIds[0] : '';
+            loadMonitoringClients(suffix, autoClientId);
         })
         .catch(error => {
-            loadingDiv.style.display = 'none';
-            campaignsList.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: #dc2626; font-size: 13px;">Ошибка загрузки кампаний</td></tr>';
+            if (loadingDiv) loadingDiv.style.display = 'none';
+            campaignsList.innerHTML = '<tr><td colspan="3" style="padding: 20px; text-align: center; color: #dc2626; font-size: 11px;">Ошибка загрузки кампаний</td></tr>';
             console.error('Error loading campaigns:', error);
         });
 }
 
+// Task #72 - combining 2 SAPE accounts in one monitoring card. The
+// second-account table is now built by the SAME loadCampaigns() (suffix='2')
+// as the primary one - identical account combobox, advertiser filter, and
+// campaign table/toolbar. Checkboxes in both tables share name="campaign_ids",
+// so the browser submits whatever is checked in BOTH as one combined list -
+// no extra backend wiring needed for the actual save.
+function toggleSecondAccountBlock(e) {
+    e.preventDefault();
+    const block = document.getElementById('secondAccountBlock');
+    const isHidden = block.style.display === 'none' || !block.style.display;
+    block.style.display = isHidden ? 'block' : 'none';
+}
+
 // Select/deselect all campaigns
-function openBulkMonitoringModal() {
-    const accountId = document.getElementById('account_id').value;
+function openBulkMonitoringModal(suffix = '') {
+    const accountId = document.getElementById('account_id' + suffix).value;
     if (!accountId) {
         alert('⚠️ Сначала выберите аккаунт чтобы загрузить список кампаний');
         return;
     }
+    window.bulkMonitoringTargetSuffix = suffix;
     document.getElementById('bulkMonitoringCampaignIds').value = '';
     document.getElementById('bulkMonitoringIdErrors').style.display = 'none';
     document.getElementById('bulkMonitoringModal').style.display = 'flex';
@@ -4231,6 +4369,7 @@ function closeBulkMonitoringModal() {
 }
 
 function applyBulkMonitoringIds() {
+    const suffix = window.bulkMonitoringTargetSuffix || '';
     const bulkInput = document.getElementById('bulkMonitoringCampaignIds').value;
     const errorDiv = document.getElementById('bulkMonitoringIdErrors');
 
@@ -4249,7 +4388,7 @@ function applyBulkMonitoringIds() {
     const matchedDbIds = [];
 
     inputIds.forEach(inputId => {
-        const checkbox = document.querySelector(`#campaignsList input[data-sape-id="${inputId}"]`);
+        const checkbox = document.querySelector(`#campaignsList${suffix} input[data-sape-id="${inputId}"]`);
         if (checkbox) {
             matchedDbIds.push(parseInt(checkbox.value));
         } else {
@@ -4264,9 +4403,9 @@ function applyBulkMonitoringIds() {
         errorDiv.style.display = 'none';
     }
 
-    const accountId = document.getElementById('account_id').value;
+    const accountId = document.getElementById('account_id' + suffix).value;
     if (matchedDbIds.length > 0 && accountId) {
-        reloadCampaignsWithSelection(accountId, matchedDbIds);
+        reloadCampaignsWithSelection(accountId, matchedDbIds, suffix);
     }
 
     if (matchedDbIds.length > 0 && notFoundIds.length === 0) {
@@ -4274,52 +4413,52 @@ function applyBulkMonitoringIds() {
     }
 }
 
-function selectAllCampaigns() {
-    const checkboxes = document.querySelectorAll('#campaignsList input[type="checkbox"]');
+function selectAllCampaigns(suffix = '') {
+    const checkboxes = document.querySelectorAll('#campaignsList' + suffix + ' input[type="checkbox"]');
     checkboxes.forEach(cb => cb.checked = true);
 
     // Reload with all selected
-    const accountId = document.getElementById('account_id').value;
+    const accountId = document.getElementById('account_id' + suffix).value;
     const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
     if (accountId && selectedIds.length > 0) {
-        reloadCampaignsWithSelection(accountId, selectedIds);
+        reloadCampaignsWithSelection(accountId, selectedIds, suffix);
     }
 }
 
-function deselectAllCampaigns() {
-    const checkboxes = document.querySelectorAll('#campaignsList input[type="checkbox"]');
+function deselectAllCampaigns(suffix = '') {
+    const checkboxes = document.querySelectorAll('#campaignsList' + suffix + ' input[type="checkbox"]');
     checkboxes.forEach(cb => cb.checked = false);
 
     // Reload with none selected
-    const accountId = document.getElementById('account_id').value;
+    const accountId = document.getElementById('account_id' + suffix).value;
     if (accountId) {
-        reloadCampaignsWithSelection(accountId, []);
+        reloadCampaignsWithSelection(accountId, [], suffix);
     }
 }
 
 // Handle checkbox change - resort campaigns
-function handleCampaignCheckboxChange(checkbox) {
+function handleCampaignCheckboxChange(checkbox, suffix = '') {
 
     // Get all current selected campaign IDs
-    const checkboxes = document.querySelectorAll('#campaignsList input[type="checkbox"]');
+    const checkboxes = document.querySelectorAll('#campaignsList' + suffix + ' input[type="checkbox"]');
     const selectedIds = Array.from(checkboxes)
         .filter(cb => cb.checked)
         .map(cb => parseInt(cb.value));
 
     // Reload campaigns with new sort order
-    const accountId = document.getElementById('account_id').value;
+    const accountId = document.getElementById('account_id' + suffix).value;
     if (accountId) {
-        reloadCampaignsWithSelection(accountId, selectedIds);
+        reloadCampaignsWithSelection(accountId, selectedIds, suffix);
     }
 }
 
 // Reload campaigns maintaining selection
-function reloadCampaignsWithSelection(accountId, selectedIds) {
-    // accountId is always document.getElementById('account_id').value at every
-    // call site - loadCampaigns() already reads it (and the client filter)
-    // straight from the DOM, so just delegate instead of duplicating the
-    // whole fetch/render/client-column logic a second time.
-    loadCampaigns(selectedIds);
+function reloadCampaignsWithSelection(accountId, selectedIds, suffix = '') {
+    // accountId is always document.getElementById('account_id'+suffix).value at
+    // every call site - loadCampaigns() already reads it (and the client
+    // filter) straight from the DOM, so just delegate instead of duplicating
+    // the whole fetch/render/client-column logic a second time.
+    loadCampaigns(selectedIds, suffix);
 }
 
 

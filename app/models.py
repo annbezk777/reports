@@ -163,6 +163,23 @@ class ReportConfig(db.Model):
             return []
         return Campaign.query.filter(Campaign.id.in_(self.campaign_ids)).all()
 
+    def get_accounts(self):
+        """Distinct SapeAccount objects actually referenced by campaign_ids
+        (task #72 - combining 2 SAPE accounts in one report). A report
+        whose campaigns all belong to one account (the overwhelming
+        majority, and every report before this feature existed) returns a
+        list of exactly 1 - callers that only ever handled one account
+        keep working unchanged. `.campaign`/`.campaign.account` (the
+        legacy singular campaign_id FK, see Campaign.reports backref) is
+        display-only - it does NOT reflect every account a report's
+        campaign_ids actually span, so stats code must use this instead."""
+        campaigns = self.get_campaigns()
+        seen = {}
+        for c in campaigns:
+            if c.account_id not in seen:
+                seen[c.account_id] = c.account
+        return list(seen.values())
+
     def get_ad_format_label(self):
         """Метка формата рекламы (Баннер/Видео/ТГБ) для бейджа на карточке."""
         campaigns = self.get_campaigns()
@@ -438,6 +455,21 @@ class MonitoringCampaign(db.Model):
         if not self.campaign_ids:
             return []
         return Campaign.query.filter(Campaign.id.in_(self.campaign_ids)).all()
+
+    def get_accounts(self):
+        """Distinct SapeAccount objects actually referenced by campaign_ids
+        (task #72 - combining 2 SAPE accounts in one monitoring card). A
+        card whose campaigns all belong to one account (every card before
+        this feature existed) returns a list of exactly 1 - `self.account`
+        (the single account_id FK) still matches it for those, but stats
+        code should use this instead so a dual-account card is handled
+        correctly rather than silently querying only one of its accounts."""
+        campaigns = self.get_campaigns()
+        seen = {}
+        for c in campaigns:
+            if c.account_id not in seen:
+                seen[c.account_id] = c.account
+        return list(seen.values())
 
     def get_total_days(self):
         """Calculate total days in monitoring period"""

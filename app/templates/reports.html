@@ -701,17 +701,20 @@
                                 <!-- Account -->
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <span style="color: var(--text-secondary);">Кабинет:</span>
-                                    {% if report.campaign.account.sape_user_id %}
-                                    <a href="https://cp.sapient.ru/users/sudo?uid={{ report.campaign.account.sape_user_id }}&sid=15"
+                                    {% for acc in report.get_accounts() %}
+                                    {% if not loop.first %}<span style="color: var(--text-secondary);">+</span>{% endif %}
+                                    {% if acc.sape_user_id %}
+                                    <a href="https://cp.sapient.ru/users/sudo?uid={{ acc.sape_user_id }}&sid=15"
                                        target="_blank"
                                        style="color: var(--text-primary); font-weight: 500; text-decoration: none; transition: color 0.2s;"
                                        onmouseover="this.style.color='var(--primary-orange)';"
                                        onmouseout="this.style.color='var(--text-primary)';">
-                                        {{ report.campaign.account.login }}
+                                        {{ acc.login }}
                                     </a>
                                     {% else %}
-                                    <strong style="color: var(--text-primary); font-weight: 500;">{{ report.campaign.account.login }}</strong>
+                                    <strong style="color: var(--text-primary); font-weight: 500;">{{ acc.login }}</strong>
                                     {% endif %}
+                                    {% endfor %}
                                 </div>
 
                                 {% if report.manager %}
@@ -1372,32 +1375,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <p id="formAsanaAssignee" style="font-size: 12px; color: var(--primary-orange); margin-top: 4px; display: none;"></p>
                 </div>
 
-                <!-- Account Selection - single-box typeahead combobox (not select2 -
-                     select2 always renders a separate search row under the main
-                     box when open; this types directly into the same field) -->
-                <div style="margin-bottom: 24px; position: relative;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
-                        Выберите аккаунт SAPE
-                    </label>
-                    <input type="text" id="formAccountSearch" autocomplete="off" placeholder="Выберите аккаунт"
-                           style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
-                    <input type="hidden" id="formAccountId" name="account_id">
-                    <div id="formAccountDropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; background: white; border: 1px solid var(--border-color); border-radius: 8px; max-height: 240px; overflow-y: auto; z-index: 50; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);"></div>
-                </div>
-
-                <!-- Advertiser (Client) Filter -->
-                <div id="formClientSection" style="display: none; margin-bottom: 24px;">
-                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
-                        Рекламодатель
-                        <span style="font-size: 11px; font-weight: 400; color: var(--text-secondary);">(необязательно, для фильтра кампаний)</span>
-                    </label>
-                    <select id="formClientId"
-                            onchange="loadFormCampaigns(document.getElementById('formAccountId').value)"
-                            style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
-                        <option value="">Все рекламодатели</option>
-                    </select>
-                </div>
-
                 <!-- Report Name -->
                 <div style="margin-bottom: 24px;">
                     <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
@@ -1422,6 +1399,32 @@ document.addEventListener('DOMContentLoaded', () => {
                         <option value="Саша">Саша</option>
                         <option value="Аня">Аня</option>
                         <option value="Лена">Лена</option>
+                    </select>
+                </div>
+
+                <!-- Account Selection - single-box typeahead combobox (not select2 -
+                     select2 always renders a separate search row under the main
+                     box when open; this types directly into the same field) -->
+                <div style="margin-bottom: 24px; position: relative;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Выберите аккаунт SAPE
+                    </label>
+                    <input type="text" id="formAccountSearch" autocomplete="off" placeholder="Выберите аккаунт"
+                           style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                    <input type="hidden" id="formAccountId" name="account_id">
+                    <div id="formAccountDropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; background: white; border: 1px solid var(--border-color); border-radius: 8px; max-height: 240px; overflow-y: auto; z-index: 50; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);"></div>
+                </div>
+
+                <!-- Advertiser (Client) Filter -->
+                <div id="formClientSection" style="display: none; margin-bottom: 24px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                        Клиент
+                        <span style="font-size: 11px; font-weight: 400; color: var(--text-secondary);">(необязательно, для фильтра кампаний)</span>
+                    </label>
+                    <select id="formClientId"
+                            onchange="loadFormCampaigns(document.getElementById('formAccountId').value)"
+                            style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                        <option value="">Все клиенты</option>
                     </select>
                 </div>
 
@@ -1469,6 +1472,75 @@ document.addEventListener('DOMContentLoaded', () => {
                     <p id="formCampaignCounter" style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
                         Не выбрано ни одной кампании
                     </p>
+                    <div style="margin-top: 6px;">
+                        <a href="#" onclick="toggleSecondFormAccountBlock(event)" style="font-size: 12px; color: var(--primary-orange); text-decoration: none;">+ Добавить второй аккаунт</a>
+                    </div>
+                    <div id="secondFormAccountBlock" style="display: none; margin-top: 14px; padding: 14px; border: 1px dashed var(--border-color); border-radius: 8px;">
+                        <!-- Second account flow - mirrors the primary account's combobox +
+                             advertiser filter + full campaign table exactly (task #72). -->
+                        <div style="margin-bottom: 16px; position: relative;">
+                            <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                                Выберите второй аккаунт SAPE
+                            </label>
+                            <input type="text" id="formAccountSearch2" autocomplete="off" placeholder="Выберите аккаунт"
+                                   style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                            <input type="hidden" id="formAccountId2" name="account_id2">
+                            <div id="formAccountDropdown2" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; background: white; border: 1px solid var(--border-color); border-radius: 8px; max-height: 240px; overflow-y: auto; z-index: 50; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);"></div>
+                        </div>
+
+                        <div id="formClientSection2" style="display: none; margin-bottom: 16px;">
+                            <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                                Клиент
+                                <span style="font-size: 11px; font-weight: 400; color: var(--text-secondary);">(необязательно, для фильтра кампаний)</span>
+                            </label>
+                            <select id="formClientId2"
+                                    onchange="loadFormCampaigns(document.getElementById('formAccountId2').value, [], {}, '2')"
+                                    style="width: 100%; padding: 10px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px;">
+                                <option value="">Все клиенты</option>
+                            </select>
+                        </div>
+
+                        <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+                            Выберите кампании
+                        </label>
+                        <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+                            <button type="button" onclick="openBulkFormModal('2')" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                                Добавить массово
+                            </button>
+                            <button type="button" onclick="selectAllFormCampaigns('2')" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                                Выбрать все
+                            </button>
+                            <button type="button" onclick="deselectAllFormCampaigns('2')" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                                Снять все
+                            </button>
+                        </div>
+                        <div style="height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white;">
+                            <table style="width: 100%; min-width: 820px; border-collapse: collapse;" id="formCampaignsTable2">
+                                <thead style="position: sticky; top: 0; background: var(--bg-light); border-bottom: 2px solid var(--border-color);">
+                                    <tr>
+                                        <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 40px;"></th>
+                                        <th style="padding: 8px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-secondary);">КАМПАНИЯ</th>
+                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 90px;">ФОРМАТ</th>
+                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ДНЕВНАЯ</th>
+                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
+                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 70px;">ТОТАЛ</th>
+                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 50px;">±</th>
+                                        <th style="padding: 8px; text-align: center; font-size: 11px; font-weight: 600; color: var(--text-secondary); width: 110px;" title="Если не выбрано - используется общий лист отчёта ниже">ЛИСТ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="formCampaignsList2">
+                                    <tr>
+                                        <td colspan="8" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+                                            Выберите второй аккаунт для загрузки кампаний
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p id="formCampaignCounter2" style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
+                            Не выбрано ни одной кампании
+                        </p>
+                    </div>
                 </div>
 
                 <!-- Campaign Mode -->
@@ -1690,6 +1762,25 @@ function openReportFormModal(reportId = null) {
                     loadFormCampaigns(data.account_id, data.campaign_ids || [], data.campaign_settings || {});
                 }
 
+                // Task #72 - a report whose campaign_ids actually span 2
+                // accounts: auto-reveal the second-account block and
+                // pre-select its own campaigns too, or editing without
+                // noticing it's collapsed would submit the form with
+                // that account's campaigns silently dropped.
+                const secondReportAccountId = (data.account_ids || [])[1];
+                document.getElementById('secondFormAccountBlock').style.display = secondReportAccountId ? 'block' : 'none';
+                if (secondReportAccountId) {
+                    document.getElementById('formAccountId2').value = secondReportAccountId;
+                    const matchedAccount2 = FORM_ACCOUNTS.find(a => a.id === String(secondReportAccountId));
+                    document.getElementById('formAccountSearch2').value = matchedAccount2 ? matchedAccount2.label : '';
+                    loadFormClients(secondReportAccountId, '', '2');
+                    loadFormCampaigns(secondReportAccountId, data.campaign_ids || [], data.campaign_settings || {}, '2');
+                } else {
+                    document.getElementById('formAccountId2').value = '';
+                    document.getElementById('formAccountSearch2').value = '';
+                    document.getElementById('formCampaignsList2').innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Выберите второй аккаунт для загрузки кампаний</td></tr>';
+                }
+
                 // Load worksheet
                 if (data.google_sheet_url) {
                     loadFormWorksheets(data.worksheet_name);
@@ -1722,7 +1813,7 @@ function openReportFormModal(reportId = null) {
         form.reset();
         document.getElementById('formAccountDropdown').style.display = 'none';
         document.getElementById('formClientSection').style.display = 'none';
-        document.getElementById('formClientId').innerHTML = '<option value="">Все рекламодатели</option>';
+        document.getElementById('formClientId').innerHTML = '<option value="">Все клиенты</option>';
 
         // Reset day buttons
         document.querySelectorAll('.day-button').forEach(btn => {
@@ -1734,6 +1825,14 @@ function openReportFormModal(reportId = null) {
         document.getElementById('formCampaignsSection').style.display = 'none';
         document.getElementById('formWorksheetSection').style.display = 'none';
         window.formAvailableWorksheets = [];
+
+        document.getElementById('secondFormAccountBlock').style.display = 'none';
+        document.getElementById('formAccountId2').value = '';
+        document.getElementById('formAccountSearch2').value = '';
+        document.getElementById('formAccountDropdown2').style.display = 'none';
+        document.getElementById('formClientSection2').style.display = 'none';
+        document.getElementById('formClientId2').innerHTML = '<option value="">Все клиенты</option>';
+        document.getElementById('formCampaignsList2').innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Выберите второй аккаунт для загрузки кампаний</td></tr>';
     }
 
     modal.style.display = 'flex';
@@ -1744,34 +1843,35 @@ function closeReportFormModal() {
 }
 
 // Load campaigns for selected account
-function loadFormClients(accountId, selectedClientId = '') {
-    const section = document.getElementById('formClientSection');
-    const select = document.getElementById('formClientId');
+function loadFormClients(accountId, selectedClientId = '', suffix = '') {
+    const section = document.getElementById('formClientSection' + suffix);
+    const select = document.getElementById('formClientId' + suffix);
     if (!accountId) {
         section.style.display = 'none';
-        select.innerHTML = '<option value="">Все рекламодатели</option>';
+        select.innerHTML = '<option value="">Все клиенты</option>';
         return;
     }
     fetch(`/api/clients/${accountId}`)
         .then(res => res.json())
         .then(clients => {
-            select.innerHTML = '<option value="">Все рекламодатели</option>' +
+            select.innerHTML = '<option value="">Все клиенты</option>' +
                 clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
             select.value = selectedClientId || '';
             section.style.display = clients.length > 0 ? 'block' : 'none';
         });
 }
 
-function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings = {}) {
+function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings = {}, suffix = '') {
+    const section = document.getElementById('formCampaignsSection' + suffix);
     if (!accountId) {
-        document.getElementById('formCampaignsSection').style.display = 'none';
+        if (section) section.style.display = 'none';
         return;
     }
 
-    const clientId = document.getElementById('formClientId').value;
+    const clientId = document.getElementById('formClientId' + suffix).value;
 
-    document.getElementById('formCampaignsSection').style.display = 'block';
-    const tbody = document.getElementById('formCampaignsList');
+    if (section) section.style.display = 'block';
+    const tbody = document.getElementById('formCampaignsList' + suffix);
     tbody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">Загрузка кампаний...</td></tr>';
 
     const campaignsUrl = clientId ? `/api/campaigns/${accountId}?client_id=${clientId}` : `/api/campaigns/${accountId}`;
@@ -1857,7 +1957,7 @@ function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings
                 tbody.innerHTML = html;
 
                 // Sort campaigns: selected first (like in old version)
-                sortFormCampaignsSelectedFirst();
+                sortFormCampaignsSelectedFirst(suffix);
 
                 // Worksheets may have already loaded before campaigns did
                 // (e.g. sheet URL typed first) - fill in the per-campaign
@@ -1880,9 +1980,24 @@ function loadFormCampaigns(accountId, selectedCampaignIds = [], campaignSettings
         });
 }
 
+// Task #72 - combining 2 SAPE accounts in one report. The second account's
+// table is now built by the SAME loadFormCampaigns()/row markup as the
+// primary one (suffix='2') - identical account combobox, advertiser
+// filter, and per-campaign format/frequency/worksheet columns. Checkboxes
+// in both tables share name="campaign_ids", so the browser submits
+// whatever is checked in BOTH as one combined list - no backend wiring
+// needed beyond what already reads that field by campaign id.
+function toggleSecondFormAccountBlock(e) {
+    e.preventDefault();
+    const block = document.getElementById('secondFormAccountBlock');
+    const isHidden = block.style.display === 'none' || !block.style.display;
+    block.style.display = isHidden ? 'block' : 'none';
+}
+
 function handleFormCampaignChange() {
     updateFormCampaignCounter();
-    sortFormCampaignsSelectedFirst();
+    sortFormCampaignsSelectedFirst('');
+    sortFormCampaignsSelectedFirst('2');
     updateGeneralWorksheetLock();
 }
 
@@ -1890,14 +2005,17 @@ function handleFormCampaignChange() {
 // general/default worksheet becomes meaningless for this report - clear and
 // lock it so it can't be saved as if it were still in effect. Unchecked
 // campaigns with a saved pin from before don't count - only what's actually
-// part of this report run right now.
+// part of this report run right now. Checks both the primary and the
+// second-account table (task #72) since either can pin a worksheet.
 function updateGeneralWorksheetLock() {
     const generalSelect = document.getElementById('formWorksheetName');
     const hint = document.getElementById('formWorksheetHint');
     const warning = document.getElementById('formWorksheetLockWarning');
     if (!generalSelect) return;
 
-    const anyPinned = Array.from(document.querySelectorAll('#formCampaignsList input[name="campaign_ids"]:checked')).some(cb => {
+    const anyPinned = Array.from(document.querySelectorAll(
+        '#formCampaignsList input[name="campaign_ids"]:checked, #formCampaignsList2 input[name="campaign_ids"]:checked'
+    )).some(cb => {
         const row = cb.closest('tr');
         const select = row ? row.querySelector('.form-campaign-worksheet-select') : null;
         return select && select.value;
@@ -1915,8 +2033,8 @@ function updateGeneralWorksheetLock() {
     }
 }
 
-function sortFormCampaignsSelectedFirst() {
-    const tbody = document.getElementById('formCampaignsList');
+function sortFormCampaignsSelectedFirst(suffix = '') {
+    const tbody = document.getElementById('formCampaignsList' + suffix);
     if (!tbody) return;
 
     const rows = Array.from(tbody.querySelectorAll('tr'));
@@ -1941,30 +2059,33 @@ function sortFormCampaignsSelectedFirst() {
     rows.forEach(row => tbody.appendChild(row));
 }
 
-function selectAllFormCampaigns() {
-    document.querySelectorAll('#formCampaignsTable input[type="checkbox"]').forEach(cb => {
+function selectAllFormCampaigns(suffix = '') {
+    document.querySelectorAll('#formCampaignsTable' + suffix + ' input[type="checkbox"]').forEach(cb => {
         cb.checked = true;
     });
     updateFormCampaignCounter();
-    sortFormCampaignsSelectedFirst();
+    sortFormCampaignsSelectedFirst(suffix);
     updateGeneralWorksheetLock();
 }
 
-function deselectAllFormCampaigns() {
-    document.querySelectorAll('#formCampaignsTable input[type="checkbox"]').forEach(cb => {
+function deselectAllFormCampaigns(suffix = '') {
+    document.querySelectorAll('#formCampaignsTable' + suffix + ' input[type="checkbox"]').forEach(cb => {
         cb.checked = false;
     });
     updateFormCampaignCounter();
-    sortFormCampaignsSelectedFirst();
+    sortFormCampaignsSelectedFirst(suffix);
     updateGeneralWorksheetLock();
 }
 
-function openBulkFormModal() {
-    const rows = document.querySelectorAll('#formCampaignsTable input[type="checkbox"]');
+// Single shared modal, targets whichever table opened it (primary or
+// second account, suffix='2' - task #72) via window.bulkFormTargetSuffix.
+function openBulkFormModal(suffix = '') {
+    const rows = document.querySelectorAll('#formCampaignsTable' + suffix + ' input[type="checkbox"]');
     if (rows.length === 0) {
         alert('⚠️ Сначала выберите аккаунт чтобы загрузить список кампаний');
         return;
     }
+    window.bulkFormTargetSuffix = suffix;
     document.getElementById('bulkFormCampaignIds').value = '';
     document.getElementById('bulkFormIdErrors').style.display = 'none';
     document.getElementById('bulkFormModal').style.display = 'flex';
@@ -1975,6 +2096,7 @@ function closeBulkFormModal() {
 }
 
 function applyBulkFormIds() {
+    const suffix = window.bulkFormTargetSuffix || '';
     const bulkInput = document.getElementById('bulkFormCampaignIds').value;
     const errorDiv = document.getElementById('bulkFormIdErrors');
 
@@ -1989,7 +2111,7 @@ function applyBulkFormIds() {
         return;
     }
 
-    document.querySelectorAll('#formCampaignsTable input[type="checkbox"]').forEach(cb => {
+    document.querySelectorAll('#formCampaignsTable' + suffix + ' input[type="checkbox"]').forEach(cb => {
         cb.checked = false;
     });
 
@@ -1997,7 +2119,7 @@ function applyBulkFormIds() {
     let foundCount = 0;
 
     inputIds.forEach(inputId => {
-        const checkbox = document.querySelector(`#formCampaignsTable input[data-sape-id="${inputId}"]`);
+        const checkbox = document.querySelector(`#formCampaignsTable${suffix} input[data-sape-id="${inputId}"]`);
         if (checkbox) {
             checkbox.checked = true;
             foundCount++;
@@ -2014,7 +2136,7 @@ function applyBulkFormIds() {
     }
 
     updateFormCampaignCounter();
-    sortFormCampaignsSelectedFirst();
+    sortFormCampaignsSelectedFirst(suffix);
 
     if (foundCount > 0 && notFoundIds.length === 0) {
         closeBulkFormModal();
@@ -2022,12 +2144,16 @@ function applyBulkFormIds() {
 }
 
 function updateFormCampaignCounter() {
-    const checked = document.querySelectorAll('#formCampaignsTable input[type="checkbox"]:checked').length;
+    const checked1 = document.querySelectorAll('#formCampaignsTable input[type="checkbox"]:checked').length;
+    const checked2 = document.querySelectorAll('#formCampaignsTable2 input[type="checkbox"]:checked').length;
+    const total = checked1 + checked2;
+
     const counter = document.getElementById('formCampaignCounter');
-    if (checked === 0) {
-        counter.textContent = 'Не выбрано ни одной кампании';
-    } else {
-        counter.textContent = `Выбрано кампаний: ${checked}`;
+    counter.textContent = total === 0 ? 'Не выбрано ни одной кампании' : `Выбрано кампаний: ${total}`;
+
+    const counter2 = document.getElementById('formCampaignCounter2');
+    if (counter2) {
+        counter2.textContent = checked2 === 0 ? 'Не выбрано ни одной кампании' : `Выбрано кампаний: ${checked2}`;
     }
 }
 
@@ -2207,8 +2333,8 @@ const FORM_ACCOUNTS = [
     {% endfor %}
 ];
 
-function renderAccountOptions(filterText) {
-    const dropdown = document.getElementById('formAccountDropdown');
+function renderAccountOptions(filterText, suffix = '') {
+    const dropdown = document.getElementById('formAccountDropdown' + suffix);
     const needle = filterText.trim().toLowerCase();
     const filtered = needle
         ? FORM_ACCOUNTS.filter(a => a.label.toLowerCase().includes(needle))
@@ -2224,32 +2350,41 @@ function renderAccountOptions(filterText) {
     dropdown.style.display = 'block';
 }
 
-function selectFormAccount(id, label) {
-    document.getElementById('formAccountId').value = id;
-    document.getElementById('formAccountSearch').value = label;
-    document.getElementById('formAccountDropdown').style.display = 'none';
-    loadFormClients(id);
-    loadFormCampaigns(id);
+function selectFormAccount(id, label, suffix = '') {
+    document.getElementById('formAccountId' + suffix).value = id;
+    document.getElementById('formAccountSearch' + suffix).value = label;
+    document.getElementById('formAccountDropdown' + suffix).style.display = 'none';
+    loadFormClients(id, '', suffix);
+    loadFormCampaigns(id, [], {}, suffix);
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('formAccountSearch');
-    const dropdown = document.getElementById('formAccountDropdown');
+// Wires up one account combobox (primary suffix='', second account
+// suffix='2' - task #72) - identical behavior for both, just a different
+// set of element ids.
+function setupFormAccountCombobox(suffix) {
+    const searchInput = document.getElementById('formAccountSearch' + suffix);
+    const dropdown = document.getElementById('formAccountDropdown' + suffix);
+    if (!searchInput || !dropdown) return;
 
-    searchInput.addEventListener('focus', () => renderAccountOptions(searchInput.value));
-    searchInput.addEventListener('input', () => renderAccountOptions(searchInput.value));
+    searchInput.addEventListener('focus', () => renderAccountOptions(searchInput.value, suffix));
+    searchInput.addEventListener('input', () => renderAccountOptions(searchInput.value, suffix));
 
     dropdown.addEventListener('click', (e) => {
         const opt = e.target.closest('.account-combobox-option');
         if (!opt) return;
-        selectFormAccount(opt.dataset.id, opt.dataset.label);
+        selectFormAccount(opt.dataset.id, opt.dataset.label, suffix);
     });
 
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('#formAccountSearch') && !e.target.closest('#formAccountDropdown')) {
+        if (!e.target.closest('#formAccountSearch' + suffix) && !e.target.closest('#formAccountDropdown' + suffix)) {
             dropdown.style.display = 'none';
         }
     });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    setupFormAccountCombobox('');
+    setupFormAccountCombobox('2');
 
     // account_id - сейчас скрытое поле (не <select>), так что HTML5
     // required на нём ненадёжен (в некоторых браузерах форма просто
@@ -2257,8 +2392,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('reportForm').addEventListener('submit', (e) => {
         if (!document.getElementById('formAccountId').value) {
             e.preventDefault();
-            searchInput.style.borderColor = '#dc2626';
-            searchInput.focus();
+            document.getElementById('formAccountSearch').style.borderColor = '#dc2626';
+            document.getElementById('formAccountSearch').focus();
             alert('Выберите аккаунт SAPE');
         }
     });
