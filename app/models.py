@@ -136,6 +136,17 @@ class ReportConfig(db.Model):
 
     # Metadata
     last_update = db.Column(db.DateTime, nullable=True)
+    # Separate from last_update on purpose: last_update is a wall-clock
+    # "when did someone last click Обновить" timestamp (shown to the user
+    # in reports.html), which is NOT the same thing as "through which date
+    # is data actually written in the sheet". A manual one-off run for a
+    # single past day (e.g. a spot-check for 09.11 run today on 15.11) sets
+    # last_update to today but only writes 09.11 - if the scheduler resumed
+    # from last_update's date, it would skip 10.11-14.11 forever. This field
+    # tracks the real high-water mark instead, set to date_to of whatever
+    # range was actually just written, so get_next_report_update_range()
+    # always resumes right after it regardless of when/why that run happened.
+    data_written_through = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     active = db.Column(db.Boolean, default=True)
     archived = db.Column(db.Boolean, default=False)  # Archived reports hidden from main view

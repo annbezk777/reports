@@ -5858,6 +5858,7 @@ def run_report_old(report_id):
             db.session.add(log)
 
             report.last_update = datetime.utcnow()
+            report.data_written_through = date_to.date()
             db.session.commit()
 
             flash(f'Realweb отчёт успешно обновлен! Записано {total_rows} строк для {len(campaigns_daily_data)} кампаний. Всего показов: {total_impressions:,}, кликов: {total_clicks:,}', 'success')
@@ -5990,6 +5991,7 @@ def run_report_old(report_id):
             db.session.add(log)
 
             report.last_update = datetime.utcnow()
+            report.data_written_through = date_to.date()
             db.session.commit()
 
             flash(f'Сводный отчёт успешно обновлен для {total_campaigns_written} кампаний. Всего показов: {total_impressions:,}, кликов: {total_clicks:,}', 'success')
@@ -6129,6 +6131,7 @@ def run_report_old(report_id):
             db.session.add(log)
 
             report.last_update = datetime.utcnow()
+            report.data_written_through = date_to.date()
             db.session.commit()
 
             flash(f'Отчёт по креативам обновлён: {sections_written} секций. Всего показов: {total_impressions:,}, кликов: {total_clicks:,}', 'success')
@@ -6627,6 +6630,7 @@ def run_report_old(report_id):
         db.session.add(log)
 
         report.last_update = datetime.utcnow()
+        report.data_written_through = date_to.date()
         db.session.commit()
 
         success_msg = f'Отчет успешно обновлен для {len(campaigns)} кампаний. Секций обработано: {sections_processed}/{len(sections_to_process)}'
@@ -7097,16 +7101,19 @@ def init_db():
 def get_next_report_update_range(report):
     """
     Determine the date range the scheduler should write next: from the
-    day right after whatever date was last written, through yesterday
-    (we only ever have complete data up to yesterday - never "today").
+    day right after whatever date was last ACTUALLY WRITTEN, through
+    yesterday (we only ever have complete data up to yesterday - never
+    "today").
 
-    report.last_update is a run timestamp (set to "now" at the moment a
-    run completes), and every run - manual or scheduled - always writes
-    through "yesterday relative to that run". So the last day actually
-    written is (last_update's date - 1 day), and the next day to write
-    is last_update's date itself (no further +1 - a previous version of
-    this function added an extra day here, which pushed daily schedules
-    to write "today" instead of "yesterday").
+    Deliberately uses report.data_written_through (the real date_to of
+    the last run), not report.last_update (a wall-clock "when was
+    Обновить last clicked" timestamp shown in the UI). Those two used to
+    be conflated - a manual one-off run for a single past day set
+    last_update to today while only writing that one day, which made the
+    scheduler skip the real gap between that day and today on the next
+    run. data_written_through always reflects what was truly written,
+    regardless of when/why that run happened (scheduled catch-up to
+    yesterday, or a manual spot-check for an arbitrary past day).
 
     For schedules that run less often than daily (e.g. weekly), this
     returns the FULL gap since the last run, not just a single day, so
@@ -7116,8 +7123,8 @@ def get_next_report_update_range(report):
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday = today - timedelta(days=1)
 
-    if report.last_update:
-        date_from = report.last_update.replace(hour=0, minute=0, second=0, microsecond=0)
+    if report.data_written_through:
+        date_from = datetime.combine(report.data_written_through, datetime.min.time()) + timedelta(days=1)
     else:
         date_from = yesterday
 
