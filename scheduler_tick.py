@@ -58,8 +58,30 @@ once, then exits:
 IMPORTANT: the web app's ENABLE_AUTO_SYNC must be "0" (not "1") once this
 timer is running, or both this script AND the in-process scheduler would
 fire the same jobs twice.
+
+Task #91 - exact-minute triggers (hour==9 and minute==N) are fragile:
+systemd refuses to start a second instance of this one-shot service
+while a previous tick is still running, so if scheduled_refresh_all_
+monitorings() (09:00) happens to take longer than usual (confirmed on
+prod: 7+ minutes on 2026-11-17 instead of its usual ~1-2), every tick
+that would fire WHILE it's still running - including the one single
+minute an exact-minute check is watching for - is silently skipped
+entirely, not delayed. That's exactly what caused понедельная
+статистика to miss a whole day's update: the 09:05 tick for
+scheduled_compute_current_week_stats() never ran because 09:00's job
+was still occupying the service slot.
+
+Fixed by widening each exact minute into a multi-minute (or multi-hour)
+catch-up WINDOW, combined with a once-per-day marker file (same
+disk-persisted-state idea as _REPORT_RETRY_COOLDOWN_FILE in app.py,
+needed because scheduler_tick.py is a fresh process every single tick -
+an in-memory flag would never survive between ticks) so a late tick
+within the window still runs the job exactly once, instead of either
+silently skipping it (narrow window) or re-running it every minute for
+the rest of the window (no guard).
 """
 import importlib.util
+import json
 import logging
 import os
 import sys
@@ -75,30 +97,70 @@ spec.loader.exec_module(main)
 
 MOSCOW = pytz.timezone('Europe/Moscow')
 
+_MARKER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.scheduler_daily_markers.json')
 
-def run_tick():
-    now = datetime.now(MOSCOW)
+
+def _load_markers():
+    try:
+        with open(_MARKER_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_markers(markers):
+    tmp_path = _MARKER_FILE + '.tmp'
+    with open(tmp_path, 'w') as f:
+        json.dump(markers, f)
+    os.replace(tmp_path, _MARKER_FILE)
+
+
+def _run_once_per_day(job_key, day_str, fn):
+    """Run fn() at most once per calendar day (MSK) for this job_key -
+    see task #91 note above for why this exists. Call from inside a
+    WIDENED catch-up window, not an exact-minute check, so a tick delayed
+    by a still-running previous job can still catch it later in the same
+    window without re-running it on every subsequent tick."""
+    markers = _load_markers()
+    if markers.get(job_key) == day_str:
+        return
+    fn()
+    markers[job_key] = day_str
+    _save_markers(markers)
+
+
+def run_tick(now=None):
+    if now is None:
+        now = datetime.now(MOSCOW)
     logging.info(f"⏰ scheduler_tick at {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    day_str = now.strftime('%Y-%m-%d')
 
     main.scheduled_update_reports()
 
-    if now.hour == 9 and now.minute == 0:
-        main.scheduled_refresh_all_monitorings()
+    # Catch-up window 09:00-11:59 instead of an exact minute==0 check -
+    # nothing precedes this one in the morning, but it's still cheap
+    # insurance against e.g. a slow report-check tick stealing the exact
+    # minute right before it.
+    if now.hour in (9, 10, 11):
+        _run_once_per_day('refresh_all_monitorings', day_str, main.scheduled_refresh_all_monitorings)
 
-    if now.hour == 9 and now.minute == 5:
-        main.scheduled_compute_current_week_stats()
+    # Catch-up window 09:05-11:59 (after the refresh above).
+    if (now.hour == 9 and now.minute >= 5) or now.hour in (10, 11):
+        _run_once_per_day('current_week_stats', day_str, main.scheduled_compute_current_week_stats)
 
-    # 09:30 first attempt, 09:40 one retry. The function itself skips
-    # anything already fresh today, so the second call is cheap once
-    # 09:30 already succeeded.
-    if now.hour == 9 and now.minute in (30, 40):
-        main.scheduled_refresh_weborama_verifiers()
+    # Two attempts, each its own once-per-day marker so the 2-retry
+    # design is preserved - just each attempt now tolerates a few
+    # minutes of scheduling jitter instead of needing its exact minute.
+    if now.hour == 9 and 30 <= now.minute <= 36:
+        _run_once_per_day('weborama_attempt1', day_str, main.scheduled_refresh_weborama_verifiers)
+    if now.hour == 9 and 40 <= now.minute <= 46:
+        _run_once_per_day('weborama_attempt2', day_str, main.scheduled_refresh_weborama_verifiers)
 
-    if now.isoweekday() <= 5 and now.hour == 9 and now.minute == 0:
-        main.scheduled_sync_all_accounts()
+    if now.isoweekday() <= 5 and now.hour in (9, 10, 11):
+        _run_once_per_day('sync_all_accounts', day_str, main.scheduled_sync_all_accounts)
 
-    if now.isoweekday() == 1 and now.hour == 9 and now.minute == 30:
-        main.scheduled_compute_weekly_monitoring_stats()
+    if now.isoweekday() == 1 and ((now.hour == 9 and now.minute >= 30) or now.hour in (10, 11)):
+        _run_once_per_day('weekly_freeze', day_str, main.scheduled_compute_weekly_monitoring_stats)
 
 
 if __name__ == '__main__':
