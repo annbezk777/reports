@@ -715,6 +715,30 @@ def dashboard():
             })
         return results
 
+    # Её формула (задача #74 ревизия): эффективность = пул "выполнено"/
+    # "всего" campaign-level засчитываний по 6 метрикам, НЕ среднее их
+    # процентов - у метрик вовлечённости (PI/Отказы/Время) счёт умножается
+    # на k>1 И в числителе, и в знаменателе (CTR/VTR/Роботность - базовые
+    # медийные, вес 1). Умножение на k И числителя, И знаменателя - это
+    # пропорционально увеличивает вес ОДНОЙ кампании в группе вовлечённости
+    # против ОДНОЙ кампании в базовой группе, а не просто усредняет уже
+    # готовые проценты - поэтому менеджер с БОЛЬШИМ объёмом кампаний в
+    # вовлечённости (даже при "средне" выглядящих процентах по каждой из
+    # них) двигает итог сильнее, чем менеджер с маленьким объёмом даже при
+    # одной провальной метрике.
+    ENGAGEMENT_METRIC_KEYS = {'pi', 'bounce', 'time'}
+    MANAGER_ENGAGEMENT_WEIGHT = 2.0
+
+    def weighted_manager_score(metrics, k=MANAGER_ENGAGEMENT_WEIGHT):
+        good_base = sum(m['good'] for m in metrics if m['key'] not in ENGAGEMENT_METRIC_KEYS)
+        total_base = sum(m['total'] for m in metrics if m['key'] not in ENGAGEMENT_METRIC_KEYS)
+        good_engage = sum(m['good'] for m in metrics if m['key'] in ENGAGEMENT_METRIC_KEYS)
+        total_engage = sum(m['total'] for m in metrics if m['key'] in ENGAGEMENT_METRIC_KEYS)
+        denom = total_base + k * total_engage
+        if denom == 0:
+            return 0
+        return round((good_base + k * good_engage) / denom * 100)
+
     metric_success = compute_metric_success(active_monitorings)
 
     def bucket_color(percent):
@@ -742,7 +766,7 @@ def dashboard():
     manager_avg_success = [
         {
             'name': name,
-            'percent': round(sum(m['percent'] for m in metrics) / len(metrics)),
+            'percent': weighted_manager_score(metrics),
         }
         for name, metrics in manager_metric_success.items()
     ]
@@ -765,7 +789,7 @@ def dashboard():
     account_manager_avg_success = [
         {
             'name': name,
-            'percent': round(sum(m['percent'] for m in metrics) / len(metrics)),
+            'percent': weighted_manager_score(metrics),
         }
         for name, metrics in account_manager_metric_success.items()
     ]
