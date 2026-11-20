@@ -222,7 +222,16 @@ def _read_grid_rows(page):
         if cells.count() < 4:
             continue
         name = cells.nth(1).inner_text().strip()
-        if not name or name in ('Total', 'Plot selected rows'):
+        # 'Weborama' - корень дерева ("кампания -> площадка Weborama ->
+        # insertion -> креатив"), его числа - это СУММА всех insertion-
+        # строк ниже, а не отдельная реальная строка. Дедуп по значению в
+        # _sum_distinct_weborama_rows ловит дубль insertion/креатив (у них
+        # одинаковые числа), но этот корень почти всегда имеет УНИКАЛЬНУЮ
+        # сумму (если insertion'ов больше одного) - то есть не совпадает
+        # ни с одной дочерней строкой и проходит дедуп как "новая"
+        # строка, задваивая итог (подтверждено на реальном пермалинке:
+        # 522 762 у нас = 261 381 (корень) + 261 381 (сумма insertion'ов)).
+        if not name or name in ('Total', 'Plot selected rows', 'Weborama'):
             continue
         impressions = _parse_number(cells.nth(2).inner_text())
         clicks = _parse_number(cells.nth(3).inner_text())
