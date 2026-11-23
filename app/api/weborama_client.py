@@ -218,20 +218,31 @@ def _read_grid_rows(page):
 
     results = {}
     for i in range(row_count):
-        cells = rows.nth(i).locator('.x-grid-cell')
+        row = rows.nth(i)
+        cells = row.locator('.x-grid-cell')
         if cells.count() < 4:
             continue
         name = cells.nth(1).inner_text().strip()
-        # 'Weborama' - корень дерева ("кампания -> площадка Weborama ->
-        # insertion -> креатив"), его числа - это СУММА всех insertion-
-        # строк ниже, а не отдельная реальная строка. Дедуп по значению в
-        # _sum_distinct_weborama_rows ловит дубль insertion/креатив (у них
-        # одинаковые числа), но этот корень почти всегда имеет УНИКАЛЬНУЮ
-        # сумму (если insertion'ов больше одного) - то есть не совпадает
-        # ни с одной дочерней строкой и проходит дедуп как "новая"
-        # строка, задваивая итог (подтверждено на реальном пермалинке:
-        # 522 762 у нас = 261 381 (корень) + 261 381 (сумма insertion'ов)).
-        if not name or name in ('Total', 'Plot selected rows', 'Weborama'):
+        if not name or name in ('Total', 'Plot selected rows'):
+            continue
+        # Её находка (случай "Акридерм 2" после "Weborama"-корня) - a
+        # literal-name skip-list doesn't scale: a "tree" permalink groups
+        # rows by project/size/etc, and EVERY expanded group-header row's
+        # numbers are the SUM of its own children already counted below
+        # it, whatever that group happens to be named (not just the
+        # literal root label "Weborama" handled before - confirmed on
+        # this permalink: group headers "Weborama_general_w25-44" and
+        # "Weborama_Hand_Work" doubled the total the same way, under
+        # names no hardcoded list would have anticipated). ExtJS marks
+        # this structurally, not just by name - ".x-grid-tree-node-
+        # expanded" vs "...-leaf" - read straight from the DOM instead:
+        # skip every expanded (= has-children, already-summed) row,
+        # keep every leaf AND every non-tree row (a flat Insertions/
+        # Sites list, confirmed via a real permalink, carries NEITHER
+        # tree class at all - must stay included, not excluded by a
+        # "requires -leaf" check).
+        row_class = row.get_attribute('class') or ''
+        if 'x-grid-tree-node-expanded' in row_class:
             continue
         impressions = _parse_number(cells.nth(2).inner_text())
         clicks = _parse_number(cells.nth(3).inner_text())
@@ -244,7 +255,20 @@ def _read_grid_rows(page):
         else:
             format_guess = None
 
-        results[name] = {
+        # Её находка (тот же "Акридерм 2" пермалинк) - leaf rows under
+        # different tree branches can share the exact same generic name
+        # (e.g. a creative export always called "240x400.zip" regardless
+        # of which campaign/segment group it sits under) - a plain
+        # results[name] = ... would silently OVERWRITE the earlier branch's
+        # row with the later one, losing its impressions/clicks entirely
+        # from any .values() sum (confirmed: dropped ~22% of the real
+        # total this way). Keep the first occurrence under its plain name
+        # (named-lookup mappings - see mapping.insertion_name usage below -
+        # only ever reference genuinely unique names in practice, so this
+        # doesn't change their behavior), disambiguate any later same-name
+        # row so it still lands in results.values() for summing.
+        key = name if name not in results else f'{name} #{i}'
+        results[key] = {
             'impressions': impressions,
             'clicks': clicks,
             'insertion_name': name,
