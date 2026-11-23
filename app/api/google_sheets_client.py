@@ -700,6 +700,7 @@ class GoogleSheetsClient:
 
             # Find column headers row (contains "Дата")
             column_headers_row = None
+            date_col_idx = None
 
             for offset in range(1, 6):
                 test_row = header_row + offset
@@ -711,11 +712,12 @@ class GoogleSheetsClient:
                         for check_col in range(max(0, header_col_idx - 2), min(len(row_data), header_col_idx + 3)):
                             if row_data[check_col] and 'дата' in str(row_data[check_col]).lower():
                                 column_headers_row = test_row
+                                date_col_idx = check_col
                                 break
                 if column_headers_row:
                     break
 
-            if not column_headers_row:
+            if not column_headers_row or date_col_idx is None:
                 return None
 
             # Get headers
@@ -742,10 +744,23 @@ class GoogleSheetsClient:
                 'header_col': col_idx_to_letter(header_col_idx)
             }
 
-            # Search for columns within reasonable range of the header
-            # Include columns to the LEFT of header (for tables where Дата is before campaign name)
-            search_start = max(0, header_col_idx - 3)  # Look 3 columns left
-            search_end = min(len(headers), header_col_idx + 10)  # Look 10 columns right
+            # Её находка: anchoring this search on header_col_idx (where the
+            # campaign-ID text sits, which can be 1-3 columns off from the
+            # table's own "Дата" column depending on header wording) with a
+            # "-3 columns left" allowance let it reach INTO the neighboring
+            # table to its left whenever two tables sit side by side closer
+            # than ~9-10 columns apart (common in these sheets - a 2nd/KZ
+            # table's "Клики"/"Просмотры 100%" column would then already be
+            # (wrongly) claimed by matching the 1st/RU table's same-named
+            # column first, since columns are scanned left-to-right and the
+            # first match wins - see elif ... not structure[...] below).
+            # Anchoring on date_col_idx (the table's OWN "Дата" column,
+            # already found above) instead, with NO leftward reach - a
+            # table's columns never start left of its own Дата column by
+            # this sheet convention - keeps each table's column search
+            # scoped to itself.
+            search_start = date_col_idx
+            search_end = min(len(headers), date_col_idx + 10)
 
             for i in range(search_start, search_end):
                 if i >= len(headers):
